@@ -1,7 +1,3 @@
----
-tags: [zk-casper]
----
-
 # ZK-CASPER Architecture
 
 In the proposed architecture, multiple sub-circuits are placed within a super-circuit. When a circuit encounters an expensive operation, it can outsource the verification effort to another circuit. The main `zkCasper` circuit would use lookup tables via lookup arguments in a simple input-output relationship, outsourcing the effort of verifying the relationship itself to the sub-circuit proofs.
