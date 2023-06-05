@@ -1,6 +1,10 @@
 # KZG Membership proofs
 
-> inspired by https://research.polytope.technology/zkcasper
+### References 
+- https://research.polytope.technology/zkcasper
+- https://youtu.be/mxvaThCgU9c
+
+## Protocol
 
 #### $KZG.Setup(t, s)$
 - Given some secret value $s$, where $s \in \mathbb{F}_p$​. This method generates a common reference string $srs_{kzg}$ that allows anyone commit to a polynomial of degree $\leq t$ ie. to a maximum of $t$ validators.
@@ -15,15 +19,6 @@
 - we also want to generate proof to allow users/contract to succinctly verify this initial commitment (preferably) without knowing all the validators. Options are:
 	1. KZG multi-proof to all values though it unclear whether that would be more efficient than just building commitment again TBD
 	2. Commitment inside ZKP (not necessarily SNARK) TBD
-- outputs $\langle C_x, C_y, C_{\nu}, \pi_{kzg}\rangle$
-
-#### (alternative) $Merkle.Commit(T)$
-- given a set of public keys $T =\{pk_i, \nu_i\}^t_{i=1}$
-- generate a Merkle tree using a snark-friendly hash function
-- depending on requirements public keys and balances can be committed using a single or separate Merkle trees
-- Merkle tree implementation must be optimized for insert/delete complexity
-	- Sparse Merkle trees?
-- for public verification, this can be implemented as a layered arithmetic circuit for GKR (see [benchmarks](https://ethresear.ch/t/performance-improvement-for-gkr/12228)) - this assumes MIMC/gMIMC hash function
 - outputs $\langle C_x, C_y, C_{\nu}, \pi_{kzg}\rangle$
 
 #### $ProveValidatorSetUpdate(h, C, I)$
