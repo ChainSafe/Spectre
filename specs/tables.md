@@ -1,51 +1,88 @@
 # Tables
 
-In zkCasper we use the following dynamic and fixed tables for lookups to the Casper circuit.
+In BansheeZK we use the following dynamic and fixed tables for lookups to the Casper circuit.
 
-## `vreg_table`: validator registry table
+## `StateTable`
+
+Proved by the `validators` and `aggregation` circuits.
+
+The validator table consists of 7 columns, described as follows:
+- **ID**: when `tag == 'validator'` represents [`ValidatorIndex`](https://eth2book.info/capella/annotated-spec/#validatorindex), [`CommitteeIndex`](https://eth2book.info/capella/annotated-spec/#committeeindex) when `tag == 'committee'`, and empty otherwise.
+- **Order**: shuffle index calculated using [`compute_shuffled_index()`](https://eth2book.info/capella/annotated-spec/#compute_shuffled_index).
+- **Tag**: the type entity row represents (`self`, `fork`, `eth1_data`, `validator`, `committee`).
+- **Attested**: whether validator have attested during this epoch.
+- **FieldTag**: the type of field the row represents: `Balance`, `ActivationEpoch`, `ExitEpoch`, `Slashed`, `PubKey.*`.
+- **Index**: the number of row associated with given tag: *\$chunkIdx* ranges (0..7) for BLS12-381
 
 
-| Column             | Type       | Description                                        |
-| ------------------ | ---------- | -------------------------------------------------- |
-| `v_index`          | `Advice`   | A unique validator index number                    |
-| `pubkey`           | `G1Affine` | A public key as BLS12-381 $\mathbb{G}_1$ point     |
-| `activation_epoch` | `Advice`   | When criteria for activation were met              |
-| `exit_epoch`       | `Advice`   | When criteria for deactivation were met            |
-| `balance`          | `Advice`   | Effective balance at stake                         |
-| `s_index`          | `Advice`   | Shuffling index based on current epoch random seed |
-| committee          | `Advice`   | Assigned committee                                 |
+| *ID*          | *Order* | *Tag*       | *IsAttested* | *IsActive* | *FieldTag*        | *GIndex* | *Index*   | *Value*   |
+| ------------- | ------- | ----------- | ------------ | ---------- | ----------------- | -------- | --------- | --------- |
+| -             | -       | `fork`      | -            | -          | `CurrentVersion`  | $gindex  | 0         | $value    |
+| -             | -       | `eth1_data` | -            | -          | `BlockHash`       | $gindex  | 0         | $value    |
+| $validatorIdx | $index  | `validator` | bool         | bool       | `Balance`         | $gindex  | 0         | $value    |
+| $validatorIdx | $index  | `validator` | bool         | bool       | `ActivationEpoch` | $gindex  | 0         | $value    |
+| ...           | ...     | ...         | ...          | ...        | `ExitEpoch`       | ...      | 0         | ...       |
+| ...           | ...     | ...         | ...          | ...        | `Slashed`         | ...      | 0         | ...       |
+| ...           | ...     | ...         | ...          | ...        | `PubKeyRLC`       | ...      | 0         | ...       |
+| $committeeIdx | -       | `committee` | -            | -          | `Balance`         | -        | 0         | $accValue |
+| $committeeIdx | -       | `committee` | -            | -          | `PubKey.X`        | -        | $chunkIdx | $accValue |
+| ...           | ...     | ...         | ...          | ...        | `PubKey.Y`        | ...      | $chunkIdx | ...       |
+| -             | -       | `self`      | -            | -          | `BlockHeader`     | $gindex  | 0         | $value    |
+| -             | -       | `self`      | -            | -          | `PrevJustifiedCP` | $gindex  | 0         | $value    |
+| -             | -       | `self`      | -            | -          | `CurJustifiedCP`  | $gindex  | 0         | $value    |
+| -             | -       | `self`      | -            | -          | `FinilizedCP`     | $gindex  | 0         | $value    |
 
-Proved by the `validators` circuits.
 
-## `Attestations Table`
+## `AttestationsTable`
 
-| Column         | Type       | Description                           |
-| -------------- | ---------- | ------------------------------------- |
-| `slot`         | `Advice`   | Slot number                           |
-| `committee`    | `Advice`   | Committee index                       |
-| `source_epoch` | `Advice`   | Source checkpoint epoch number        |
-| `target_epoch` | `Advice`   | Target checkpoint epoch number        |
-| `target_root`  | `Advice`   | Target checkpoint state root          |
-| `fork_root`    | `Advice`   | LMD GHOST vote                        |
-| `signature`    | `G2Affine` | BLS Signature                         |
-| `hash_point`   | `G2Affine` | Message hash as `hash_to_curve(data)` |
-| `v_indexes`    | `?`        | Attesting validator indices           |
+Provided by the `attestations` circuits.
 
-Proved by the `attestations` circuits.
+The attestations table consists of 5 columns, described as follows:
+- **Slot** and **Committee** are used to query individual attestations.
+- **IsPadding** flag is used to align rows with `StateTable`.
+- **FieldTag**: the type of field the row represents: `TargetEpoch`, `PubKey.*`, `AggregationBits`.
+- **Index**: the number of row associated with given tag: *\$chunkIdx* ranges (0..7) for BLS12-381, *\$bitIdx* (0..2048)
+
+| 0 *Slot* | 1 *Committee* | 2 *IsPadding* | 3 *FieldTag*     | 3 *Index* | 4 *Value* |
+| -------- | ------------- | ------------- | ---------------- | --------- | --------- |
+| $slot    | $c_idx        | 0             | `TargetEpoch`    | 0         | $value    |
+| $slot    | $c_idx        | 0             | `PubKey.X`       | $chunkIdx | $value    |
+| $slot    | $c_idx        | 0             | `PubKey.Y`       | $chunkIdx | $value    |
+| $slot    | $c_idx        | 0             | `AggregationBit` | $bitIdx   | $value    |
+| $slot    | $c_idx        | 1             |               | $padIdx   |  0         |
 
 
 ## `SHA256 Table`
 
-| Column         | Type     | Description                                      |
-| -------------- | -------- | ------------------------------------------------ |
-| `is_final`     | `Advice` | `1` if contains output, otherwise `0`            |
-| `input`        | `Advice` | An input word                                    |
-| `input_len`    | `Advice` | The input length, in 32-byte words               |
-| `output_hi/lo` | `Advice` | The output hash, encoded into high and low parts |
+SHA256 table can be implemented in two ways: full and compact. The trade-off is between increased memory/computation respectively.
+
+### Full
+
+Full version contains input in bytes as illustrated below with example.
+
+| *InputByte*  | *BytesLeft* | *IsPadding* | *OutputLo/Hi* |
+| ---------- | ----------- | ----------- | ------------- |
+| $byteVal   | $bytesLeft  | bool        | $hash         |
 
 ```text
-| is_final | input | input_len | output{Lo,Hi} |
-|    0     |  0x01 |     3     |               | 
-|    0     |  0x02 |     3     |               |
-|    1     |  0x03 |     3     | (0x.., 0x..)  |
+| input_byte | bytes_left | is_padding | output{Lo,Hi} |
+|     e      |     6      |     0      |               |
+|     x      |     5      |     0      |               |
+|     a      |     4      |     0      |               |
+|     m      |     3      |     0      |               |
+|     p      |     2      |     0      |               |
+|     l      |     1      |     0      |               |
+|     e      |     0      |     0      | (0x.., 0x..)  |
 ```
+
+> **Note:** Lookups based on [Plookup](https://eprint.iacr.org/2020/315) require polynomial divisions which are done with FFT. The BN254 curve allows for FFTs of degree up to 2^28 while proving time roughly doubles with each degree added. So in practice, increased degree due to full table layout is likely to offset the benefits of not doing RLC or be impossible at all.
+
+### Compact (w/ RLC encoding)
+
+Compact version uses random linear combination (RLC) to succinctly encode input so that each (input, output) pair takes a single row in table.
+
+> **Note:** RLC is a one way encoding encoding (commitment).
+
+| *InputRLC* | *InputLen* | *OutputRLC* |
+| ---------- | ---------- | ----------- |
+| $rlc       | $length    | $hash       |
