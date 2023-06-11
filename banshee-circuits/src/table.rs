@@ -7,6 +7,7 @@ use eth_types::{Field};
 use gadgets::impl_expr;
 
 pub(crate) mod state_table;
+pub(crate) use state_table::StateTable;
 
 /// Trait used to define lookup tables
 pub trait LookupTable<F: Field> {
