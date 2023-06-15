@@ -5,3 +5,6 @@ pub use block::*;
 
 mod state;
 pub use state::*;
+
+mod merkle;
+pub use merkle::*;

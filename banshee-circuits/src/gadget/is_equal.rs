@@ -1,9 +1,10 @@
+use super::IsZeroGadget;
+use crate::util::*;
 use eth_types::Field;
 use halo2_proofs::{
-    circuit::Value,
+    circuit::{Region, Value},
     plonk::{Error, Expression},
 };
-
 
 /// Returns `1` when `lhs == rhs`, and returns `0` otherwise.
 #[derive(Clone, Debug)]
@@ -13,7 +14,7 @@ pub struct IsEqualGadget<F> {
 
 impl<F: Field> IsEqualGadget<F> {
     pub(crate) fn construct(
-        cb: &mut EVMConstraintBuilder<F>,
+        cb: &mut impl ConstrainBuilderCommon<F>,
         lhs: Expression<F>,
         rhs: Expression<F>,
     ) -> Self {
@@ -28,7 +29,7 @@ impl<F: Field> IsEqualGadget<F> {
 
     pub(crate) fn assign(
         &self,
-        region: &mut CachedRegion<'_, '_, F>,
+        region: &mut Region<'_, F>,
         offset: usize,
         lhs: F,
         rhs: F,
@@ -38,7 +39,7 @@ impl<F: Field> IsEqualGadget<F> {
 
     pub(crate) fn assign_value(
         &self,
-        region: &mut CachedRegion<'_, '_, F>,
+        region: &mut Region<'_, F>,
         offset: usize,
         lhs: Value<F>,
         rhs: Value<F>,

@@ -1,12 +1,15 @@
+use eth_types::Field;
+use gadgets::impl_expr;
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, *},
     poly::Rotation,
 };
-use eth_types::{Field};
-use gadgets::impl_expr;
 
+pub(crate) mod sha256_table;
 pub(crate) mod state_table;
+
+pub(crate) use sha256_table::SHA256Table;
 pub(crate) use state_table::StateTable;
 
 /// Trait used to define lookup tables

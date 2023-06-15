@@ -1,0 +1,29 @@
+{
+  "name": "banshee-preprocessor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChainSafe/banshee-zk.git"
+  },
+  "author": "timoftime",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ChainSafe/banshee-zk/issues"
+  },
+  "homepage": "https://github.com/ChainSafe/banshee-zk#readme",
+  "devDependencies": {
+    "@types/node": "^20.3.0",
+    "typescript": "^5.1.3"
+  },
+  "dependencies": {
+    "@chainsafe/persistent-merkle-tree": "^0.6.1",
+    "@chainsafe/ssz": "^0.11.1",
+    "@lodestar/types": "^1.8.0"
+  }
+}

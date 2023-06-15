@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "banshee-circuits",
+    "banshee-preprocessor",
     "eth-types",
     "gadgets",
 ]
@@ -10,7 +11,6 @@ members = [
 
 # [patch."https://github.com/privacy-scaling-explorations/zkevm-circuits.git"]
 # eth-types = { path = "./eth-types" }
-
 
 # Definition of benchmarks profile to use.
 [profile.bench]

@@ -1,0 +1,14 @@
+[package]
+name = "banshee-preprocessor"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0.81", optional = true }
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus" }
+ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", default-features = false}
+merkle_proof = {git = "https://github.com/sigp/lighthouse", package = "merkle_proof", branch = "stable"}
+ethereum-types = "0.14.1"

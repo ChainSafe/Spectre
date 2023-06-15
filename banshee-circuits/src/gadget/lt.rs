@@ -1,14 +1,7 @@
-use crate::{
-    util::Expr,
-    vs_circuit::{
-        constraint_builder::ConstraintBuilder,
-        cell_manager::{Cell},
-        util::*
-    },
-};
+use crate::util::*;
 use eth_types::Field;
 use halo2_proofs::{
-    circuit::{Value, Region},
+    circuit::{Region, Value},
     plonk::{Error, Expression},
 };
 
@@ -31,7 +24,7 @@ pub struct LtGadget<F, const N_BYTES: usize> {
 
 impl<F: Field, const N_BYTES: usize> LtGadget<F, N_BYTES> {
     pub(crate) fn construct(
-        cb: &mut ConstraintBuilder<F>,
+        cb: &mut impl ConstrainBuilderCommon<F>,
         lhs: Expression<F>,
         rhs: Expression<F>,
     ) -> Self {

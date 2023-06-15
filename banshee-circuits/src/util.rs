@@ -1,4 +1,14 @@
 //! Common utility traits and functions.
+
+mod cell_manager;
+pub use cell_manager::*;
+
+mod constraint_builder;
+pub use constraint_builder::*;
+
+use crate::witness;
+use eth_types::*;
+pub use gadgets::util::{rlc, Expr};
 use halo2_proofs::{
     circuit::{Layouter, Value},
     plonk::{
@@ -6,9 +16,6 @@ use halo2_proofs::{
         VirtualCells,
     },
 };
-use crate::{witness};
-use eth_types::*;
-pub use gadgets::util::{Expr, rlc};
 
 pub(crate) fn query_expression<F: Field, T>(
     meta: &mut ConstraintSystem<F>,
@@ -43,12 +50,9 @@ impl Challenges {
     /// Returns `Expression` of challenges from `ConstraintSystem`.
     pub fn exprs<F: Field>(&self, meta: &mut ConstraintSystem<F>) -> Challenges<Expression<F>> {
         let [lookup_input] = query_expression(meta, |meta| {
-            [self.lookup_input]
-                .map(|challenge| meta.query_challenge(challenge))
+            [self.lookup_input].map(|challenge| meta.query_challenge(challenge))
         });
-        Challenges {
-            lookup_input,
-        }
+        Challenges { lookup_input }
     }
 
     /// Returns `Value` of challenges from `Layouter`.
@@ -102,6 +106,55 @@ pub trait SubCircuitConfig<F: Field> {
 
     /// Type constructor
     fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self;
+}
+
+/// Decodes a field element from its byte representation
+pub(crate) mod from_bytes {
+    use crate::{util::Expr, MAX_N_BYTES_INTEGER};
+    use eth_types::Field;
+    use halo2_proofs::plonk::Expression;
+
+    pub(crate) fn expr<F: Field, E: Expr<F>>(bytes: &[E]) -> Expression<F> {
+        debug_assert!(
+            bytes.len() <= MAX_N_BYTES_INTEGER,
+            "Too many bytes to compose an integer in field"
+        );
+        let mut value = 0.expr();
+        let mut multiplier = F::ONE;
+        for byte in bytes.iter() {
+            value = value + byte.expr() * multiplier;
+            multiplier *= F::from(256);
+        }
+        value
+    }
+
+    pub(crate) fn value<F: Field>(bytes: &[u8]) -> F {
+        debug_assert!(
+            bytes.len() <= MAX_N_BYTES_INTEGER,
+            "Too many bytes to compose an integer in field"
+        );
+        let mut value = F::ZERO;
+        let mut multiplier = F::ONE;
+        for byte in bytes.iter() {
+            value += F::from(*byte as u64) * multiplier;
+            multiplier *= F::from(256);
+        }
+        value
+    }
+}
+
+/// Returns 2**by as Field
+pub(crate) fn pow_of_two<F: Field>(by: usize) -> F {
+    F::from(2).pow([by as u64, 0, 0, 0])
+}
+
+/// Transposes an `Value` of a [`Result`] into a [`Result`] of an `Value`.
+pub(crate) fn transpose_val_ret<F, E>(value: Value<Result<F, E>>) -> Result<Value<F>, E> {
+    let mut ret = Ok(Value::unknown());
+    value.map(|value| {
+        ret = value.map(Value::known);
+    });
+    ret
 }
 
 /// Ceiling of log_2(n)

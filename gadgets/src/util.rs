@@ -1,5 +1,5 @@
 //! Utility traits, functions used in the crate.
-use eth_types::{Field};
+use eth_types::Field;
 use halo2_proofs::plonk::Expression;
 
 /// Returns the sum of the passed in cells

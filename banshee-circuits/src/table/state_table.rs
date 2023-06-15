@@ -1,4 +1,4 @@
-use crate::witness::{StateRow, StateEntry};
+use crate::witness::{StateEntry, StateRow};
 
 use super::*;
 
@@ -65,7 +65,7 @@ impl StateTable {
             value: meta.advice_column_in(SecondPhase),
         }
     }
-    
+
     fn assign<F: Field>(
         &self,
         region: &mut Region<'_, F>,
@@ -82,7 +82,12 @@ impl StateTable {
             (self.g_index, row.g_index),
             (self.value, row.value),
         ] {
-            region.assign_advice(|| "assign state row on state table", column, offset, || value)?;
+            region.assign_advice(
+                || "assign state row on state table",
+                column,
+                offset,
+                || value,
+            )?;
         }
         Ok(())
     }
@@ -98,9 +103,13 @@ impl StateTable {
         layouter.assign_region(
             || "state table",
             |mut region| {
-                for (offset, row) in entries.iter().flat_map(|e| e.table_assignment(challenges)).enumerate() {
+                for (offset, row) in entries
+                    .iter()
+                    .flat_map(|e| e.table_assignment(challenges))
+                    .enumerate()
+                {
                     self.assign(&mut region, offset, &row)?;
-                };
+                }
 
                 Ok(())
             },

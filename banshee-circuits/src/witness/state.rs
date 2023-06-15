@@ -3,11 +3,11 @@ use std::vec;
 use eth_types::Field;
 use gadgets::impl_expr;
 use gadgets::util::rlc;
-use halo2_proofs::halo2curves::bn256::G1Affine;
-use halo2_proofs::{circuit::Value, halo2curves::bn256::Fr};
-use halo2_proofs::plonk::Expression;
-use itertools::Itertools;
 use halo2_base::utils::decompose_bigint_option;
+use halo2_proofs::halo2curves::bn256::G1Affine;
+use halo2_proofs::plonk::Expression;
+use halo2_proofs::{circuit::Value, halo2curves::bn256::Fr};
+use itertools::Itertools;
 use strum_macros::EnumIter;
 
 /// Beacon state entry. State entries are used for connecting CasperCircuit and
@@ -78,11 +78,7 @@ impl StateEntry {
                         0,
                         Value::known(F::from(*exit_epoch as u64)),
                     ),
-                    new_state_row(
-                        FieldTag::Slashed,
-                        0,
-                        Value::known(F::from(*slashed as u64)),
-                    ),
+                    new_state_row(FieldTag::Slashed, 0, Value::known(F::from(*slashed as u64))),
                     new_state_row(
                         FieldTag::PubKeyRLC,
                         0,
@@ -111,20 +107,18 @@ impl StateEntry {
                     value,
                 };
 
-                
                 let t = vec![new_state_row(
                     FieldTag::EffectiveBalance,
                     0,
                     Value::known(F::from(*accumulated_balance as u64)),
-                ),];
+                )];
 
-                vec![
-                    new_state_row(
-                        FieldTag::EffectiveBalance,
-                        0,
-                        Value::known(F::from(*accumulated_balance as u64)),
-                    ),
-                ].into_iter()
+                vec![new_state_row(
+                    FieldTag::EffectiveBalance,
+                    0,
+                    Value::known(F::from(*accumulated_balance as u64)),
+                )]
+                .into_iter()
                 // .chain(decompose_bigint_option(Value::known(aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
                 // .chain(decompose_bigint_option(Value::known(aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
                 .collect()
@@ -132,7 +126,6 @@ impl StateEntry {
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, EnumIter, Hash)]
 pub enum StateTag {
@@ -158,7 +151,6 @@ pub enum FieldTag {
     PubKeyAffineY,
 }
 impl_expr!(FieldTag);
-
 
 /// State table row assignment
 #[derive(Default, Clone, Copy, Debug)]

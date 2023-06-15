@@ -1,12 +1,14 @@
-use super::{cell_manager::*, gadget::LtGadget};
-use crate::{util::Expr, vs_circuit::N_BYTES_U64, witness::StateTag};
+use super::cell_manager::*;
+use crate::{
+    gadget::LtGadget,
+    util::{Cell, CellType, ConstrainBuilderCommon, Constraint, Expr, Lookup},
+    witness::StateTag,
+    N_BYTES_U64,
+};
 use eth_types::Field;
 use gadgets::binary_number::BinaryNumberConfig;
 use halo2_proofs::plonk::Expression;
 use strum::IntoEnumIterator;
-
-type Constraint<F> = (&'static str, Expression<F>);
-type Lookup<F> = (&'static str, Vec<(Expression<F>, Expression<F>)>);
 
 pub struct ConstraintBuilder<F: Field> {
     pub constraints: Vec<Constraint<F>>,
@@ -76,31 +78,6 @@ impl<F: Field> ConstraintBuilder<F> {
         self.require_boolean("slashed is 0 for committees", q.slashed());
     }
 
-    pub fn require_zero(&mut self, name: &'static str, e: Expression<F>) {
-        self.constraints.push((name, self.condition.clone() * e));
-    }
-
-    pub fn require_true(&mut self, name: &'static str, e: Expression<F>) {
-        self.require_equal(name, e, 1.expr());
-    }
-
-    pub fn require_equal(&mut self, name: &'static str, left: Expression<F>, right: Expression<F>) {
-        self.require_zero(name, left - right)
-    }
-
-    pub fn require_boolean(&mut self, name: &'static str, e: Expression<F>) {
-        self.require_zero(name, e.clone() * (1.expr() - e))
-    }
-
-    fn require_in_set(&mut self, name: &'static str, item: Expression<F>, set: Vec<Expression<F>>) {
-        self.require_zero(
-            name,
-            set.iter().fold(1.expr(), |acc, element| {
-                acc * (item.clone() - element.clone())
-            }),
-        );
-    }
-
     fn add_lookup(&mut self, name: &'static str, lookup: Vec<(Expression<F>, Expression<F>)>) {
         let mut lookup = lookup;
         for (expression, _) in lookup.iter_mut() {
@@ -115,23 +92,16 @@ impl<F: Field> ConstraintBuilder<F> {
         build(self);
         self.condition = original_condition;
     }
+}
 
-    pub(crate) fn query_bool(&mut self) -> Cell<F> {
-        let cell = self.query_cell();
-        self.require_boolean("Constrain cell to be a bool", cell.expr());
-        cell
+impl<F: Field> ConstrainBuilderCommon<F> for ConstraintBuilder<F> {
+    fn add_constraint(&mut self, name: &'static str, constraint: Expression<F>) {
+        self.constraints
+            .push((name, self.condition.clone() * constraint));
     }
 
-    pub(crate) fn query_cell(&mut self) -> Cell<F> {
-        self.cell_manager.query_cell(CellType::StoragePhase1)
-    }
-
-    pub(crate) fn query_bytes<const N: usize>(&mut self) -> [Cell<F>; N] {
-        self.query_bytes_dyn(N).try_into().unwrap()
-    }
-
-    pub(crate) fn query_bytes_dyn(&mut self, count: usize) -> Vec<Cell<F>> {
-        self.cell_manager.query_cells(CellType::LookupByte, count)
+    fn query_cells(&mut self, cell_type: CellType, count: usize) -> Vec<Cell<F>> {
+        self.cell_manager.query_cells(cell_type, count)
     }
 }
 
