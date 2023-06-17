@@ -20,6 +20,8 @@ use message_schedule::*;
 use spread_table::*;
 use util::*;
 
+pub use compression::{State, RoundWordDense};
+
 const ROUNDS: usize = 64;
 const STATE: usize = 8;
 
@@ -322,6 +324,10 @@ impl<Fr: Field> Table16Chip<Fr> {
     ) -> Result<(), Error> {
         SpreadTableChip::load(config.lookup, layouter)
     }
+
+    pub(crate) fn compression_config(&self) -> compression::CompressionConfig<Fr> {
+        self.config.compression.clone()
+    }
 }
 
 impl<Fr: Field> Sha256Instructions<Fr> for Table16Chip<Fr> {
@@ -352,12 +358,14 @@ impl<Fr: Field> Sha256Instructions<Fr> for Table16Chip<Fr> {
         layouter: &mut impl Layouter<Fr>,
         initialized_state: &Self::State,
         input: [Self::BlockWord; super::BLOCK_SIZE],
-    ) -> Result<Self::State, Error> {
+    ) -> Result<(Self::State, Vec<AssignedBits<Fr, 32>>), Error> {
         let config = self.config();
-        let (_, w_halves) = config.message_schedule.process(layouter, input)?;
-        config
+        let (_, w_halves, assigned_inputs) = config.message_schedule.process(layouter, input)?;
+        let state = config
             .compression
-            .compress(layouter, initialized_state.clone(), w_halves)
+            .compress(layouter, initialized_state.clone(), w_halves)?;
+
+        Ok((state, assigned_inputs))
     }
 
     fn digest(

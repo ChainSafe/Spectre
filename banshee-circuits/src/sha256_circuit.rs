@@ -2,6 +2,7 @@
 // mod util;
 mod table16;
 mod sha256;
+mod sha256_bit;
 
 use std::vec;
 
@@ -24,11 +25,13 @@ use halo2_base::{
     gates::{range::RangeConfig, RangeInstructions, RangeChip},
     gates::{flex_gate::FlexGateConfig, GateInstructions},
     // utils::{bigint_to_fe, biguint_to_fe, fe_to_bigint, fe_to_biguint, modulus},
-    AssignedValue, Context, utils::ScalarField
+    AssignedValue, Context, utils::{ScalarField, value_to_option}, ContextCell
 };
 use itertools::Itertools;
+use num::Integer;
+use table16::BlockWord;
 
-use self::sha256::Table16Config;
+use self::{sha256::{Sha256Instructions, Table16Config, Table16Chip}, table16::{AssignedBits, State, RoundWordDense}};
 
 const BLOCK_BYTE: usize = 64;
 const DIGEST_BYTE: usize = 32;
@@ -48,7 +51,9 @@ pub struct SHA256ChipConfig<F: Field> {
 #[derive(Clone, Debug)]
 pub struct SHA256Chip<F: Field> {
     config: SHA256ChipConfig<F>,
+    table16: Table16Chip<F>,
     range: RangeChip<F>,
+    state: State<F>,
 }
 
 impl<F: Field> Chip<F> for SHA256Chip<F> {
@@ -79,13 +84,13 @@ impl<F: Field> SHA256Chip<F> {
         }
     }
 
-    pub fn digest<'a>(
-        &'a self,
+    pub fn digest(
+        &mut self,
         ctx: &mut Context<F>,
-        input: &'a [u8],
         assinged_inputs: Vec<AssignedValue<F>>,
+        mut layouter: &mut impl Layouter<F>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        let input_byte_size = input.len();
+        let input_byte_size = assinged_inputs.len();
         let input_byte_size_with_9 = input_byte_size + 9;
         let one_round_size = Self::ONE_ROUND_INPUT_BYTES;
         let num_round = if input_byte_size_with_9 % one_round_size == 0 {
@@ -122,7 +127,7 @@ impl<F: Field> SHA256Chip<F> {
         // assert_eq!(padding.len(), max_byte_size);
 
 
-        let assigned_input_bytes = {
+        let assigned_padded_inputs = {
             let assigned_padding = padding
                 .iter()
                 .map(|byte| ctx.load_witness(F::from(*byte as u64)))
@@ -138,15 +143,204 @@ impl<F: Field> SHA256Chip<F> {
 
         let range = self.range.clone();
 
-        for assigned_byte in assigned_input_bytes.iter().copied() {
+        for assigned_byte in assigned_padded_inputs.iter().copied() {
             self.range.range_check(ctx, assigned_byte, 8);
         }
 
 
+        for (i, assigned_input_block) in assigned_padded_inputs
+            .chunks((32 / 8) * BLOCK_SIZE)
+            .enumerate()
+        {
+            let input_block = assigned_input_block
+                .iter()
+                .map(|cell| cell.value().get_lower_32().try_into().unwrap())
+                .collect::<Vec<u8>>();
+
+            let blockword_inputs: [_; 16] = input_block
+                .chunks(32 / 8)
+                .map(|chunk| BlockWord(Value::known(u32::from_be_bytes(chunk.try_into().unwrap()))))
+                .collect_vec()
+                .try_into()
+                .unwrap();
+
+            self.state = self.compute_round(ctx, layouter, blockword_inputs)?;
+        }
 
         Ok(vec![])
     }
 
+    fn compute_round(
+        &self,
+        ctx: &mut Context<F>,
+        layouter: &mut impl Layouter<F>,
+        input: [BlockWord; BLOCK_SIZE],
+    ) -> Result<State<F>, Error> {
+        let mut base_gate = self.range().gate();
+
+        let last_state = &self.state;
+        let last_digest = self.state_to_assigned_halves(ctx, last_state);
+        let (compressed_state, assigned_inputs) = self.table16.compress(layouter, last_state, input)?;
+
+        let compressed_state_values = self.state_to_assigned_halves(ctx, &compressed_state);
+
+        let word_sums = last_digest
+            .iter()
+            .copied()
+            .zip(compressed_state_values)
+            .map(|(digest_word, comp_word)| {
+                base_gate.add(ctx, digest_word, comp_word)
+            })
+            .collect_vec();
+
+        let u32_mod = 1u128 << 32;
+        let lo_his = word_sums
+            .iter()
+            .map(|sum| {
+                (
+                    F::from_u128(sum.value().get_lower_128() % u32_mod),
+                    F::from_u128(sum.value().get_lower_128() >> 32),
+                )
+            })
+            .collect_vec();
+        let assigned_los = lo_his
+            .iter()
+            .map(|(lo, hi)| ctx.load_witness(*lo))
+            .collect_vec();
+        let assigned_his = lo_his
+            .iter()
+            .map(|(lo, hi)| ctx.load_witness(*hi))
+            .collect_vec();
+        let u32 = ctx.load_constant(F::from(1 << 32));
+
+        let combines = assigned_los
+            .iter()
+            .copied()
+            .zip(assigned_his)
+            .map(|(lo, hi)| {
+                base_gate
+                    .mul_add(ctx, hi, u32, lo)
+            })
+            .collect_vec();
+
+        for (combine, word_sum) in combines.iter().zip(&word_sums) {
+            ctx.constrain_equal(combine, word_sum);
+        }
+
+        let mut new_state_word_vals = [0u32; 8];
+        for i in 0..8 {
+            new_state_word_vals[i] = assigned_los[i].value().get_lower_128().try_into().unwrap()
+        }
+
+        let new_state = self
+            .table16
+            .compression_config()
+            .initialize_with_iv(layouter, new_state_word_vals)?;
+
+        Ok(new_state)
+    }
+
+
+    // pub fn decompose_digest_to_bytes(
+    //     &self,
+    //     layouter: &mut impl Layouter<F>,
+    //     digest: &[AssignedValue<F>],
+    // ) -> Result<[AssignedValue<F>; 4 * DIGEST_SIZE], Error> {
+    //     let range = self.range();
+    //     let base_gate = range.gate();
+    //     let mut assigned_bytes = Vec::new();
+
+    //     for word in digest.into_iter() {
+            
+    //         let mut bytes = halo2_base::utils::decompose(word.value(), 8, 32);
+    //         bytes.reverse();
+    //         assigned_bytes.append(&mut bytes);
+    //     }
+    //     Ok(assigned_bytes.try_into().unwrap())
+    // }
+
+    // fn decompose(
+    //     &self,
+    //     unassigned: &F,
+    //     limb_bit_len: usize,
+    //     bit_len: usize,
+    // ) -> Result<(AssignedValue<F>, Vec<AssignedValue<F>>), Error> {
+    //     let (number_of_limbs, overflow_bit_len) = bit_len.div_rem(&limb_bit_len);
+    //     let number_of_limbs = number_of_limbs + if overflow_bit_len > 0 { 1 } else { 0 };
+    //     let mut decomposed_bytes = halo2_base::utils::decompose(unassigned, number_of_limbs, number_of_limbs);
+
+
+    //     let mut bases = vec![F::one()];
+    //     let mut bases_assigned = vec![];
+    //     for i in 1..31 {
+    //         bases.push(bases[i - 1].mul(&F::from(
+    //             0x0000000000000000000000000000000000000000000000000000000000000100,
+    //         )));
+    //         bases_assigned.push(
+    //             self.main_gate
+    //                 .as_ref()
+    //                 .borrow_mut()
+    //                 .assign_constant(bases[i]),
+    //         );
+    //     }
+
+    //     let terms: Vec<_> = decomposed_bytes
+    //         .into_iter()
+    //         .map(|e| self.main_gate.as_ref().borrow_mut().assign(e))
+    //         .zip(&bases_assigned)
+    //         .map(|(limb, base)| (limb, *base))
+    //         .collect();
+
+    //     let zero = self
+    //         .main_gate
+    //         .as_ref()
+    //         .borrow_mut()
+    //         .assign_constant(Fr::zero());
+    //     self.decompose_terms(&terms[..], zero)
+    // }
+
+    fn state_to_assigned_halves(
+        &self,
+        ctx: &mut Context<F>,
+        state: &State<F>,
+    ) -> [AssignedValue<F>; DIGEST_SIZE] {
+        let (a, b, c, d, e, f, g, h) = state.clone().split_state();
+
+        [
+            self.concat_word_halves(ctx, a.dense_halves()),
+            self.concat_word_halves(ctx, b.dense_halves()),
+            self.concat_word_halves(ctx, c.dense_halves()),
+            self.concat_word_halves(ctx, d),
+            self.concat_word_halves(ctx, e.dense_halves()),
+            self.concat_word_halves(ctx, f.dense_halves()),
+            self.concat_word_halves(ctx, g.dense_halves()),
+            self.concat_word_halves(ctx, h),
+        ]
+    }
+
+    fn concat_word_halves(
+        &self,
+        ctx: &mut Context<F>,
+        word: RoundWordDense<F>,
+    ) -> AssignedValue<F> {
+        let (lo, hi) = word.halves();
+        let u16 = ctx.load_constant(F::from(1 << 16));
+
+        let val_u32 = value_to_option(word.value()).unwrap();
+        let val_lo = F::from_u128((val_u32 % (1 << 16)) as u128);
+        let val_hi = F::from_u128((val_u32 >> 16) as u128);
+        let assigned_lo = ctx.load_witness(val_lo);
+        let assigned_hi = ctx.load_witness(val_hi);
+
+        // ctx.constrain_equal(&lo, &assigned_lo);
+        // ctx.constrain_equal(&hi, &assigned_hi);
+
+        self.range.gate().mul_add(ctx, assigned_hi, u16, assigned_lo)
+    }
+
+    pub fn range(&self) -> &RangeChip<F> {
+        &self.range
+    }
 }
 
 

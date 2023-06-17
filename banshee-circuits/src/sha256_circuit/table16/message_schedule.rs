@@ -313,11 +313,13 @@ impl<Fr: Field>  MessageScheduleConfig<Fr> {
         (
             [MessageWord<Fr>; ROUNDS],
             [(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>); ROUNDS],
+            Vec<AssignedBits<Fr, 32>>,
         ),
         Error,
     > {
         let mut w = Vec::<MessageWord<Fr>>::with_capacity(ROUNDS);
         let mut w_halves = Vec::<(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>)>::with_capacity(ROUNDS);
+        let mut assigned_inputs = Vec::<AssignedBits<Fr, 32>>::with_capacity(BLOCK_SIZE);
 
         layouter.assign_region(
             || "process message block",
@@ -362,6 +364,7 @@ impl<Fr: Field>  MessageScheduleConfig<Fr> {
                 // Assign W[0..16]
                 for (i, word) in input.iter().enumerate() {
                     let (word, halves) = self.assign_word_and_halves(&mut region, word.0, i)?;
+                    assigned_inputs.push(word.clone());
                     w.push(MessageWord(word));
                     w_halves.push(halves);
                 }
@@ -390,7 +393,7 @@ impl<Fr: Field>  MessageScheduleConfig<Fr> {
             },
         )?;
 
-        Ok((w.try_into().unwrap(), w_halves.try_into().unwrap()))
+        Ok((w.try_into().unwrap(), w_halves.try_into().unwrap(), assigned_inputs))
     }
 }
 

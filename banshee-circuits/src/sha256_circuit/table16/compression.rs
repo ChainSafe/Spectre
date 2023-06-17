@@ -272,6 +272,10 @@ impl<Fr: Field> RoundWordDense<Fr> {
             .zip(self.1.value_u16())
             .map(|(lo, hi)| lo as u32 + (1 << 16) * hi as u32)
     }
+
+    pub fn halves(&self) -> (AssignedBits<Fr, 16>, AssignedBits<Fr, 16>) {
+        (self.0.clone(), self.1.clone())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -319,6 +323,10 @@ impl<Fr: Field> RoundWordA<Fr> {
             spread_halves: None,
         }
     }
+
+    pub fn dense_halves(&self) -> RoundWordDense<Fr> {
+        self.dense_halves.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -348,6 +356,10 @@ impl<Fr: Field> RoundWordE<Fr> {
             spread_halves: None,
         }
     }
+
+    pub fn dense_halves(&self) -> RoundWordDense<Fr> {
+        self.dense_halves.clone()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -362,6 +374,10 @@ impl<Fr: Field> RoundWord<Fr> {
             dense_halves,
             spread_halves,
         }
+    }
+
+    pub fn dense_halves(&self) -> RoundWordDense<Fr> {
+        self.dense_halves.clone()
     }
 }
 
@@ -415,6 +431,21 @@ impl<Fr: Field> State<Fr> {
             h: None,
         }
     }
+
+    pub fn split_state(
+        &self,
+    ) -> (
+        RoundWordA<Fr>,
+        RoundWord<Fr>,
+        RoundWord<Fr>,
+        RoundWordDense<Fr>,
+        RoundWordE<Fr>,
+        RoundWord<Fr>,
+        RoundWord<Fr>,
+        RoundWordDense<Fr>,
+    ) {
+        compression_util::match_state(self.clone())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -430,7 +461,7 @@ pub enum StateWord<Fr: Field> {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct CompressionConfig<F: Field> {
+pub struct CompressionConfig<F: Field> {
     lookup: SpreadInputs,
     message_schedule: Column<Advice>,
     extras: [Column<Advice>; 6],
@@ -864,7 +895,7 @@ impl<Fr: Field> CompressionConfig<Fr> {
 
     /// Initialize compression with a constant Initialization Vector of 32-byte words.
     /// Returns an initialized state.
-    pub(super) fn initialize_with_iv(
+    pub fn initialize_with_iv(
         &self,
         layouter: &mut impl Layouter<Fr>,
         init_state: [u32; STATE],

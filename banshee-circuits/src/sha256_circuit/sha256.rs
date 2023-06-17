@@ -6,12 +6,14 @@ use std::cmp::min;
 use std::convert::TryInto;
 use std::fmt;
 
+use eth_types::Field;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{Chip, Layouter},
     plonk::Error,
 };
 
+use super::table16::AssignedBits;
 pub use super::{
     BLOCK_SIZE, DIGEST_SIZE,
     table16::{BlockWord, Table16Chip, Table16Config}
@@ -19,7 +21,7 @@ pub use super::{
 
 
 /// The set of circuit instructions required to use the [`Sha256`] gadget.
-pub trait Sha256Instructions<F: FieldExt>: Chip<F> {
+pub trait Sha256Instructions<F: Field>: Chip<F> {
     /// Variable representing the SHA-256 internal state.
     type State: Clone + fmt::Debug;
     /// Variable representing a 32-bit word of the input block to the SHA-256 compression
@@ -43,7 +45,7 @@ pub trait Sha256Instructions<F: FieldExt>: Chip<F> {
         layouter: &mut impl Layouter<F>,
         initialized_state: &Self::State,
         input: [Self::BlockWord; BLOCK_SIZE],
-    ) -> Result<Self::State, Error>;
+    ) -> Result<(Self::State, Vec<AssignedBits<F, 32>>), Error>;
 
     /// Converts the given state into a message digest.
     fn digest(
@@ -60,14 +62,14 @@ pub struct Sha256Digest<BlockWord>([BlockWord; DIGEST_SIZE]);
 /// A gadget that constrains a SHA-256 invocation. It supports input at a granularity of
 /// 32 bits.
 #[derive(Debug)]
-pub struct Sha256<F: FieldExt, CS: Sha256Instructions<F>> {
+pub struct Sha256<F: Field, CS: Sha256Instructions<F>> {
     chip: CS,
     state: CS::State,
     cur_block: Vec<CS::BlockWord>,
     length: usize,
 }
 
-impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
+impl<F: Field, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
     /// Create a new hasher instance.
     pub fn new(chip: Sha256Chip, mut layouter: impl Layouter<F>) -> Result<Self, Error> {
         let state = chip.initialization_vector(&mut layouter)?;
@@ -99,7 +101,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
         }
 
         // Process the now-full current block.
-        self.state = self.chip.compress(
+        (self.state, _) = self.chip.compress(
             &mut layouter,
             &self.state,
             self.cur_block[..]
@@ -112,7 +114,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
         let mut chunks_iter = data.chunks_exact(BLOCK_SIZE);
         for chunk in &mut chunks_iter {
             self.state = self.chip.initialization(&mut layouter, &self.state)?;
-            self.state = self.chip.compress(
+            (self.state, _) = self.chip.compress(
                 &mut layouter,
                 &self.state,
                 chunk.try_into().expect("chunk.len() == BLOCK_SIZE"),
@@ -136,7 +138,7 @@ impl<F: FieldExt, Sha256Chip: Sha256Instructions<F>> Sha256<F, Sha256Chip> {
             let padding = vec![Sha256Chip::BlockWord::default(); BLOCK_SIZE - self.cur_block.len()];
             self.cur_block.extend_from_slice(&padding);
             self.state = self.chip.initialization(&mut layouter, &self.state)?;
-            self.state = self.chip.compress(
+            (self.state, _) = self.chip.compress(
                 &mut layouter,
                 &self.state,
                 self.cur_block[..]
