@@ -1,11 +1,15 @@
-use halo2_proofs::halo2curves::{
-    bn256::{Fq, Fr},
-    ff::{Field as Halo2Field, FromUniformBytes, PrimeField},
+use halo2_proofs::{
+    arithmetic::{Field as Halo2Field, FieldExt},
+    halo2curves::{
+        bn256::{Fq, Fr},
+        group::ff::PrimeField,
+    },
 };
+use core::hash::Hash;
 
 /// Trait used to reduce verbosity with the declaration of the [`PrimeField`]
 /// trait and its repr.
-pub trait Field: Halo2Field + PrimeField<Repr = [u8; 32]> + FromUniformBytes<64> + Ord {
+pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash/*+ FromUniformBytes<64>*/ + Ord {
     /// Gets the lower 128 bits of this field element when expressed
     /// canonically.
     fn get_lower_128(&self) -> u128 {

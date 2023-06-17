@@ -108,7 +108,7 @@ impl<'a, F: Field> PathChip<'a, F> {
             let level = &tree[i];
             let next_level = &tree[i - 1];
 
-            meta.create_gate(format!("tree[{i}] boolean checks"), |meta| {
+            meta.create_gate("tree_level boolean checks", |meta| {
                 let selector = meta.query_selector(selector);
                 let mut cb = ConstraintBuilder::new();
                 cb.require_boolean("into_left is boolean", level.into_left(meta));
@@ -129,7 +129,7 @@ impl<'a, F: Field> PathChip<'a, F> {
 
             if let Some(is_left_col) = level.is_left {
                 meta.lookup_any(
-                    format!("state_table.lookup(tree[{i}][node], tree[{i}][index])"),
+                    "state_table.lookup(tree_level,node, tree_level.index)",
                     |meta| {
                         let selector = meta.query_selector(selector);
                         let is_left = meta.query_advice(is_left_col, Rotation::cur());
@@ -149,7 +149,7 @@ impl<'a, F: Field> PathChip<'a, F> {
 
             if let Some(is_right_col) = level.is_right {
                 meta.lookup_any(
-                    format!("state_table.lookup(tree[{i}][sibling], tree[{i}][sibling_index])"),
+                    "state_table.lookup(tree_level.sibling, tree_level.sibling_index",
                     |meta| {
                         let selector = meta.query_selector(selector);
                         let is_right = meta.query_advice(is_right_col, Rotation::cur());
@@ -167,10 +167,7 @@ impl<'a, F: Field> PathChip<'a, F> {
             }
 
             meta.lookup_any(
-                format!(
-                    "hash(tree[{i}][node] | tree[{i}][sibling]) == tree[{}][node]",
-                    i - 1
-                ),
+                "hash(tree_level.node | tree_level.sibling) == next_level.node",
                 |meta| {
                     let selector = meta.query_selector(selector);
                     let into_node = level.into_left(meta);
@@ -181,7 +178,7 @@ impl<'a, F: Field> PathChip<'a, F> {
                 },
             );
 
-            meta.lookup_any(format!("hash(tree[{i}][node] | tree[{i}][sibling]) == tree[{}][sibling]@rotation(-(padding + 1))", i-1), |meta| {
+            meta.lookup_any("hash(tree_level.node | tree_level.sibling) == next_level.sibling@rotation(-(padding + 1))", |meta| {
                 let selector = meta.query_selector(selector);
                 let into_sibling: Expression<F> = not::expr(level.into_left(meta));
                 let node = level.node(meta);

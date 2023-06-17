@@ -99,9 +99,9 @@ impl<F: Field, const N: usize> BatchedIsZeroChip<F, N> {
                 .iter()
                 .find_map(|value| Option::<F>::from(value.invert()))
             {
-                (F::ZERO, inverse)
+                (F::zero(), inverse)
             } else {
-                (F::ONE, F::ZERO)
+                (F::one(), F::zero())
             }
         });
 
@@ -158,7 +158,7 @@ mod test {
     impl<F: Field, const N: usize> Circuit<F> for TestCircuit<F, N> {
         type Config = TestCircuitConfig<N>;
         type FloorPlanner = SimpleFloorPlanner;
-        type Params = ();
+        // // type Params = ();
 
         fn without_witnesses(&self) -> Self {
             Self::default()

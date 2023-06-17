@@ -120,7 +120,7 @@ impl<F: Field> IsZeroInstruction<F> for IsZeroChip<F> {
         value: Value<F>,
     ) -> Result<(), Error> {
         let config = self.config();
-        let value_invert = value.map(|value| value.invert().unwrap_or(F::ZERO));
+        let value_invert = value.map(|value| value.invert().unwrap_or(F::zero()));
         region.assign_advice(
             || "witness inverse of value",
             config.value_inv,
@@ -213,7 +213,7 @@ mod test {
         impl<F: Field> Circuit<F> for TestCircuit<F> {
             type Config = TestCircuitConfig<F>;
             type FloorPlanner = SimpleFloorPlanner;
-            type Params = ();
+            // // type Params = ();
 
             fn without_witnesses(&self) -> Self {
                 Self::default()
@@ -341,7 +341,7 @@ mod test {
         impl<F: Field> Circuit<F> for TestCircuit<F> {
             type Config = TestCircuitConfig<F>;
             type FloorPlanner = SimpleFloorPlanner;
-            type Params = ();
+            // // type Params = ();
 
             fn without_witnesses(&self) -> Self {
                 Self::default()

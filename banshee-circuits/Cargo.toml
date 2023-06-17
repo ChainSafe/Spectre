@@ -6,7 +6,10 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["circuit-params"], tag = "v2023_04_20" }
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02" }
+halo2_gadgets = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["unstable"], tag = "v2023_02_02" }
+halo2-base = {  git = "https://github.com/axiom-crypto/halo2-lib", default-features = false, features = ["halo2-pse", "display"] }
+# zkevm-circuits = { git = "https://github.com/SoraSuegami/zkevm-circuits.git", branch = "feat/simple_compression" }
 num = "0.4"
 sha3 = "0.10"
 array-init = "2.0.0"
@@ -19,11 +22,10 @@ lazy_static = "1.4"
 log = "0.4"
 num-bigint = { version = "0.4" }
 rand_chacha = "0.3"
-snark-verifier = { git = "https://github.com/privacy-scaling-explorations/snark-verifier", tag = "v2023_04_20", default-features = false, features = ["loader_halo2", "system_halo2"] }
+snark-verifier = { git = "https://github.com/privacy-scaling-explorations/snark-verifier", tag = "v2023_02_02", default-features = false, features = ["loader_halo2", "system_halo2"] }
 cli-table = { version = "0.4", optional = true }
 eth-types = { path = "../eth-types" }
 gadgets = { path = "../gadgets" }
-halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib" }
 
 [dev-dependencies]
 hex = "0.4.3"

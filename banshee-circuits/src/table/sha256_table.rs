@@ -81,7 +81,7 @@ impl SHA256Table {
     ) -> Vec<(Expression<F>, Expression<F>)> {
         vec![
             (
-                enable.clone() * Expression::Constant(F::ZERO),
+                enable.clone() * Expression::Constant(F::zero()),
                 meta.query_advice(self.is_enabled, Rotation::cur()),
             ),
             (

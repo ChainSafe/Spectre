@@ -134,7 +134,7 @@ impl<F: Field, const N_BYTES: usize> LtInstruction<F> for LtChip<F, N_BYTES> {
             if lt {
                 diff += config.range;
             } else {
-                diff += F::ZERO;
+                diff += F::zero();
             }
             diff.to_repr()
         });
@@ -252,7 +252,7 @@ mod test {
         impl<F: Field> Circuit<F> for TestCircuit<F> {
             type Config = TestCircuitConfig<F>;
             type FloorPlanner = SimpleFloorPlanner;
-            type Params = ();
+            // type Params = ();
 
             fn without_witnesses(&self) -> Self {
                 Self::default()
@@ -378,7 +378,7 @@ mod test {
         impl<F: Field> Circuit<F> for TestCircuit<F> {
             type Config = TestCircuitConfig<F>;
             type FloorPlanner = SimpleFloorPlanner;
-            type Params = ();
+            // type Params = ();
 
             fn without_witnesses(&self) -> Self {
                 Self::default()
