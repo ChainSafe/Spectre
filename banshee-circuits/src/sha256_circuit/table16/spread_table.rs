@@ -1,11 +1,11 @@
 use super::{util::*, AssignedBits};
+use eth_types::Field;
 use halo2_proofs::{
     arithmetic::FieldExt,
     circuit::{Chip, Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, TableColumn},
     poly::Rotation,
 };
-use halo2_proofs::halo2curves::bn256::Fr;
 use std::convert::TryInto;
 use std::marker::PhantomData;
 
@@ -67,13 +67,13 @@ impl<const DENSE: usize, const SPREAD: usize> SpreadWord<DENSE, SPREAD> {
 
 /// A variable stored in advice columns corresponding to a row of [`SpreadTableConfig`].
 #[derive(Clone, Debug)]
-pub(super) struct SpreadVar<const DENSE: usize, const SPREAD: usize> {
+pub(super) struct SpreadVar<Fr: Field, const DENSE: usize, const SPREAD: usize> {
     pub tag: Value<u8>,
-    pub dense: AssignedBits<DENSE>,
-    pub spread: AssignedBits<SPREAD>,
+    pub dense: AssignedBits<Fr, DENSE>,
+    pub spread: AssignedBits<Fr, SPREAD>,
 }
 
-impl<const DENSE: usize, const SPREAD: usize> SpreadVar<DENSE, SPREAD> {
+impl<Fr: Field, const DENSE: usize, const SPREAD: usize> SpreadVar<Fr, DENSE, SPREAD> {
     pub(super) fn with_lookup(
         region: &mut Region<'_, Fr>,
         cols: &SpreadInputs,
@@ -91,11 +91,11 @@ impl<const DENSE: usize, const SPREAD: usize> SpreadVar<DENSE, SPREAD> {
             || tag.map(|tag| Fr::from(tag as u64)),
         )?;
 
-        let dense =
-            AssignedBits::<DENSE>::assign_bits(region, || "dense", cols.dense, row, dense_val)?;
+        let dense: AssignedBits<Fr, DENSE> =
+            AssignedBits::<Fr, DENSE>::assign_bits(region, || "dense", cols.dense, row, dense_val)?;
 
         let spread =
-            AssignedBits::<SPREAD>::assign_bits(region, || "spread", cols.spread, row, spread_val)?;
+            AssignedBits::<Fr, SPREAD>::assign_bits(region, || "spread", cols.spread, row, spread_val)?;
 
         Ok(SpreadVar { tag, dense, spread })
     }
@@ -112,7 +112,7 @@ impl<const DENSE: usize, const SPREAD: usize> SpreadVar<DENSE, SPREAD> {
         let dense_val = word.map(|word| word.dense);
         let spread_val = word.map(|word| word.spread);
 
-        let dense = AssignedBits::<DENSE>::assign_bits(
+        let dense = AssignedBits::<Fr, DENSE>::assign_bits(
             region,
             || "dense",
             dense_col,
@@ -120,7 +120,7 @@ impl<const DENSE: usize, const SPREAD: usize> SpreadVar<DENSE, SPREAD> {
             dense_val,
         )?;
 
-        let spread = AssignedBits::<SPREAD>::assign_bits(
+        let spread = AssignedBits::<Fr, SPREAD>::assign_bits(
             region,
             || "spread",
             spread_col,

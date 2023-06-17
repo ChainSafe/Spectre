@@ -2,11 +2,11 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 
 use super::sha256::Sha256Instructions;
+use eth_types::Field;
 use halo2_proofs::{
     circuit::{AssignedCell, Chip, Layouter, Region, Value},
     plonk::{Advice, Any, Assigned, Column, ConstraintSystem, Error},
 };
-use halo2_proofs::halo2curves::bn256::Fr;
 
 mod compression;
 mod gates;
@@ -81,7 +81,7 @@ impl<const LEN: usize> From<&Bits<LEN>> for [bool; LEN] {
     }
 }
 
-impl<const LEN: usize> From<&Bits<LEN>> for Assigned<Fr> {
+impl<Fr: Field, const LEN: usize> From<&Bits<LEN>> for Assigned<Fr> {
     fn from(bits: &Bits<LEN>) -> Assigned<Fr> {
         assert!(LEN <= 64);
         Fr::from(lebs2ip(&bits.0)).into()
@@ -113,9 +113,9 @@ impl From<u32> for Bits<32> {
 }
 
 #[derive(Clone, Debug)]
-pub struct AssignedBits<const LEN: usize>(AssignedCell<Bits<LEN>, Fr>);
+pub struct AssignedBits<Fr: Field, const LEN: usize>(AssignedCell<Bits<LEN>, Fr>);
 
-impl<const LEN: usize> std::ops::Deref for AssignedBits<LEN> {
+impl<Fr: Field, const LEN: usize> std::ops::Deref for AssignedBits<Fr, LEN> {
     type Target = AssignedCell<Bits<LEN>, Fr>;
 
     fn deref(&self) -> &Self::Target {
@@ -123,7 +123,7 @@ impl<const LEN: usize> std::ops::Deref for AssignedBits<LEN> {
     }
 }
 
-impl<const LEN: usize> AssignedBits<LEN> {
+impl<Fr: Field, const LEN: usize> AssignedBits<Fr, LEN> {
     fn assign_bits<A, AR, T: TryInto<[bool; LEN]> + std::fmt::Debug + Clone>(
         region: &mut Region<'_, Fr>,
         annotation: A,
@@ -157,7 +157,7 @@ impl<const LEN: usize> AssignedBits<LEN> {
     }
 }
 
-impl AssignedBits<16> {
+impl<Fr: Field> AssignedBits<Fr, 16> {
     fn value_u16(&self) -> Value<u16> {
         self.value().map(|v| v.into())
     }
@@ -192,7 +192,7 @@ impl AssignedBits<16> {
     }
 }
 
-impl AssignedBits<32> {
+impl<Fr: Field> AssignedBits<Fr, 32> {
     fn value_u32(&self) -> Value<u32> {
         self.value().map(|v| v.into())
     }
@@ -229,21 +229,20 @@ impl AssignedBits<32> {
 
 /// Configuration for a [`Table16Chip`].
 #[derive(Clone, Debug)]
-pub struct Table16Config {
+pub struct Table16Config<Fr: Field> {
     lookup: SpreadTableConfig,
-    message_schedule: MessageScheduleConfig,
-    compression: CompressionConfig,
+    message_schedule: MessageScheduleConfig<Fr>,
+    compression: CompressionConfig<Fr>,
 }
 
 /// A chip that implements SHA-256 with a maximum lookup table size of $2^16$.
 #[derive(Clone, Debug)]
-pub struct Table16Chip {
-    config: Table16Config,
-    _marker: PhantomData<Fr>,
+pub struct Table16Chip<Fr: Field> {
+    config: Table16Config<Fr>,
 }
 
-impl Chip<Fr> for Table16Chip {
-    type Config = Table16Config;
+impl<Fr: Field> Chip<Fr> for Table16Chip<Fr> {
+    type Config = Table16Config<Fr>;
     type Loaded = ();
 
     fn config(&self) -> &Self::Config {
@@ -255,12 +254,11 @@ impl Chip<Fr> for Table16Chip {
     }
 }
 
-impl Table16Chip {
+impl<Fr: Field> Table16Chip<Fr> {
     /// Reconstructs this chip from the given config.
     pub fn construct(config: <Self as Chip<Fr>>::Config) -> Self {
         Self {
             config,
-            _marker: PhantomData,
         }
     }
 
@@ -319,21 +317,21 @@ impl Table16Chip {
 
     /// Loads the lookup table required by this chip into the circuit.
     pub fn load(
-        config: Table16Config,
+        config: Table16Config<Fr>,
         layouter: &mut impl Layouter<Fr>,
     ) -> Result<(), Error> {
         SpreadTableChip::load(config.lookup, layouter)
     }
 }
 
-impl Sha256Instructions<Fr> for Table16Chip {
-    type State = State;
+impl<Fr: Field> Sha256Instructions<Fr> for Table16Chip<Fr> {
+    type State = State<Fr>;
     type BlockWord = BlockWord;
 
     fn initialization_vector(
         &self,
         layouter: &mut impl Layouter<Fr>,
-    ) -> Result<State, Error> {
+    ) -> Result<State<Fr>, Error> {
         self.config().compression.initialize_with_iv(layouter, IV)
     }
 
@@ -374,7 +372,7 @@ impl Sha256Instructions<Fr> for Table16Chip {
 }
 
 /// Common assignment patterns used by Table16 regions.
-trait Table16Assignment {
+trait Table16Assignment<Fr: Field> {
     /// Assign cells for general spread computation used in sigma, ch, ch_neg, maj gates
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::type_complexity)]
@@ -390,8 +388,8 @@ trait Table16Assignment {
         r_1_odd: Value<[bool; 16]>,
     ) -> Result<
         (
-            (AssignedBits<16>, AssignedBits<16>),
-            (AssignedBits<16>, AssignedBits<16>),
+            (AssignedBits<Fr, 16>, AssignedBits<Fr, 16>),
+            (AssignedBits<Fr, 16>, AssignedBits<Fr, 16>),
         ),
         Error,
     > {
@@ -440,7 +438,7 @@ trait Table16Assignment {
         r_0_odd: Value<[bool; 16]>,
         r_1_even: Value<[bool; 16]>,
         r_1_odd: Value<[bool; 16]>,
-    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+    ) -> Result<(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>), Error> {
         let (even, _odd) = self.assign_spread_outputs(
             region, lookup, a_3, row, r_0_even, r_0_odd, r_1_even, r_1_odd,
         )?;

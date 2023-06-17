@@ -19,7 +19,6 @@ use halo2_proofs::{
     },
     poly::Rotation,
 };
-use halo2_gadgets::sha256::{Table16Config, Table16Chip};
 use halo2_base::{
     QuantumCell,
     gates::{range::RangeConfig, RangeInstructions, RangeChip},
@@ -28,6 +27,8 @@ use halo2_base::{
     AssignedValue, Context, utils::ScalarField
 };
 use itertools::Itertools;
+
+use self::sha256::Table16Config;
 
 const BLOCK_BYTE: usize = 64;
 const DIGEST_BYTE: usize = 32;
@@ -38,8 +39,8 @@ pub const BLOCK_SIZE: usize = 16;
 pub const DIGEST_SIZE: usize = 8;
 
 #[derive(Clone, Debug)]
-pub struct SHA256ChipConfig<F: ScalarField> {
-    // table16: Table16Config,
+pub struct SHA256ChipConfig<F: Field> {
+    table16: Table16Config<F>,
     pub max_byte_size: usize,
     range: RangeConfig<F>,
 }
@@ -66,13 +67,13 @@ impl<F: Field> Chip<F> for SHA256Chip<F> {
 impl<F: Field> SHA256Chip<F> {
     const ONE_ROUND_INPUT_BYTES: usize = 64;
     pub fn configure(
-        //table16: Table16Config,
+        table16config: Table16Config<F>,
         max_byte_size: usize,
         range: RangeConfig<F>,
     ) -> <Self as Chip<F>>::Config {
         debug_assert_eq!(max_byte_size % Self::ONE_ROUND_INPUT_BYTES, 0);
         SHA256ChipConfig {
-            //table16,
+            table16: table16config,
             max_byte_size,
             range,
         }
@@ -167,6 +168,7 @@ mod test {
     use num_bigint::RandomBits;
     use rand::rngs::OsRng;
     use rand::{thread_rng, Rng};
+    use table16::Table16Chip;
 
     #[derive(Debug, Clone)]
     struct TestConfig<F: Field> {
@@ -189,6 +191,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+            let table16config = Table16Chip::<F>::configure(meta);
             let range_config = RangeConfig::configure(
                 meta,
                 Vertical,
@@ -201,6 +204,7 @@ mod test {
             let hash_column = meta.instance_column();
             meta.enable_equality(hash_column);
             let sha256 = SHA256Chip::configure(
+                table16config,
                 Self::MAX_BYTE_SIZE,
                 range_config,
             );

@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02" }
-halo2_gadgets = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["unstable"], tag = "v2023_02_02" }
+# halo2_gadgets = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["unstable"], tag = "v2023_02_02" }
 halo2-base = {  git = "https://github.com/axiom-crypto/halo2-lib", default-features = false, features = ["halo2-pse", "display"] }
 # zkevm-circuits = { git = "https://github.com/SoraSuegami/zkevm-circuits.git", branch = "feat/simple_compression" }
 num = "0.4"

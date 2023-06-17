@@ -1,17 +1,17 @@
 use super::super::{super::DIGEST_SIZE, BlockWord, RoundWordDense};
 use super::{compression_util::*, CompressionConfig, State};
+use eth_types::Field;
 use halo2_proofs::{
     circuit::{Region, Value},
     plonk::{Advice, Column, Error},
 };
-use halo2_proofs::halo2curves::bn256::Fr;
 
-impl CompressionConfig {
+impl<Fr: Field> CompressionConfig<Fr> {
     #[allow(clippy::many_single_char_names)]
     pub fn assign_digest(
         &self,
         region: &mut Region<'_, Fr>,
-        state: State,
+        state: State<Fr>,
     ) -> Result<[BlockWord; DIGEST_SIZE], Error> {
         let a_3 = self.extras[0];
         let a_4 = self.extras[1];
@@ -84,7 +84,7 @@ impl CompressionConfig {
         lo_col: Column<Advice>,
         hi_col: Column<Advice>,
         word_col: Column<Advice>,
-        dense_halves: RoundWordDense,
+        dense_halves: RoundWordDense<Fr>,
     ) -> Result<Value<u32>, Error> {
         dense_halves.0.copy_advice(|| "lo", region, lo_col, row)?;
         dense_halves.1.copy_advice(|| "hi", region, hi_col, row)?;

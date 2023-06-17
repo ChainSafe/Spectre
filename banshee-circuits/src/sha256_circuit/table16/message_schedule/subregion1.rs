@@ -1,26 +1,26 @@
 use super::super::{util::*, AssignedBits, BlockWord, SpreadVar, SpreadWord, Table16Assignment};
 use super::{schedule_util::*, MessageScheduleConfig};
+use eth_types::Field;
 use halo2_proofs::{
     circuit::{Region, Value},
     plonk::Error,
 };
-use halo2_proofs::halo2curves::bn256::Fr;
 use std::convert::TryInto;
 
 // A word in subregion 1
 // (3, 4, 11, 14)-bit chunks
 #[derive(Debug)]
-pub struct Subregion1Word {
+pub struct Subregion1Word<Fr: Field> {
     index: usize,
-    a: AssignedBits<3>,
-    b: AssignedBits<4>,
-    c: AssignedBits<11>,
-    d: AssignedBits<14>,
-    spread_c: AssignedBits<22>,
-    spread_d: AssignedBits<28>,
+    a: AssignedBits<Fr, 3>,
+    b: AssignedBits<Fr, 4>,
+    c: AssignedBits<Fr, 11>,
+    d: AssignedBits<Fr, 14>,
+    spread_c: AssignedBits<Fr, 22>,
+    spread_d: AssignedBits<Fr, 28>,
 }
 
-impl Subregion1Word {
+impl<Fr: Field> Subregion1Word<Fr> {
     fn spread_a(&self) -> Value<[bool; 6]> {
         self.a.value().map(|v| v.spread())
     }
@@ -74,12 +74,12 @@ impl Subregion1Word {
     }
 }
 
-impl MessageScheduleConfig {
+impl<Fr: Field>  MessageScheduleConfig<Fr> {
     pub fn assign_subregion1(
         &self,
         region: &mut Region<'_, Fr>,
         input: &[BlockWord],
-    ) -> Result<Vec<(AssignedBits<16>, AssignedBits<16>)>, Error> {
+    ) -> Result<Vec<(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>)>, Error> {
         assert_eq!(input.len(), SUBREGION_1_LEN);
         Ok(input
             .iter()
@@ -106,7 +106,7 @@ impl MessageScheduleConfig {
         region: &mut Region<'_, Fr>,
         word: Value<[bool; 32]>,
         index: usize,
-    ) -> Result<Subregion1Word, Error> {
+    ) -> Result<Subregion1Word<Fr>, Error> {
         let row = get_word_row(index);
 
         // Rename these here for ease of matching the gates to the specification.
@@ -125,10 +125,10 @@ impl MessageScheduleConfig {
 
         // Assign `a` (3-bit piece)
         let a =
-            AssignedBits::<3>::assign_bits(region, || "word_a", a_3, row + 1, pieces[0].clone())?;
+            AssignedBits::<Fr, 3>::assign_bits(region, || "word_a", a_3, row + 1, pieces[0].clone())?;
         // Assign `b` (4-bit piece)
         let b =
-            AssignedBits::<4>::assign_bits(region, || "word_b", a_4, row + 1, pieces[1].clone())?;
+            AssignedBits::<Fr, 4>::assign_bits(region, || "word_b", a_4, row + 1, pieces[1].clone())?;
 
         // Assign `c` (11-bit piece) lookup
         let spread_c = pieces[2].clone().map(SpreadWord::try_new);
@@ -154,8 +154,8 @@ impl MessageScheduleConfig {
     fn lower_sigma_0(
         &self,
         region: &mut Region<'_, Fr>,
-        word: Subregion1Word,
-    ) -> Result<(AssignedBits<16>, AssignedBits<16>), Error> {
+        word: Subregion1Word<Fr>,
+    ) -> Result<(AssignedBits<Fr, 16>, AssignedBits<Fr, 16>), Error> {
         let a_3 = self.extras[0];
         let a_4 = self.extras[1];
         let a_5 = self.message_schedule;
@@ -168,16 +168,16 @@ impl MessageScheduleConfig {
 
         // Witness `spread_a`
         let spread_a = word.a.value().map(|bits| spread_bits(bits.0));
-        AssignedBits::<6>::assign_bits(region, || "spread_a", a_6, row + 1, spread_a)?;
+        AssignedBits::<Fr, 6>::assign_bits(region, || "spread_a", a_6, row + 1, spread_a)?;
 
         // Split `b` (4-bit chunk) into `b_hi` and `b_lo`
         // Assign `b_lo`, `spread_b_lo`
         let b_lo: Value<[bool; 2]> = word.b.value().map(|b| b.0[..2].try_into().unwrap());
         let spread_b_lo = b_lo.map(spread_bits);
         {
-            AssignedBits::<2>::assign_bits(region, || "b_lo", a_3, row - 1, b_lo)?;
+            AssignedBits::<Fr, 2>::assign_bits(region, || "b_lo", a_3, row - 1, b_lo)?;
 
-            AssignedBits::<4>::assign_bits(region, || "spread_b_lo", a_4, row - 1, spread_b_lo)?;
+            AssignedBits::<Fr, 4>::assign_bits(region, || "spread_b_lo", a_4, row - 1, spread_b_lo)?;
         };
 
         // Split `b` (2-bit chunk) into `b_hi` and `b_lo`
@@ -185,9 +185,9 @@ impl MessageScheduleConfig {
         let b_hi: Value<[bool; 2]> = word.b.value().map(|b| b.0[2..].try_into().unwrap());
         let spread_b_hi = b_hi.map(spread_bits);
         {
-            AssignedBits::<2>::assign_bits(region, || "b_hi", a_5, row - 1, b_hi)?;
+            AssignedBits::<Fr, 2>::assign_bits(region, || "b_hi", a_5, row - 1, b_hi)?;
 
-            AssignedBits::<4>::assign_bits(region, || "spread_b_hi", a_6, row - 1, spread_b_hi)?;
+            AssignedBits::<Fr, 4>::assign_bits(region, || "spread_b_hi", a_6, row - 1, spread_b_hi)?;
         };
 
         // Assign `b` and copy constraint
