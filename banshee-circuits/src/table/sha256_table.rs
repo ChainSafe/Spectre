@@ -6,14 +6,12 @@ use crate::util::Challenges;
 pub struct SHA256Table {
     /// True when the row is enabled
     pub is_enabled: Column<Advice>,
-    /// Byte array first input as `RLC(input1)`
-    pub first_rlc: Column<Advice>,
-    /// Byte array first input length
-    pub first_len: Column<Advice>,
-    /// Byte array second input as `RLC(input2)`
-    pub second_rlc: Column<Advice>,
-    /// Byte array second input length
-    pub second_len: Column<Advice>,
+    /// Byte array first input as `RLC(input[i])`
+    pub limbs_rlc: [Column<Advice>; 2],
+    /// Byte array first input as `RLC(input[i])`
+    pub input_rlc: Column<Advice>,
+    /// Length of first+second inputs
+    pub input_len: Column<Advice>,
     /// RLC of the hash result
     pub hash_rlc: Column<Advice>,
 }
@@ -22,10 +20,10 @@ impl<F: Field> LookupTable<F> for SHA256Table {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
             self.is_enabled.into(),
-            self.first_rlc.into(),
-            self.first_len.into(),
-            self.second_rlc.into(),
-            self.second_len.into(),
+            self.limbs_rlc[0].into(),
+            self.limbs_rlc[1].into(),
+            self.input_rlc.into(),
+            self.input_len.into(),
             self.hash_rlc.into(),
         ]
     }
@@ -33,10 +31,10 @@ impl<F: Field> LookupTable<F> for SHA256Table {
     fn annotations(&self) -> Vec<String> {
         vec![
             String::from("is_enabled"),
-            String::from("first_rlc"),
-            String::from("first_len"),
-            String::from("second_rlc"),
-            String::from("second_len"),
+            String::from("left_rlc"),
+            String::from("right_rlc"),
+            String::from("input_rlc"),
+            String::from("input_len"),
             String::from("hash_rlc"),
         ]
     }
@@ -47,10 +45,12 @@ impl SHA256Table {
     pub fn construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
         Self {
             is_enabled: meta.advice_column(),
-            first_rlc: meta.advice_column_in(SecondPhase),
-            first_len: meta.advice_column(),
-            second_rlc: meta.advice_column_in(SecondPhase),
-            second_len: meta.advice_column(),
+            limbs_rlc: [
+                meta.advice_column_in(SecondPhase),
+                meta.advice_column_in(SecondPhase),
+            ],
+            input_rlc: meta.advice_column_in(SecondPhase),
+            input_len: meta.advice_column(),
             hash_rlc: meta.advice_column_in(SecondPhase),
         }
     }
@@ -81,16 +81,16 @@ impl SHA256Table {
     ) -> Vec<(Expression<F>, Expression<F>)> {
         vec![
             (
-                enable.clone() * Expression::Constant(F::ZERO),
+                enable.clone() * Expression::Constant(F::zero()),
                 meta.query_advice(self.is_enabled, Rotation::cur()),
             ),
             (
                 enable.clone() * fst,
-                meta.query_advice(self.first_rlc, Rotation::cur()),
+                meta.query_advice(self.limbs_rlc[0], Rotation::cur()),
             ),
             (
                 enable.clone() * snd,
-                meta.query_advice(self.second_len, Rotation::cur()),
+                meta.query_advice(self.limbs_rlc[1], Rotation::cur()),
             ),
             (
                 enable * hash,

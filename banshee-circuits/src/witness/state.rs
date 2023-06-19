@@ -58,7 +58,7 @@ impl StateEntry {
                     is_attested: Value::known(F::from(*is_attested as u64)),
                     field_tag: Value::known(F::from(field_tag as u64)),
                     index: Value::known(F::from(index as u64)),
-                    g_index: Value::known(F::ZERO), // TODO: fill generalized indexes deterministically
+                    g_index: Value::known(F::zero()), // TODO: fill generalized indexes deterministically
                     value,
                 };
 
@@ -99,11 +99,11 @@ impl StateEntry {
                 let new_state_row = |field_tag: FieldTag, index: usize, value| StateRow {
                     id: Value::known(F::from(*id as u64)),
                     tag: Value::known(F::from(StateTag::Committee as u64)),
-                    is_active: Value::known(F::ZERO),
-                    is_attested: Value::known(F::ZERO),
+                    is_active: Value::known(F::zero()),
+                    is_attested: Value::known(F::zero()),
                     field_tag: Value::known(F::from(field_tag as u64)),
                     index: Value::known(F::from(index as u64)),
-                    g_index: Value::known(F::ZERO),
+                    g_index: Value::known(F::zero()),
                     value,
                 };
 
@@ -183,7 +183,7 @@ impl<F: Field> StateRow<F> {
         values
             .iter()
             .rev()
-            .fold(F::ZERO, |acc, value| acc * randomness + value)
+            .fold(F::zero(), |acc, value| acc * randomness + value)
     }
 
     pub(crate) fn rlc_value(&self, randomness: Value<F>) -> Value<F> {

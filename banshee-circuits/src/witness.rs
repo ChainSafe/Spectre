@@ -8,3 +8,6 @@ pub use state::*;
 
 mod merkle;
 pub use merkle::*;
+
+mod hashing;
+pub use hashing::*;
