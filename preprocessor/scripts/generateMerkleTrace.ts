@@ -13,9 +13,9 @@ import {
     Validator as BeaconValidator,
 } from "@lodestar/types/phase0"
 import {createProof, ProofType, MultiProof, Node} from "@chainsafe/persistent-merkle-tree";
-import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 import crypto from "crypto";
 import { serialize } from "./util";
+import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 
 
   const ValidatorContainer = new ContainerType(
