@@ -1,11 +1,11 @@
 use super::cell_manager::CellManager;
 use crate::{
-    state_circuit::{PathChipConfig, TREE_LEVEL_AUX_COLUMNS},
+    state_circuit::{StateSSZCircuitConfig, TREE_LEVEL_AUX_COLUMNS},
     util::{Cell, CellType},
     witness::{MerkleTrace, MerkleTraceStep},
 };
 use eth_types::*;
-use gadgets::{binary_number::BinaryNumberConfig, util::Expr};
+use gadgets::{binary_number::BinaryNumberConfig, util::{Expr, rlc}};
 use halo2_proofs::{
     circuit::{Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, Expression, VirtualCells},
@@ -32,7 +32,6 @@ pub struct TreeLevel<F> {
 impl<F: Field> TreeLevel<F> {
     pub(crate) fn configure(
         meta: &mut ConstraintSystem<F>,
-        height: usize,
         depth: usize,
         offset: usize,
         padding: usize,
@@ -74,45 +73,51 @@ impl<F: Field> TreeLevel<F> {
     pub fn assign_with_region(
         &self,
         region: &mut Region<'_, F>,
-        steps: Vec<&MerkleTraceStep<F>>,
+        steps: Vec<&MerkleTraceStep>,
+        challange: Value<F>
     ) -> Result<(), Error> {
         for (i, step) in steps.into_iter().enumerate() {
+            assert_eq!(step.sibling.len(), 32);
+            assert_eq!(step.node.len(), 32);
+            let sibling_rlc = challange.map(|rnd| rlc::value(&step.sibling, rnd));
+            let node_rlc = challange.map(|rnd| rlc::value(&step.node, rnd));
+
             region.assign_advice(
                 || "sibling",
                 self.sibling,
                 self.offset + i,
-                || Value::known(step.sibling),
+                || sibling_rlc,
             )?;
             region.assign_advice(
                 || "sibling_index",
                 self.sibling_index,
                 self.offset + i,
-                || Value::known(step.sibling_index),
+                || Value::known(F::from(step.sibling_index as u64)),
             )?;
             region.assign_advice(
                 || "node",
                 self.node,
                 self.offset + i,
-                || Value::known(step.node),
+                || node_rlc,
             )?;
             region.assign_advice(
                 || "index",
                 self.index,
                 self.offset + i,
-                || Value::known(step.index),
+                || Value::known(F::from(step.index as u64)),
             )?;
             region.assign_advice(
                 || "into_left",
                 self.into_left,
                 self.offset + i,
-                || Value::known(step.into_left),
+                || Value::known(F::from(step.into_left as u64)),
             )?;
             if let Some(is_left) = self.is_left {
                 region.assign_advice(
                     || "is_left",
                     is_left,
                     self.offset + i,
-                    || Value::known(step.is_left),
+                    || Value::known(F::from(step.is_left as u64)),
                 )?;
             }
             if let Some(is_right) = self.is_right {
@@ -120,7 +125,7 @@ impl<F: Field> TreeLevel<F> {
                     || "is_right",
                     is_right,
                     self.offset + i,
-                    || Value::known(step.is_right),
+                    || Value::known(F::from(step.is_right as u64)),
                 )?;
             }
         }

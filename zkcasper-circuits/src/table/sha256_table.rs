@@ -1,5 +1,7 @@
 use super::*;
-use crate::util::Challenges;
+use crate::util::{Challenges, rlc};
+use itertools::Itertools;
+use sha2::Digest;
 
 /// Keccak Table, used to verify keccak hashing from RLC'ed input.
 #[derive(Clone, Debug)]
@@ -69,6 +71,62 @@ impl SHA256Table {
             region.assign_advice(|| format!("assign {}", offset), column, offset, || *value)?;
         }
         Ok(())
+    }
+
+    /// Generate the sha256 table assignments from a byte array input.
+    pub fn assignments<F: Field>(
+        input: &[u8],
+        challenge: Value<F>,
+    ) -> Vec<[Value<F>; 4]> {
+        let input_rlc = challenge.map(|randomness| rlc::value(
+            input,
+            randomness,
+        ));
+        let input_len = F::from(input.len() as u64);
+
+        let output = sha2::Sha256::digest(input).to_vec();
+        let output_rlc = challenge.map(|randomness| rlc::value(
+            &output,
+            randomness,
+        ));
+
+        vec![[
+            Value::known(F::one()),
+            input_rlc,
+            Value::known(input_len),
+            output_rlc,
+        ]]
+    }
+
+    /// Load sha256 table but without running the full sha256 circuit.
+    pub fn dev_load<'a, F: Field>(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        inputs: impl IntoIterator<Item = &'a Vec<u8>> + Clone,
+        challenge: Value<F>,
+    ) -> Result<(), Error> {
+        layouter.assign_region(
+            || "sha256 table",
+            |mut region| {
+                let mut offset = 0;
+
+                let sha256_table_columns = <SHA256Table as LookupTable<F>>::advice_columns(self);
+                for input in inputs.clone() {
+                    for row in Self::assignments(input, challenge.clone()) {
+                        for (&column, value) in sha256_table_columns.iter().zip_eq(row) {
+                            region.assign_advice(
+                                || format!("sha256 table row {}", offset),
+                                column,
+                                offset,
+                                || value,
+                            )?;
+                        }
+                        offset += 1;
+                    }
+                }
+                Ok(())
+            },
+        )
     }
 
     pub fn build_lookup<F: Field>(

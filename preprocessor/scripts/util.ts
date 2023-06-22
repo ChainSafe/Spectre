@@ -1,5 +1,40 @@
 import { GindexBitstring } from "@chainsafe/persistent-merkle-tree";
 
+
+function toSnakeCase(str: string): string {
+  return str.replace(/\.?([A-Z]+)/g, (x, y) => "_" + y.toLowerCase()).replace(/^_/, "");
+}
+
+function toRustFormat(obj: any, keysToSkip: string[] = [], replacer: (value: any) => any = (value) => value): any {
+  if (Array.isArray(obj)) {
+    return obj.map(v => toRustFormat(v, keysToSkip, replacer));
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj).reduce(
+      (result, key) => ({
+        ...result,
+        ...(keysToSkip.includes(key) ? {} : { 
+          [toSnakeCase(key)]: toRustFormat(replacer(obj[key]), keysToSkip, replacer)
+        })
+      }),
+      {}
+    );
+  }
+  return replacer(obj);
+}
+
+export function serialize(obj: any, keysToSkip: string[] = []): string {
+  const processed = toRustFormat(obj, keysToSkip, (value) => {
+    if (value instanceof Uint8Array) {
+      return Array.from(value);
+    }
+    if (typeof value === 'bigint') {
+      return Number(value);
+    }
+    return value;
+  });
+  return JSON.stringify(processed);
+}
+
 export enum SortOrder {
     InOrder,
     Decreasing,

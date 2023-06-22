@@ -3,13 +3,14 @@ import { SortOrder, computeMultiProofBitstrings, } from "./util";
 
 type TraceRow = {
     node: Uint8Array;
-    nodeGindex: Gindex;
+    index: Gindex;
     sibling: Uint8Array;
-    siblingGindex: Gindex;
+    siblingIndex: Gindex;
+    intoLeft: boolean;
     isLeft: boolean;
     isRight: boolean;
     parent: Uint8Array;
-    parentGindex: Gindex;
+    parentIndex: Gindex;
     depth: number;
 };
 
@@ -76,16 +77,16 @@ export function createNodeFromMultiProofWithTrace(leaves: Uint8Array[], witnesse
   
         // store the parent node
         const parentNode = isLeft ? new BranchNode(node, siblingNode) : new BranchNode(siblingNode, node);
-        // console.log("fst:", (isLeft ? nodeGindex : siblingGindex), Buffer.from((isLeft ? node : siblingNode).root).toString("hex"),  "snd:", (isLeft ? siblingGindex : nodeGindex), Buffer.from((isLeft ? siblingNode : node).root).toString("hex"), "hash:", parentGindex, Buffer.from(parentNode.root).toString("hex"));
         trace.push({
             node: node.root,
-            nodeGindex,
+            index: nodeGindex,
             sibling: siblingNode.root,
-            siblingGindex,
+            siblingIndex: siblingGindex,
+            intoLeft: parentBitstring[parentBitstring.length - 1] === "0",
             isLeft: gindices.includes(isLeft ? nodeGindex : siblingGindex),
             isRight: gindices.includes(isLeft ? siblingGindex : nodeGindex),
             parent: parentNode.root,
-            parentGindex,
+            parentIndex: parentGindex,
             depth: i,
         });
         
@@ -110,12 +111,12 @@ export function printTrace(node: Node, trace: TraceRow[]) {
   let row_index = 0;
 
   function draw_separator() {
-      console.log('|-----||-------|---------|--------|---------|-------|--------|---------|---------|--------|')
+      console.log('|-----||-------|---------|--------|---------|-------|----------|--------|---------|---------|--------|')
   }
 
   console.log();
   draw_separator();
-  console.log('| Row || Depth | Sibling | sIndex |  Node   | Index | IsLeft | IsRight | Parent  | pIndex |')
+  console.log('| Row || Depth | Sibling | sIndex |  Node   | Index | IntoLeft | IsLeft | IsRight | Parent  | pIndex |')
   draw_separator();
   for (let t of trace) {
       if (t.depth != current_level) {
@@ -125,11 +126,11 @@ export function printTrace(node: Node, trace: TraceRow[]) {
       let node = Buffer.from(t.node).toString("hex").substring(0, 7);
       let sibling = Buffer.from(t.sibling).toString("hex").substring(0, 7);
       let parent = Buffer.from(t.parent).toString("hex").substring(0, 7);
-      console.log(`| ${(row_index++).toString().padEnd(3, ' ')} ||  ${t.depth.toString().padEnd(3, ' ')}  | ${sibling} |  ${t.siblingGindex.toString().padEnd(4, ' ')}  | ${node} | ${t.nodeGindex.toString().padEnd(4, ' ')}  |   ${t.isLeft ? 1 : 0}    |    ${t.isRight ? 1 : 0}    | ${parent} |  ${t.parentGindex.toString().padEnd(4, ' ')}  |`)
+      console.log(`| ${(row_index++).toString().padEnd(3, ' ')} ||  ${t.depth.toString().padEnd(3, ' ')}  | ${sibling} |  ${t.siblingIndex.toString().padEnd(4, ' ')}  | ${node} | ${t.index.toString().padEnd(4, ' ')}  |    ${t.intoLeft ? 1 : 0}     |   ${t.isLeft ? 1 : 0}    |    ${t.isRight ? 1 : 0}    | ${parent} |  ${t.parentIndex.toString().padEnd(4, ' ')}  |`)
   }
 
   let root = Buffer.from(node.root).toString("hex").substring(0, 7);
   draw_separator();
-  console.log(`| ${(++row_index).toString().padEnd(3, ' ')} ||  1    |         |        | ${root} | 1     |        |         |         |        |`)
+  console.log(`| ${(++row_index).toString().padEnd(3, ' ')} ||  1    |         |        | ${root} | 1     |          |        |         |         |        |`)
   draw_separator();
 }

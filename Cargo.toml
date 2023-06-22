@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "banshee-circuits",
-    "banshee-preprocessor",
+    "zkcasper-circuits",
+    "preprocessor",
     "eth-types",
     "gadgets",
 ]

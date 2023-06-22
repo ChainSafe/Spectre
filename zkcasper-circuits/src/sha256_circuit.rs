@@ -1,10 +1,15 @@
+//! The circuit for SHA256 hash function.
+//! This implementation is based on:\
+//! - https://hackmd.io/@tsgAyLwURdqHzWxSmwVLjw/Sk5AOhWhc#Bit-implementation
+//! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
+
 mod sha256_bit;
 mod util;
 
 use std::marker::PhantomData;
 
 use crate::{
-    table::SHA256Table,
+    table::{SHA256Table, LookupTable},
     util::{not, rlc, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
     witness::{self, HashInput},
 };
@@ -19,6 +24,7 @@ use itertools::Itertools;
 use log::{debug, info};
 use snark_verifier::loader::LoadedScalar;
 use util::*;
+use lazy_static::lazy_static;
 
 use self::sha256_bit::{multi_sha256, ShaRow};
 
@@ -58,7 +64,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
     type ConfigArgs = SHA256Table;
 
     fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
-        let r: F = Sha256CircuitConfig::rnd();
+        let r: F = Sha256CircuitConfig::fixed_challenge();
         let q_enable = meta.fixed_column();
         let q_first = meta.fixed_column();
         let q_extend = meta.fixed_column();
@@ -112,6 +118,10 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
         let mut h_64 = vec![0u64.expr(); NUM_BITS_PER_WORD];
         let mut new_a_ext = vec![0u64.expr(); NUM_BITS_PER_WORD_EXT];
         let mut new_e_ext = vec![0u64.expr(); NUM_BITS_PER_WORD_EXT];
+
+        // circuit annotation
+        hash_table.annotate_columns(meta);
+
         meta.create_gate("Query state bits", |meta| {
             for k in 0..NUM_BITS_PER_WORD_W {
                 w_ext[k] = meta.query_advice(word_w[k], Rotation(-0));
@@ -501,7 +511,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
                     }
                     // end
                 }
-                
+
                 cb.require_equal("update data rlc", data_rlc.clone(), new_data_rlc);
                 cb.require_equal(
                     "update base pow",
@@ -653,7 +663,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         layouter: &mut impl Layouter<F>,
         inputs: &[HashInput],
     ) -> Result<Vec<Vec<AssignedCell<F, F>>>, Error> {
-        let witness = multi_sha256(inputs, Sha256CircuitConfig::rnd());
+        let witness = multi_sha256(inputs, Sha256CircuitConfig::fixed_challenge());
         self.assign(layouter, &witness)
     }
 
@@ -817,6 +827,8 @@ impl<F: Field> Sha256CircuitConfig<F> {
             ],
         )?;
 
+        println!("offset: {offset} => [round {round}][is_enabled {}][is_final {}][left_rlc {:?}][right_rlc {:?}][data_rlc {:?}][hash_rlc {:?}]", row.is_final, row.is_final && round == NUM_ROUNDS + 7, row.limbs_rlc[0].get_lower_32(), row.limbs_rlc[1].get_lower_32(), row.data_rlc.get_lower_32(), row.hash_rlc.get_lower_32());
+
         let mut hash_cells = Vec::with_capacity(NUM_BYTES_FINAL_HASH);
         if !row.is_final || round != NUM_ROUNDS + 7 {
             for idx in 0..(NUM_BYTES_FINAL_HASH) {
@@ -842,7 +854,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         Ok(hash_cells)
     }
 
-    fn rnd() -> F {
+    pub fn fixed_challenge() -> F {
         F::from(123456)
     }
 }
@@ -891,7 +903,7 @@ impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
     fn synthesize_sub(
         &self,
         config: &Self::Config,
-        challenges: &Challenges<Value<F>>,
+        challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<(), Error> {
         let witness = self.generate_witness(*challenges);
@@ -922,8 +934,8 @@ impl<F: Field> Sha256Circuit<F> {
     }
 
     /// Sets the witness using the data to be hashed
-    pub(crate) fn generate_witness(&self, challenges: Challenges<Value<F>>) -> Vec<ShaRow<F>> {
-        multi_sha256(&self.inputs, Sha256CircuitConfig::rnd())
+    pub(crate) fn generate_witness(&self, challenges: Challenges<F, Value<F>>) -> Vec<ShaRow<F>> {
+        multi_sha256(&self.inputs, Sha256CircuitConfig::fixed_challenge())
     }
 }
 
@@ -982,7 +994,7 @@ mod tests {
     #[test]
     fn test_bit_sha256_simple() {
         let k = 10;
-        let inputs = vec![HashInput::MerklePair(vec![2u8; 32], vec![3u8; 32]); 2];
+        let inputs = vec![HashInput::MerklePair(vec![2u8; 32], vec![3u8; 32]); 1];
         verify::<Fr>(k, inputs, true);
     }
 }

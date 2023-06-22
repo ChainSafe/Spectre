@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 import {
     ContainerType,
     ListCompositeType,
@@ -12,6 +15,7 @@ import {
 import {createProof, ProofType, MultiProof, Node} from "@chainsafe/persistent-merkle-tree";
 import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 import crypto from "crypto";
+import { serialize } from "./util";
 
 
   const ValidatorContainer = new ContainerType(
@@ -38,10 +42,10 @@ let gindeces: bigint[] = [];
 
 for (let i = 0; i < N; i++) {
     validators.push({
-        pubkey: crypto.randomBytes(48),
+        pubkey: Uint8Array.from(crypto.randomBytes(48)),
         activationEpoch: i + 1,
         effectiveBalance: 32000000,
-        withdrawalCredentials: crypto.randomBytes(32),
+        withdrawalCredentials: Uint8Array.from(crypto.randomBytes(32)),
         slashed: false,
         activationEligibilityEpoch: i,
         exitEpoch: 100,
@@ -56,22 +60,6 @@ for (let i = 0; i < N; i++) {
 }
 let view = ValidatorsSsz.toView(validators);
 
-function printTree(tree: Node, depth: number = 0) {
-    console.log(" ".repeat(depth), depth, "0x" + Buffer.from(tree.root).toString("hex"), tree.isLeaf() ? "leaf" : "");
-    if (tree.isLeaf())
-        return;
-    if (tree.left) {
-        printTree(tree.left, depth + 1,);
-    }
-    if (tree.right) {
-        printTree(tree.right, depth + 1);
-    }
-}
-// printTree(view.node);
-
-
-console.log('gindeces:', gindeces);
-
 let proof = createProof(view.node, {type: ProofType.multi, gindices: gindeces}) as MultiProof; 
 
 const areEqual = (first: Uint8Array, second: Uint8Array) =>
@@ -82,4 +70,21 @@ let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proo
 
 printTrace(partial_tree, trace);
 
-console.log("\nisValid?", areEqual(partial_tree.root, view.node.root));
+fs.writeFileSync(
+    `../test_data/validators.json`,
+    serialize(Array.from(validators.entries()).map(([i, validator]) => ({Validator: {
+        id: i,
+        isActive: true,
+        isAttested: true,
+        pubkey: Array.from(validator.pubkey),
+        effectiveBalance: validator.effectiveBalance,
+        slashed: validator.slashed,
+        activationEpoch: validator.activationEpoch,
+        exitEpoch: validator.exitEpoch,
+    }})))
+);
+
+fs.writeFileSync(
+    `../test_data/merkle_trace.json`,
+    serialize(trace)
+);

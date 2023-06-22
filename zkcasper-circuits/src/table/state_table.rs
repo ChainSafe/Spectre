@@ -21,12 +21,13 @@ pub struct StateTable {
     pub g_index: Column<Advice>,
     /// Value
     pub value: Column<Advice>,
+    /// SSZ chunk RLC
+    pub ssz_rlc: Column<Advice>,
 }
 
 impl<F: Field> LookupTable<F> for StateTable {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
-            self.id.into(),
             self.tag.into(),
             self.is_active.into(),
             self.is_attested.into(),
@@ -34,6 +35,7 @@ impl<F: Field> LookupTable<F> for StateTable {
             self.index.into(),
             self.g_index.into(),
             self.value.into(),
+            self.ssz_rlc.into(),
         ]
     }
 
@@ -63,6 +65,7 @@ impl StateTable {
             index: meta.advice_column(), // meta.advice_column_in(SecondPhase),
             g_index: meta.advice_column(), // meta.advice_column_in(SecondPhase),
             value: meta.advice_column_in(SecondPhase),
+            ssz_rlc: meta.advice_column_in(SecondPhase),
         }
     }
 
@@ -97,15 +100,14 @@ impl StateTable {
         &self,
         layouter: &mut impl Layouter<F>,
         entries: &[StateEntry],
-        n_rows: usize,
-        challenges: Value<F>,
+        challenge: Value<F>,
     ) -> Result<(), Error> {
         layouter.assign_region(
             || "state table",
             |mut region| {
                 for (offset, row) in entries
                     .iter()
-                    .flat_map(|e| e.table_assignment(challenges))
+                    .flat_map(|e| e.table_assignment(challenge))
                     .enumerate()
                 {
                     self.assign(&mut region, offset, &row)?;
