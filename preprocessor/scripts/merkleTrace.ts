@@ -100,6 +100,18 @@ export function createNodeFromMultiProofWithTrace(leaves: Uint8Array[], witnesse
 
     const root = levels[1]["1"];
 
+    trace.push({
+      node: root.root,
+      index: 1n,
+      sibling: Uint8Array.from([]),
+      siblingIndex: 0n,
+      intoLeft: false,
+      isLeft: false,
+      isRight: false,
+      parent: Uint8Array.from([]),
+      parentIndex: 0n,
+      depth: 1,
+    });
     if (!root) {
       throw new Error("Internal consistency error: no root found");
     }
@@ -118,7 +130,7 @@ export function printTrace(node: Node, trace: TraceRow[]) {
   draw_separator();
   console.log('| Row || Depth | Sibling | sIndex |  Node   | Index | IntoLeft | IsLeft | IsRight | Parent  | pIndex |')
   draw_separator();
-  for (let t of trace) {
+  for (let t of trace.slice(0, trace.length - 1)) {
       if (t.depth != current_level) {
           draw_separator()
           current_level = t.depth;

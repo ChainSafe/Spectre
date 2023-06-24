@@ -1,6 +1,6 @@
 use crate::{
     util::{query_expression, Cell, CellType, Challenges, Expr},
-    vs_circuit::N_BYTE_LOOKUPS,
+    validators_circuit::N_BYTE_LOOKUPS,
     witness::*,
 };
 use eth_types::*;

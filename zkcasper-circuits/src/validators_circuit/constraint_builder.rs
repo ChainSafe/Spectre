@@ -2,19 +2,22 @@ use super::cell_manager::*;
 use crate::{
     gadget::LtGadget,
     util::{Cell, CellType, ConstrainBuilderCommon, Constraint, Expr, Lookup},
-    witness::StateTag,
+    witness::{StateEntry, StateRow, StateTag},
     N_BYTES_U64,
 };
 use eth_types::Field;
 use gadgets::binary_number::BinaryNumberConfig;
-use halo2_proofs::plonk::Expression;
+use halo2_proofs::{circuit::Region, plonk::Expression};
 use strum::IntoEnumIterator;
 
+#[derive(Clone, Debug)]
 pub struct ConstraintBuilder<F: Field> {
     pub constraints: Vec<Constraint<F>>,
     lookups: Vec<Lookup<F>>,
     condition: Expression<F>,
     pub(crate) cell_manager: CellManager<F>,
+    target_gte_activation: Option<LtGadget<F, N_BYTES_U64>>,
+    target_lt_exit: Option<LtGadget<F, N_BYTES_U64>>,
 }
 
 impl<F: Field> ConstraintBuilder<F> {
@@ -24,6 +27,8 @@ impl<F: Field> ConstraintBuilder<F> {
             lookups: vec![],
             condition: 1.expr(),
             cell_manager,
+            target_gte_activation: None,
+            target_lt_exit: None,
         }
     }
 
@@ -58,18 +63,22 @@ impl<F: Field> ConstraintBuilder<F> {
             cb.require_true("is_active is true when is_attested is true", q.is_active());
         });
 
+        let target_gte_activation =
+            LtGadget::<_, N_BYTES_U64>::construct(self, q.activation_epoch(), q.next_epoch());
+        let target_lt_exit =
+            LtGadget::<_, N_BYTES_U64>::construct(self, q.target_epoch(), q.exit_epoch());
+
         self.condition(q.is_active(), |cb| {
             cb.require_boolean("slashed is false for active validators", q.slashed());
-            let activated_lte_target =
-                LtGadget::<_, N_BYTES_U64>::construct(cb, q.activation_epoch(), q.next_epoch())
-                    .expr();
-            let exited_gt_target =
-                LtGadget::<_, N_BYTES_U64>::construct(cb, q.target_epoch(), q.exit_epoch()).expr();
+
             cb.require_true(
                 "activation_epoch <= target_epoch > exit_epoch for active validators",
-                activated_lte_target * exited_gt_target,
+                target_gte_activation.expr() * target_lt_exit.expr(),
             )
         });
+
+        self.target_gte_activation.insert(target_gte_activation);
+        self.target_lt_exit.insert(target_lt_exit);
     }
 
     fn build_committee_constraints(&mut self, q: &Queries<F>) {
@@ -91,6 +100,45 @@ impl<F: Field> ConstraintBuilder<F> {
         self.condition = self.condition.clone() * condition;
         build(self);
         self.condition = original_condition;
+    }
+
+    pub fn assign_with_region(
+        &self,
+        region: &mut Region<F>,
+        offset: usize,
+        data: &StateEntry,
+        target_epoch: u64,
+    ) {
+        let target_gte_activation = self
+            .target_gte_activation
+            .as_ref()
+            .expect("target_gte_activation gadget is expected");
+        let target_lt_exit = self
+            .target_lt_exit
+            .as_ref()
+            .expect("target_lt_exited gadget is expected");
+
+        match data {
+            StateEntry::Validator {
+                activation_epoch,
+                exit_epoch,
+                ..
+            } => {
+                target_gte_activation.assign(
+                    region,
+                    offset,
+                    F::from(*activation_epoch),
+                    F::from(target_epoch + 1),
+                );
+                target_lt_exit.assign(
+                    region,
+                    offset,
+                    F::from(target_epoch),
+                    F::from(*exit_epoch),
+                );
+            }
+            StateEntry::Committee { .. } => {}
+        }
     }
 }
 

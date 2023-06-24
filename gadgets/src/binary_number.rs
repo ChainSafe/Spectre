@@ -92,11 +92,23 @@ where
         )
     }
 
+    /// Annotates columns of this gadget.
+    pub fn annotate_columns<F: Field>(&self, meta: &mut ConstraintSystem<F>, prefix: &str) {
+        let mut annotations = Vec::new();
+        for (i, _) in self.bits.iter().enumerate() {
+            annotations.push(format!("binary_number_{}", i));
+        }
+        self.bits
+            .iter()
+            .zip(annotations.iter())
+            .for_each(|(col, ann)| meta.annotate_lookup_any_column(*col, || format!("{}_{}", prefix, ann)));
+    }
+
     /// Annotates columns of this gadget embedded within a circuit region.
     pub fn annotate_columns_in_region<F: Field>(&self, region: &mut Region<F>, prefix: &str) {
         let mut annotations = Vec::new();
         for (i, _) in self.bits.iter().enumerate() {
-            annotations.push(format!("GADGETS_binary_number_{}", i));
+            annotations.push(format!("binary_number_{}", i));
         }
         self.bits
             .iter()

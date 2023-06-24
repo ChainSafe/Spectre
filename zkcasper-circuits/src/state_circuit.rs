@@ -1,4 +1,4 @@
-use crate::{util::ConstrainBuilderCommon, MAX_VALIDATORS, table::state_table};
+use crate::{table::state_table, util::ConstrainBuilderCommon, MAX_VALIDATORS};
 
 pub mod cell_manager;
 use cell_manager::CellManager;
@@ -33,13 +33,13 @@ use itertools::Itertools;
 use std::{
     fmt::format,
     iter,
+    marker::PhantomData,
     ops::{Add, Mul},
-    vec, marker::PhantomData,
+    vec,
 };
 
 pub const CHUNKS_PER_VALIDATOR: usize = 8;
 pub const USED_CHUNKS_PER_VALIDATOR: usize = 5;
-// pub const TREE_MAX_LEAVES: usize = MAX_VALIDATORS * CHUNKS_PER_VALIDATOR;
 pub const TREE_DEPTH: usize = 10; // ceil(log2(TREE_MAX_LEAVES))
 pub const TREE_LEVEL_AUX_COLUMNS: usize = 1;
 
@@ -48,10 +48,10 @@ pub const VALIDATORS_LEVEL: usize = PUBKEYS_LEVEL - 1;
 
 #[derive(Clone, Debug)]
 pub struct StateSSZCircuitConfig<F: Field> {
-    selector: Selector,
-    tree: [TreeLevel<F>; TREE_DEPTH],
+    tree: [TreeLevel<F>; TREE_DEPTH - 1],
     sha256_table: SHA256Table,
     state_table: StateTable,
+    // state_root: Column<Instance>
 }
 
 pub struct StateSSZCircuitArgs {
@@ -66,33 +66,30 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         let sha256_table = args.sha256_table;
         let state_table = args.state_table;
 
-        let selector = meta.selector();
-        let mut tree = vec![TreeLevel::configure(
-            meta,
-            PUBKEYS_LEVEL,
-            0,
-            3,
-            true,
-        )];
+        let mut tree = vec![TreeLevel::configure(meta, PUBKEYS_LEVEL, 0, 3, true)];
 
         let mut padding = 0;
-        for i in (1..TREE_DEPTH).rev() {
+        for i in (2..TREE_DEPTH).rev() {
             if i != VALIDATORS_LEVEL {
                 padding = padding * 2 + 1;
             }
-            let level =
-                TreeLevel::configure(meta, i, 0, padding, i == VALIDATORS_LEVEL);
+            let level = TreeLevel::configure(meta, i, 0, padding, i == VALIDATORS_LEVEL);
             tree.push(level);
         }
 
-        let mut tree: [_; TREE_DEPTH] = tree.into_iter().rev().collect_vec().try_into().unwrap();
+        let mut tree: [_; TREE_DEPTH - 1] = tree.into_iter().rev().collect_vec().try_into().unwrap();
 
-        for i in (0..TREE_DEPTH).rev() {
-            let level = &tree[i];
-            let next_level = &tree[i - 1];
+        // Annotate circuit
+        sha256_table.annotate_columns(meta);
+        state_table.annotate_columns(meta);
+
+        for depth in (2..TREE_DEPTH).rev() {
+            let depth = depth - 1;
+            let level = &tree[depth];
+            let next_level = &tree[depth - 1];
 
             meta.create_gate("tree_level boolean checks", |meta| {
-                let selector = meta.query_selector(selector);
+                let selector = level.selector(meta);
                 let mut cb = ConstraintBuilder::new();
                 cb.require_boolean("into_left is boolean", level.into_left(meta));
                 if let Some(is_left_col) = level.is_left {
@@ -112,57 +109,53 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
 
             if let Some(is_left_col) = level.is_left {
                 meta.lookup_any(
-                    "state_table.lookup(tree_level,node, tree_level.index)",
+                    "state_table.lookup(index, node)",
                     |meta| {
-                        let selector = meta.query_selector(selector);
+                        let selector = level.selector(meta);
                         let is_left = meta.query_advice(is_left_col, Rotation::cur());
+                        let index = level.index(meta);
+                        let node = level.node(meta);
 
-                        // TODO: constraint (node, index) with StateTable
-                        // https://github.com/privacy-scaling-explorations/zkevm-circuits/blob/main/zkevm-circuits/src/evm_circuit/execution.rs#L815-L816
-                        // state_table.build_lookup(
-                        //     meta,
-                        //     selector * is_left,
-                        //     level.node(meta),
-                        //     level.node_index(meta),
-                        // )
-                        vec![]
+                        state_table.build_lookup(
+                            meta,
+                            selector * is_left,
+                            index,
+                            node,
+                        )
                     },
                 );
             }
 
             if let Some(is_right_col) = level.is_right {
                 meta.lookup_any(
-                    "state_table.lookup(tree_level.sibling, tree_level.sibling_index",
+                    "state_table.lookup(sibling_index, sibling)",
                     |meta| {
-                        let selector = meta.query_selector(selector);
+                        let selector = level.selector(meta);
                         let is_right = meta.query_advice(is_right_col, Rotation::cur());
+                        let sibling_index = level.sibling_index(meta);
+                        let sibling = level.sibling(meta);
 
-                        // TODO: constraint (sibling, sibling_index) with StateTable
-                        // state_table.build_lookup(
-                        //     meta,
-                        //     selector * is_right,
-                        //     level.sibling(meta),
-                        //     level.sibling_index(meta),
-                        // )
-                        vec![]
+                        state_table.build_lookup(
+                            meta,
+                            selector * is_right,
+                            sibling_index,
+                            sibling,
+                        )
                     },
                 );
             }
 
-            meta.lookup_any(
-                "hash(tree_level.node | tree_level.sibling) == next_level.node",
-                |meta| {
-                    let selector = meta.query_selector(selector);
-                    let into_node = level.into_left(meta);
-                    let node = level.node(meta);
-                    let sibling = level.sibling(meta);
-                    let parent = next_level.node(meta);
-                    sha256_table.build_lookup(meta, selector * into_node, node, sibling, parent)
-                },
-            );
+            meta.lookup_any("hash(node, sibling) == next_level.node", |meta| {
+                let selector = level.selector(meta);
+                let into_node = level.into_left(meta);
+                let node = level.node(meta);
+                let sibling = level.sibling(meta);
+                let parent = next_level.node(meta);
+                sha256_table.build_lookup(meta, selector * into_node, node, sibling, parent)
+            });
 
-            meta.lookup_any("hash(tree_level.node | tree_level.sibling) == next_level.sibling@rotation(-(padding + 1))", |meta| {
-                let selector = meta.query_selector(selector);
+            meta.lookup_any("hash(node, sibling) = next_level.sibling", |meta| {
+                let selector = level.selector(meta);
                 let into_sibling: Expression<F> = not::expr(level.into_left(meta));
                 let node = level.node(meta);
                 let sibling = level.sibling(meta);
@@ -178,29 +171,29 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         }
 
         StateSSZCircuitConfig {
-            selector,
             tree,
             sha256_table,
             state_table,
         }
     }
 
+    fn annotate_columns_in_region(&self, region: &mut Region<'_, F>) {
+        self.state_table.annotate_columns_in_region(region);
+        self.sha256_table.annotate_columns_in_region(region);
+        for level in self.tree.iter() {
+            level.annotate_columns_in_region(region);
+        }
+    }
 }
 
 impl<F: Field> StateSSZCircuitConfig<F> {
-    fn assign(&self,
+    fn assign(
+        &self,
         layouter: &mut impl Layouter<F>,
         witness: &MerkleTrace,
-        challange: Value<F>
+        challange: Value<F>,
     ) -> Result<usize, Error> {
-        let trace_by_depth = witness
-            .into_iter()
-            .group_by(|step| step.depth)
-            .into_iter()
-            .sorted_by_key(|(depth, steps)| depth.clone())
-            .rev()
-            .map(|(depth, steps)| steps.collect_vec())
-            .collect_vec();
+        let trace_by_depth = witness.trace_by_levels();
 
         let max_rows = trace_by_depth
             .iter()
@@ -209,18 +202,19 @@ impl<F: Field> StateSSZCircuitConfig<F> {
             .unwrap();
 
         layouter.assign_region(
-            || "assign merkle trace",
+            || "state ssz circuit",
             |mut region| {
-            for offset in 0..max_rows {
-                self.selector.enable(&mut region, offset)?;
-            }
+                self.annotate_columns_in_region(&mut region);
 
-            for (level, steps) in self.tree.iter().zip(trace_by_depth.clone()) {
-                level.assign_with_region(&mut region, steps, challange)?;
-            }
+                // filter out the first (root) level, state root is assigned seperately into instance column.
+                let trace_by_depth = trace_by_depth.clone().into_iter().filter(|e| e[0].depth != 1).collect_vec();
+                for (level, steps) in self.tree.iter().zip(trace_by_depth) {
+                    level.assign_with_region(&mut region, steps, challange)?;
+                }
 
-            Ok(())
-        });
+                Ok(())
+            },
+        );
 
         Ok(max_rows)
     }
@@ -229,34 +223,27 @@ impl<F: Field> StateSSZCircuitConfig<F> {
 /// Circuit for verify Merkle-multi proof of the SSZ Merkelized `BeaconState`
 #[derive(Clone, Default, Debug)]
 pub struct StateSSZCircuit<F: Field> {
-    offset: usize,
     trace: MerkleTrace,
     _f: PhantomData<F>,
 }
 
 impl<F: Field> StateSSZCircuit<F> {
-    pub fn new(
-        offset: usize,
-        trace: MerkleTrace,
-    ) -> Self {
+    pub fn new(trace: MerkleTrace) -> Self {
         Self {
-            offset,
             trace,
             _f: PhantomData,
         }
     }
-
-   
 }
 
 impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
     type Config = StateSSZCircuitConfig<F>;
 
-    fn unusable_rows() -> usize {
-        todo!()
+    fn new_from_block(block: &witness::Block<F>) -> Self {
+        Self::new(block.merkle_trace.clone())
     }
 
-    fn new_from_block(block: &witness::Block<F>) -> Self {
+    fn unusable_rows() -> usize {
         todo!()
     }
 
@@ -278,15 +265,21 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr, circuit::{Value, SimpleFloorPlanner}, plonk::Circuit};
+    use crate::{
+        sha256_circuit::{Sha256Circuit, Sha256CircuitConfig},
+        witness::{MerkleTrace, StateEntry},
+    };
+    use halo2_proofs::{
+        circuit::{SimpleFloorPlanner, Value},
+        dev::MockProver,
+        halo2curves::bn256::Fr,
+        plonk::Circuit,
+    };
     use itertools::Itertools;
-    use crate::{witness::{StateEntry, MerkleTrace}, sha256_circuit::{Sha256Circuit, Sha256CircuitConfig}};
-    use std::{marker::PhantomData, fs};
-
+    use std::{fs, marker::PhantomData};
 
     #[derive(Debug, Clone)]
     struct TestStateSSZ<F: Field> {
@@ -306,7 +299,7 @@ mod tests {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let state_table = StateTable::construct(meta);
             let sha256_table = SHA256Table::construct(meta);
-    
+
             let config = {
                 StateSSZCircuitConfig::new(
                     meta,
@@ -316,7 +309,7 @@ mod tests {
                     },
                 )
             };
-    
+
             (config, Challenges::construct(meta))
         }
 
@@ -325,15 +318,21 @@ mod tests {
             config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
-            let challenge = Value::known(Sha256CircuitConfig::fixed_challenge());
-            let hash_inputs = self.state.iter().flat_map(|e| e.sha256_inputs()).collect_vec();
-            config.0.sha256_table.dev_load(
+            let challenge = config.1.sha256_input();
+            let hash_inputs = self.state_circuit.trace.sha256_inputs();
+            config
+                .0
+                .state_table
+                .load(&mut layouter, &self.state, challenge)?;
+            config
+                .0
+                .sha256_table
+                .dev_load(&mut layouter, &hash_inputs, challenge.clone())?;
+            self.state_circuit.synthesize_sub(
+                &config.0,
+                &config.1.values(&mut layouter),
                 &mut layouter,
-                &hash_inputs,
-                challenge.clone(),
             )?;
-            config.0.state_table.load(&mut layouter, &self.state, challenge)?;
-            self.state_circuit.synthesize_sub(&config.0, &config.1.values(&mut layouter), &mut layouter)?;
             Ok(())
         }
     }
@@ -341,23 +340,18 @@ mod tests {
     #[test]
     fn test_state_ssz_circuit() {
         let k = 10;
-        let state: Vec<StateEntry> = serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
-        let merkle_trace: MerkleTrace = serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
+        let state: Vec<StateEntry> =
+            serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
+        let merkle_trace: MerkleTrace =
+            serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
+
         let circuit = TestStateSSZ::<Fr> {
             state,
-            state_circuit: StateSSZCircuit::new(0, merkle_trace),
+            state_circuit: StateSSZCircuit::new(merkle_trace),
             _f: PhantomData,
         };
 
         let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
-        let verify_result = prover.verify();
-        if !verify_result.is_ok() {
-            if let Some(errors) = verify_result.err() {
-                for error in errors.iter() {
-                    println!("{}", error);
-                }
-            }
-            panic!();
-        }
+        prover.assert_satisfied();
     }
 }

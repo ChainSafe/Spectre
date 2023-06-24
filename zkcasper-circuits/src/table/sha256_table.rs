@@ -1,5 +1,5 @@
 use super::*;
-use crate::util::{Challenges, rlc};
+use crate::{util::{Challenges, rlc}, witness::HashInput};
 use itertools::Itertools;
 use sha2::Digest;
 
@@ -75,34 +75,60 @@ impl SHA256Table {
 
     /// Generate the sha256 table assignments from a byte array input.
     pub fn assignments<F: Field>(
-        input: &[u8],
+        input:&HashInput,
         challenge: Value<F>,
-    ) -> Vec<[Value<F>; 4]> {
-        let input_rlc = challenge.map(|randomness| rlc::value(
-            input,
-            randomness,
-        ));
-        let input_len = F::from(input.len() as u64);
+    ) -> [Value<F>; 6] {
+        let (left_rlc, right_rlc, input_rlc, preimage) = match input {
+            HashInput::Single(input) => {
+                let input_rlc = challenge.map(|randomness| rlc::value(
+                    input,
+                    randomness,
+                ));
 
-        let output = sha2::Sha256::digest(input).to_vec();
+                (input_rlc.clone(), Value::known(F::zero()), input_rlc, input.clone())
+            },
+            HashInput::MerklePair(left, right) =>  {
+                let left_rlc = challenge.map(|randomness| rlc::value(
+                    left,
+                    randomness,
+                ));
+                let right_rlc = challenge.map(|randomness| rlc::value(
+                    right,
+                    randomness,
+                ));
+                let preimage = vec![left.clone(), right.clone()].concat();
+                let input_rlc = challenge.map(|randomness| rlc::value(
+                    &preimage,
+                    randomness,
+                ));
+
+                (left_rlc, right_rlc, input_rlc, preimage)
+            }
+        };
+       
+        let input_len = F::from(preimage.len() as u64);
+
+        let output = sha2::Sha256::digest(preimage).to_vec();
         let output_rlc = challenge.map(|randomness| rlc::value(
             &output,
             randomness,
         ));
 
-        vec![[
+        [
             Value::known(F::one()),
+            left_rlc,
+            right_rlc,
             input_rlc,
             Value::known(input_len),
             output_rlc,
-        ]]
+        ]
     }
 
     /// Load sha256 table but without running the full sha256 circuit.
     pub fn dev_load<'a, F: Field>(
         &self,
         layouter: &mut impl Layouter<F>,
-        inputs: impl IntoIterator<Item = &'a Vec<u8>> + Clone,
+        inputs: impl IntoIterator<Item = &'a HashInput> + Clone,
         challenge: Value<F>,
     ) -> Result<(), Error> {
         layouter.assign_region(
@@ -110,19 +136,21 @@ impl SHA256Table {
             |mut region| {
                 let mut offset = 0;
 
+                self.annotate_columns_in_region(&mut region);
+
                 let sha256_table_columns = <SHA256Table as LookupTable<F>>::advice_columns(self);
                 for input in inputs.clone() {
-                    for row in Self::assignments(input, challenge.clone()) {
-                        for (&column, value) in sha256_table_columns.iter().zip_eq(row) {
-                            region.assign_advice(
-                                || format!("sha256 table row {}", offset),
-                                column,
-                                offset,
-                                || value,
-                            )?;
-                        }
-                        offset += 1;
+                    let row = Self::assignments(input, challenge.clone());
+
+                    for (&column, value) in sha256_table_columns.iter().zip_eq(row) {
+                        region.assign_advice(
+                            || format!("sha256 table row {}", offset),
+                            column,
+                            offset,
+                            || value,
+                        )?;
                     }
+                    offset += 1;
                 }
                 Ok(())
             },
@@ -139,7 +167,7 @@ impl SHA256Table {
     ) -> Vec<(Expression<F>, Expression<F>)> {
         vec![
             (
-                enable.clone() * Expression::Constant(F::zero()),
+                enable.clone(),
                 meta.query_advice(self.is_enabled, Rotation::cur()),
             ),
             (

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::witness::{StateEntry, StateRow};
 
 use super::*;
@@ -18,7 +20,7 @@ pub struct StateTable {
     /// Index for FieldTag
     pub index: Column<Advice>,
     /// Generalized index for State tree Merkle proofs.
-    pub g_index: Column<Advice>,
+    pub gindex: Column<Advice>,
     /// Value
     pub value: Column<Advice>,
     /// SSZ chunk RLC
@@ -28,12 +30,13 @@ pub struct StateTable {
 impl<F: Field> LookupTable<F> for StateTable {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
+            self.id.into(),
             self.tag.into(),
             self.is_active.into(),
             self.is_attested.into(),
             self.field_tag.into(),
             self.index.into(),
-            self.g_index.into(),
+            self.gindex.into(),
             self.value.into(),
             self.ssz_rlc.into(),
         ]
@@ -47,8 +50,9 @@ impl<F: Field> LookupTable<F> for StateTable {
             String::from("is_attested"),
             String::from("field_tag"),
             String::from("index"),
-            String::from("g_index"),
+            String::from("gindex"),
             String::from("value"),
+            String::from("ssz_rlc"),
         ]
     }
 }
@@ -63,7 +67,7 @@ impl StateTable {
             is_attested: meta.advice_column(),
             field_tag: meta.advice_column(),
             index: meta.advice_column(), // meta.advice_column_in(SecondPhase),
-            g_index: meta.advice_column(), // meta.advice_column_in(SecondPhase),
+            gindex: meta.advice_column_in(SecondPhase),
             value: meta.advice_column_in(SecondPhase),
             ssz_rlc: meta.advice_column_in(SecondPhase),
         }
@@ -82,8 +86,9 @@ impl StateTable {
             (self.is_attested, row.is_attested),
             (self.field_tag, row.field_tag),
             (self.index, row.index),
-            (self.g_index, row.g_index),
+            (self.gindex, row.gindex),
             (self.value, row.value),
+            (self.ssz_rlc, row.ssz_rlc),
         ] {
             region.assign_advice(
                 || "assign state row on state table",
@@ -105,6 +110,7 @@ impl StateTable {
         layouter.assign_region(
             || "state table",
             |mut region| {
+                self.annotate_columns_in_region(&mut region);
                 for (offset, row) in entries
                     .iter()
                     .flat_map(|e| e.table_assignment(challenge))
@@ -116,5 +122,25 @@ impl StateTable {
                 Ok(())
             },
         )
+    }
+
+    pub fn build_lookup<F: Field>(
+        &self,
+        meta: &mut VirtualCells<'_, F>,
+        enable: Expression<F>,
+        gindex: Expression<F>,
+        value_rlc: Expression<F>,
+    ) -> Vec<(Expression<F>, Expression<F>)> {
+        vec![
+            (
+                gindex.clone() * enable.clone(),
+                meta.query_advice(self.gindex, Rotation::cur()),
+            ),
+            (
+                value_rlc.clone() * enable.clone(),
+                meta.query_advice(self.ssz_rlc, Rotation::cur())
+            )
+            // TODO: should any other columns be included?
+        ]
     }
 }

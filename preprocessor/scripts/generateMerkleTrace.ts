@@ -38,49 +38,80 @@ export const ValidatorsSsz = new ListCompositeType(ValidatorContainer, 10);
 
 const N = 5;
 let validators: Validator[] = [];
-let gindeces: bigint[] = [];
+let gindices: bigint[] = [];
+let validatorBaseGindices: bigint[] = [];
 
 for (let i = 0; i < N; i++) {
     validators.push({
         pubkey: Uint8Array.from(crypto.randomBytes(48)),
-        activationEpoch: i + 1,
-        effectiveBalance: 32000000,
         withdrawalCredentials: Uint8Array.from(crypto.randomBytes(32)),
+        effectiveBalance: 32000000,
         slashed: false,
         activationEligibilityEpoch: i,
+        activationEpoch: i + 1,
         exitEpoch: 100,
         withdrawableEpoch: 0
     });
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n);
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n + 1n);
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex);
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'slashed']).gindex);
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex);
-    gindeces.push(ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex);
+    validatorBaseGindices.push(ValidatorsSsz.getPathInfo([i]).gindex);
+    console.log([
+        [
+            ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 16n
+        ],
+        [
+            ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n + 1n, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 16n + 1n
+        ],
+        [
+            ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 2n
+        ],
+        [
+            ValidatorsSsz.getPathInfo([i, 'slashed']).gindex, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 3n
+        ],
+        [
+            ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 5n
+        ],
+        [
+            ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex, 
+            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 6n
+        ],
+    ]);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n + 1n);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'slashed']).gindex);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex);
+    gindices.push(ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex);
 }
+
 let view = ValidatorsSsz.toView(validators);
 
-let proof = createProof(view.node, {type: ProofType.multi, gindices: gindeces}) as MultiProof; 
+let proof = createProof(view.node, {type: ProofType.multi, gindices: gindices}) as MultiProof; 
 
 const areEqual = (first: Uint8Array, second: Uint8Array) =>
     first.length === second.length && first.every((value, index) => value === second[index]);
-
 
 let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices);
 
 printTrace(partial_tree, trace);
 
+const target_epoch = 25;
+
 fs.writeFileSync(
     `../test_data/validators.json`,
     serialize(Array.from(validators.entries()).map(([i, validator]) => ({Validator: {
         id: i,
-        isActive: true,
+        isActive: !validator.slashed && validator.activationEpoch <= target_epoch && target_epoch < validator.exitEpoch,
         isAttested: true,
         pubkey: Array.from(validator.pubkey),
         effectiveBalance: validator.effectiveBalance,
         slashed: validator.slashed,
         activationEpoch: validator.activationEpoch,
         exitEpoch: validator.exitEpoch,
+        gindex: validatorBaseGindices[i]
     }})))
 );
 

@@ -1,8 +1,13 @@
 use gadgets::impl_expr;
+use itertools::Itertools;
 use strum_macros::EnumIter;
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 
-pub type MerkleTrace = Vec<MerkleTraceStep>;
+use super::HashInput;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MerkleTrace(pub Vec<MerkleTraceStep>);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MerkleTraceStep {
@@ -17,3 +22,29 @@ pub struct MerkleTraceStep {
     pub parent_index: u64,
     pub depth: usize,
 }
+
+
+impl MerkleTrace {
+    // levels
+    pub fn trace_by_levels<'a>(&'a self) -> Vec<Vec<&'a MerkleTraceStep>> {
+        self.0
+            .iter()
+            .group_by(|step| step.depth)
+            .into_iter()
+            .sorted_by_key(|(depth, steps)| depth.clone())
+            .map(|(depth, steps)| steps.collect_vec())
+            .collect_vec()
+    }
+
+    pub fn sha256_inputs(&self) -> Vec<HashInput> {
+        let mut steps_sorted = self.0.clone().into_iter().sorted_by_key(|e| e.depth).rev().collect_vec();
+        if steps_sorted.last().unwrap().depth == 1 {
+            steps_sorted.pop();
+        }
+        steps_sorted.into_iter().map(|step| {
+            assert_eq!(sha2::Sha256::digest(&vec![step.node.clone(), step.sibling.clone()].concat()).to_vec(), step.parent);
+            HashInput::MerklePair(step.node, step.sibling)
+        }).collect_vec()
+    }
+}
+

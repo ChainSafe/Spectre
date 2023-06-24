@@ -10,7 +10,7 @@ use crate::{witness, sha256_circuit::Sha256CircuitConfig};
 use eth_types::*;
 pub use gadgets::util::{and, not, or, rlc, select, sum, xor, Expr};
 use halo2_proofs::{
-    circuit::{Layouter, Value},
+    circuit::{Layouter, Value, Region},
     plonk::{
         Challenge, Circuit, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase,
         VirtualCells, Advice,
@@ -124,6 +124,9 @@ pub trait SubCircuitConfig<F: Field> {
 
     /// Type constructor
     fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self;
+
+    /// Annotates columns of a circuit embedded within a circuit region.
+    fn annotate_columns_in_region(&self, region: &mut Region<F>);
 }
 
 /// Packs bits into bytes
