@@ -9,7 +9,7 @@ mod util;
 use std::marker::PhantomData;
 
 use crate::{
-    table::{SHA256Table, LookupTable},
+    table::{LookupTable, SHA256Table},
     util::{not, rlc, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
     witness::{self, HashInput},
 };
@@ -21,10 +21,10 @@ use halo2_proofs::{
     poly::Rotation,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use log::{debug, info};
 use snark_verifier::loader::LoadedScalar;
 use util::*;
-use lazy_static::lazy_static;
 
 use self::sha256_bit::{multi_sha256, ShaRow};
 

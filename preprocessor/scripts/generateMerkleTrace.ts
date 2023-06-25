@@ -41,6 +41,8 @@ let validators: Validator[] = [];
 let gindices: bigint[] = [];
 let validatorBaseGindices: bigint[] = [];
 
+console.log("validators[0].gindex:", ValidatorsSsz.getPathInfo([0]).gindex);
+
 for (let i = 0; i < N; i++) {
     validators.push({
         pubkey: Uint8Array.from(crypto.randomBytes(48)),
@@ -56,27 +58,27 @@ for (let i = 0; i < N; i++) {
     console.log([
         [
             ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 16n
+            "pubkey1"
         ],
         [
             ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n + 1n, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 16n + 1n
+            "pubkey2"
         ],
         [
             ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 2n
+            "effectiveBalance"
         ],
         [
             ValidatorsSsz.getPathInfo([i, 'slashed']).gindex, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 3n
+            "slashed"
         ],
         [
             ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 5n
+            "activationEpoch"            
         ],
         [
             ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex, 
-            ValidatorsSsz.getPathInfo([i]).gindex * 8n + 6n
+            "exitEpoch"
         ],
     ]);
     gindices.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n);
@@ -102,8 +104,9 @@ const target_epoch = 25;
 
 fs.writeFileSync(
     `../test_data/validators.json`,
-    serialize(Array.from(validators.entries()).map(([i, validator]) => ({Validator: {
+    serialize(Array.from(validators.entries()).map(([i, validator]) => ({
         id: i,
+        committee: 0,
         isActive: !validator.slashed && validator.activationEpoch <= target_epoch && target_epoch < validator.exitEpoch,
         isAttested: true,
         pubkey: Array.from(validator.pubkey),
@@ -112,7 +115,18 @@ fs.writeFileSync(
         activationEpoch: validator.activationEpoch,
         exitEpoch: validator.exitEpoch,
         gindex: validatorBaseGindices[i]
-    }})))
+    })))
+);
+
+fs.writeFileSync(
+    `../test_data/committees.json`,
+    serialize([
+        {
+            id: 0,
+            accumulatedBalance: Array.from(validators).reduce((acc, validator) => acc + validator.effectiveBalance, 0),
+            aggregatedPubkey: Array.from(crypto.randomBytes(48)), // TODO: aggregate pubkeys
+        }
+    ])
 );
 
 fs.writeFileSync(

@@ -101,7 +101,9 @@ where
         self.bits
             .iter()
             .zip(annotations.iter())
-            .for_each(|(col, ann)| meta.annotate_lookup_any_column(*col, || format!("{}_{}", prefix, ann)));
+            .for_each(|(col, ann)| {
+                meta.annotate_lookup_any_column(*col, || format!("{}_{}", prefix, ann))
+            });
     }
 
     /// Annotates columns of this gadget embedded within a circuit region.
@@ -191,7 +193,7 @@ where
 
     /// Assign a value to the binary number chip. A generic type that implements
     /// the AsBits trait can be provided for assignment.
-    pub fn assign(
+    pub fn assign_with_region(
         &self,
         region: &mut Region<'_, F>,
         offset: usize,

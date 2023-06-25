@@ -1,146 +1,197 @@
+use gadgets::util::rlc;
 use itertools::Itertools;
+use std::collections::HashMap;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
-use crate::witness::{StateEntry, StateRow};
+use crate::{
+    state_circuit::{PUBKEYS_LEVEL, VALIDATORS_LEVEL},
+    witness::{MerkleTrace, MerkleTraceStep},
+};
 
 use super::*;
+
+#[derive(Clone, Debug)]
+pub struct StateTables(HashMap<StateTreeLevel, StateTable>);
 
 /// The StateTable contains records of the state of the beacon chain.
 #[derive(Clone, Debug)]
 pub struct StateTable {
-    /// ValidatorIndex when tag == 'Validator', CommitteeIndex otherwise.
-    pub id: Column<Advice>,
-    /// Type of entity contained in BeaconState "god" object
-    pub tag: Column<Advice>,
-    /// Signals whether validator is active during that epoch.
-    pub is_active: Column<Advice>,
-    /// Signals whether validator have attested during that epoch.
-    pub is_attested: Column<Advice>,
-    /// Type of field the row represents.
-    pub field_tag: Column<Advice>,
-    /// Index for FieldTag
+    pub is_enabled: Column<Fixed>,
+    pub sibling: Column<Advice>,
+    pub sibling_index: Column<Advice>,
+    pub node: Column<Advice>,
     pub index: Column<Advice>,
-    /// Generalized index for State tree Merkle proofs.
-    pub gindex: Column<Advice>,
-    /// Value
-    pub value: Column<Advice>,
-    /// SSZ chunk RLC
-    pub ssz_rlc: Column<Advice>,
+}
+
+#[derive(Clone, Debug, EnumIter, PartialEq, Eq, Hash)]
+pub enum StateTreeLevel {
+    PubKeys,
+    Validators,
 }
 
 impl<F: Field> LookupTable<F> for StateTable {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
-            self.id.into(),
-            self.tag.into(),
-            self.is_active.into(),
-            self.is_attested.into(),
-            self.field_tag.into(),
+            self.is_enabled.into(),
+            self.sibling.into(),
+            self.sibling_index.into(),
+            self.node.into(),
             self.index.into(),
-            self.gindex.into(),
-            self.value.into(),
-            self.ssz_rlc.into(),
         ]
     }
 
     fn annotations(&self) -> Vec<String> {
         vec![
-            String::from("id"),
-            String::from("tag"),
-            String::from("is_active"),
-            String::from("is_attested"),
-            String::from("field_tag"),
+            String::from("is_enabled"),
+            String::from("sibling"),
+            String::from("sibling_index"),
+            String::from("node"),
             String::from("index"),
-            String::from("gindex"),
-            String::from("value"),
-            String::from("ssz_rlc"),
         ]
     }
 }
 
 impl StateTable {
-    /// Construct a new StateTable
-    pub fn construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
+    // For `StateTables::dev_constract` only.
+    fn constuct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
+        let is_enabled = meta.fixed_column();
+        let sibling = meta.advice_column();
+        let sibling_index = meta.advice_column_in(FirstPhase);
+        let node = meta.advice_column();
+        let index = meta.advice_column_in(FirstPhase);
+
         Self {
-            id: meta.advice_column(),
-            tag: meta.advice_column(),
-            is_active: meta.advice_column(),
-            is_attested: meta.advice_column(),
-            field_tag: meta.advice_column(),
-            index: meta.advice_column(), // meta.advice_column_in(SecondPhase),
-            gindex: meta.advice_column_in(SecondPhase),
-            value: meta.advice_column_in(SecondPhase),
-            ssz_rlc: meta.advice_column_in(SecondPhase),
+            is_enabled,
+            sibling,
+            sibling_index,
+            node,
+            index,
         }
     }
 
-    fn assign<F: Field>(
+    // For `StateTables::dev_constract` only. Must not be used in `StateCircuit` as it does not adds padding.
+    fn assign_with_region<F: Field>(
         &self,
         region: &mut Region<'_, F>,
-        offset: usize,
-        row: &StateRow<Value<F>>,
+        steps: Vec<&MerkleTraceStep>,
+        challange: Value<F>,
     ) -> Result<(), Error> {
-        for (column, value) in [
-            (self.id, row.id),
-            (self.tag, row.tag),
-            (self.is_active, row.is_active),
-            (self.is_attested, row.is_attested),
-            (self.field_tag, row.field_tag),
-            (self.index, row.index),
-            (self.gindex, row.gindex),
-            (self.value, row.value),
-            (self.ssz_rlc, row.ssz_rlc),
-        ] {
+        for (i, step) in steps.into_iter().enumerate() {
+            assert_eq!(step.sibling.len(), 32);
+            assert_eq!(step.node.len(), 32);
+            let node_rlc = challange.map(|rnd| rlc::value(&step.node, rnd));
+            let sibling_rlc = challange.map(|rnd| rlc::value(&step.sibling, rnd));
+
+            region.assign_fixed(
+                || "is_enabled",
+                self.is_enabled,
+                i,
+                || Value::known(F::one()),
+            )?;
+            region.assign_advice(|| "sibling", self.sibling, i, || sibling_rlc)?;
             region.assign_advice(
-                || "assign state row on state table",
-                column,
-                offset,
-                || value,
+                || "sibling_index",
+                self.sibling_index,
+                i,
+                || Value::known(F::from(step.sibling_index as u64)),
+            )?;
+            region.assign_advice(|| "node", self.node, i, || node_rlc)?;
+            region.assign_advice(
+                || "index",
+                self.index,
+                i,
+                || Value::known(F::from(step.index as u64)),
             )?;
         }
+
         Ok(())
     }
+}
 
-    /// Load the state table into the circuit.
-    pub fn load<F: Field>(
+impl StateTables {
+    /// Construct a new [`ValidatorsTable`] outside of [`StateTable`].
+    pub fn dev_construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
+        StateTables(
+            StateTreeLevel::iter()
+                .map(|level| (level, StateTable::constuct(meta)))
+                .collect(),
+        )
+    }
+
+    /// Load state tables without running the full [`StateTable`].
+    pub fn dev_load<F: Field>(
         &self,
         layouter: &mut impl Layouter<F>,
-        entries: &[StateEntry],
+        trace: &MerkleTrace,
         challenge: Value<F>,
     ) -> Result<(), Error> {
+        let mut trace_by_depth = trace.trace_by_level_map();
+
+        let pubkey_level_trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
+        let validators_level_trace = trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap();
+
+        let pubkey_table = self.0.get(&StateTreeLevel::PubKeys).unwrap();
+        let validators_table = self.0.get(&StateTreeLevel::Validators).unwrap();
+
         layouter.assign_region(
-            || "state table",
+            || "dev load state tables",
             |mut region| {
-                self.annotate_columns_in_region(&mut region);
-                for (offset, row) in entries
-                    .iter()
-                    .flat_map(|e| e.table_assignment(challenge))
-                    .enumerate()
-                {
-                    self.assign(&mut region, offset, &row)?;
-                }
+                pubkey_table.annotate_columns_in_region(&mut region);
+                validators_table.annotate_columns_in_region(&mut region);
+
+                pubkey_table.assign_with_region(
+                    &mut region,
+                    pubkey_level_trace.clone(),
+                    challenge,
+                )?;
+                validators_table.assign_with_region(
+                    &mut region,
+                    validators_level_trace.clone(),
+                    challenge,
+                )?;
 
                 Ok(())
             },
-        )
+        );
+
+        Ok(())
     }
 
     pub fn build_lookup<F: Field>(
         &self,
         meta: &mut VirtualCells<'_, F>,
+        level: StateTreeLevel,
+        is_left: bool,
         enable: Expression<F>,
         gindex: Expression<F>,
         value_rlc: Expression<F>,
     ) -> Vec<(Expression<F>, Expression<F>)> {
+        let lookup_table = self.0.get(&level).unwrap();
+        let value_col = if is_left {
+            lookup_table.node
+        } else {
+            lookup_table.sibling
+        };
+        let index_col = if is_left {
+            lookup_table.index
+        } else {
+            lookup_table.sibling_index
+        };
+
         vec![
             (
-                gindex.clone() * enable.clone(),
-                meta.query_advice(self.gindex, Rotation::cur()),
+                enable.clone(),
+                meta.query_fixed(lookup_table.is_enabled, Rotation::cur()),
             ),
             (
-                value_rlc.clone() * enable.clone(),
-                meta.query_advice(self.ssz_rlc, Rotation::cur())
-            )
-            // TODO: should any other columns be included?
+                value_rlc * enable.clone(),
+                meta.query_advice(value_col, Rotation::cur()),
+            ),
+            (
+                gindex * enable,
+                meta.query_advice(index_col, Rotation::cur()),
+            ),
         ]
     }
 }

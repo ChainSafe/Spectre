@@ -40,4 +40,16 @@ impl<F: Field> ConstrainBuilderCommon<F> for ConstraintBuilder<F> {
         // self.cell_manager.query_cells(cell_type, count)
         unimplemented!()
     }
+
+    fn condition<R>(
+        &mut self,
+        condition: Expression<F>,
+        constraint: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let original_condition = self.condition.clone();
+        self.condition = self.condition.clone() * condition;
+        let res = constraint(self);
+        self.condition = original_condition;
+        res
+    }
 }

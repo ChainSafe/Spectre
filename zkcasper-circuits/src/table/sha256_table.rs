@@ -1,5 +1,8 @@
 use super::*;
-use crate::{util::{Challenges, rlc}, witness::HashInput};
+use crate::{
+    util::{rlc, Challenges},
+    witness::HashInput,
+};
 use itertools::Itertools;
 use sha2::Digest;
 
@@ -74,45 +77,32 @@ impl SHA256Table {
     }
 
     /// Generate the sha256 table assignments from a byte array input.
-    pub fn assignments<F: Field>(
-        input:&HashInput,
-        challenge: Value<F>,
-    ) -> [Value<F>; 6] {
+    pub fn assignments<F: Field>(input: &HashInput, challenge: Value<F>) -> [Value<F>; 6] {
         let (left_rlc, right_rlc, input_rlc, preimage) = match input {
             HashInput::Single(input) => {
-                let input_rlc = challenge.map(|randomness| rlc::value(
-                    input,
-                    randomness,
-                ));
+                let input_rlc = challenge.map(|randomness| rlc::value(input, randomness));
 
-                (input_rlc.clone(), Value::known(F::zero()), input_rlc, input.clone())
-            },
-            HashInput::MerklePair(left, right) =>  {
-                let left_rlc = challenge.map(|randomness| rlc::value(
-                    left,
-                    randomness,
-                ));
-                let right_rlc = challenge.map(|randomness| rlc::value(
-                    right,
-                    randomness,
-                ));
+                (
+                    input_rlc.clone(),
+                    Value::known(F::zero()),
+                    input_rlc,
+                    input.clone(),
+                )
+            }
+            HashInput::MerklePair(left, right) => {
+                let left_rlc = challenge.map(|randomness| rlc::value(left, randomness));
+                let right_rlc = challenge.map(|randomness| rlc::value(right, randomness));
                 let preimage = vec![left.clone(), right.clone()].concat();
-                let input_rlc = challenge.map(|randomness| rlc::value(
-                    &preimage,
-                    randomness,
-                ));
+                let input_rlc = challenge.map(|randomness| rlc::value(&preimage, randomness));
 
                 (left_rlc, right_rlc, input_rlc, preimage)
             }
         };
-       
+
         let input_len = F::from(preimage.len() as u64);
 
         let output = sha2::Sha256::digest(preimage).to_vec();
-        let output_rlc = challenge.map(|randomness| rlc::value(
-            &output,
-            randomness,
-        ));
+        let output_rlc = challenge.map(|randomness| rlc::value(&output, randomness));
 
         [
             Value::known(F::one()),
@@ -124,7 +114,7 @@ impl SHA256Table {
         ]
     }
 
-    /// Load sha256 table but without running the full sha256 circuit.
+    /// Load sha256 table without running the full sha256 circuit.
     pub fn dev_load<'a, F: Field>(
         &self,
         layouter: &mut impl Layouter<F>,

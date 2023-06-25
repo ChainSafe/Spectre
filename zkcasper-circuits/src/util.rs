@@ -1,19 +1,21 @@
 //! Common utility traits and functions.
 
+pub mod layout;
+
 mod cell_manager;
 pub use cell_manager::*;
 
 mod constraint_builder;
 pub use constraint_builder::*;
 
-use crate::{witness, sha256_circuit::Sha256CircuitConfig};
+use crate::{sha256_circuit::Sha256CircuitConfig, witness};
 use eth_types::*;
 pub use gadgets::util::{and, not, or, rlc, select, sum, xor, Expr};
 use halo2_proofs::{
-    circuit::{Layouter, Value, Region},
+    circuit::{Layouter, Region, Value},
     plonk::{
-        Challenge, Circuit, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase,
-        VirtualCells, Advice,
+        Advice, Challenge, Circuit, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase,
+        VirtualCells,
     },
 };
 
@@ -56,7 +58,7 @@ impl<F: Field> Challenges<F> {
         });
         Challenges {
             sha256_input: Value::known(Sha256CircuitConfig::fixed_challenge()),
-            lookup_input
+            lookup_input,
         }
     }
 
@@ -68,7 +70,6 @@ impl<F: Field> Challenges<F> {
         }
     }
 }
-
 
 impl<F: Field, T: Clone> Challenges<F, T> {
     /// Returns challenge of `lookup_input`.

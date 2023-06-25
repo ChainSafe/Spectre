@@ -45,6 +45,12 @@ pub(crate) trait ConstrainBuilderCommon<F: Field> {
         }
     }
 
+    fn condition<R>(
+        &mut self,
+        condition: Expression<F>,
+        constraint: impl FnOnce(&mut Self) -> R,
+    ) -> R;
+
     fn query_bool(&mut self) -> Cell<F> {
         let cell = self.query_cell();
         self.require_boolean("Constrain cell to be a bool", cell.expr());

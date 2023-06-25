@@ -8,9 +8,10 @@ use halo2_proofs::{
 
 pub(crate) mod sha256_table;
 pub(crate) mod state_table;
+pub(crate) mod validators_table;
 
 pub(crate) use sha256_table::SHA256Table;
-pub(crate) use state_table::StateTable;
+pub(crate) use validators_table::ValidatorsTable;
 
 /// Trait used to define lookup tables
 pub trait LookupTable<F: Field> {

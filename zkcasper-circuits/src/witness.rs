@@ -3,8 +3,11 @@
 mod block;
 pub use block::*;
 
-mod state;
-pub use state::*;
+mod common;
+pub use common::*;
+
+mod validators;
+pub use validators::*;
 
 mod merkle;
 pub use merkle::*;
