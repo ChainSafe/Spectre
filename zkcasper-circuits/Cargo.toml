@@ -27,6 +27,7 @@ cli-table = { version = "0.4", optional = true }
 eth-types = { path = "../eth-types" }
 gadgets = { path = "../gadgets" }
 banshee-preprocessor = { path = "../preprocessor" }
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev="46ca171"}
 
 [dev-dependencies]
 hex = "0.4.3"

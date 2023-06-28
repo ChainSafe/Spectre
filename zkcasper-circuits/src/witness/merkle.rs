@@ -24,6 +24,10 @@ pub struct MerkleTraceStep {
 }
 
 impl MerkleTrace {
+    pub fn empty() -> Self {
+        Self(vec![])
+    }
+
     pub fn trace_by_levels(&self) -> Vec<Vec<&MerkleTraceStep>> {
         self.0
             .iter()
