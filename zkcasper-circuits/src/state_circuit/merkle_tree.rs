@@ -15,9 +15,10 @@ pub struct TreeLevel<F> {
     pub(crate) depth: usize,
     padding: usize,
     sibling: Column<Advice>,
-    sibling_index: Column<Advice>,
+    // TODO: remove `sibling_index` after changing lookup strategy to leverage `gindex +- 1` trick
+    sibling_index: Option<Column<Advice>>,
     node: Column<Advice>,
-    index: Column<Advice>,
+    index: Option<Column<Advice>>,
     into_left: Column<Advice>,
     offset: usize,
     _f: std::marker::PhantomData<F>,
@@ -30,13 +31,24 @@ impl<F: Field> TreeLevel<F> {
         depth: usize,
         offset: usize,
         padding: usize,
+        has_leaves: bool,
     ) -> Self {
         let q_enabled = meta.fixed_column();
         let sibling = meta.advice_column_in(SecondPhase);
-        let sibling_index = meta.advice_column_in(SecondPhase);
         let node = meta.advice_column_in(SecondPhase);
-        let index = meta.advice_column_in(SecondPhase);
         let into_left = meta.advice_column();
+
+        let index = if has_leaves {
+            Some(meta.advice_column_in(SecondPhase))
+        } else {
+            None
+        };
+
+        let sibling_index = if has_leaves {
+            Some(meta.advice_column_in(SecondPhase))
+        } else {
+            None
+        };
 
         let config = Self {
             q_enabled,
@@ -81,19 +93,23 @@ impl<F: Field> TreeLevel<F> {
                 || Value::known(F::one()),
             )?;
             region.assign_advice(|| "sibling", self.sibling, offset, || sibling_rlc)?;
-            region.assign_advice(
-                || "sibling_index",
-                self.sibling_index,
-                offset,
-                || Value::known(F::from(step.sibling_index)),
-            )?;
+            if let Some(sibling_index) = self.sibling_index {
+                region.assign_advice(
+                    || "sibling_index",
+                    sibling_index,
+                    offset,
+                    || Value::known(F::from(step.sibling_index)),
+                )?;
+            }
             region.assign_advice(|| "node", self.node, offset, || node_rlc)?;
-            region.assign_advice(
-                || "index",
-                self.index,
-                offset,
-                || Value::known(F::from(step.index)),
-            )?;
+            if let Some(index) = self.index {
+                region.assign_advice(
+                    || "index",
+                    index,
+                    offset,
+                    || Value::known(F::from(step.index)),
+                )?;
+            }
             region.assign_advice(
                 || "into_left",
                 self.into_left,
@@ -106,17 +122,25 @@ impl<F: Field> TreeLevel<F> {
     }
 
     pub fn annotations(&self) -> Vec<(Column<Any>, String)> {
-        vec![
+        let mut annots = vec![
             (self.q_enabled.into(), format!("{}/q_enabled", self.depth)),
             (self.sibling.into(), format!("{}/sibling", self.depth)),
-            (
-                self.sibling_index.into(),
-                format!("{}/sibling_index", self.depth),
-            ),
             (self.node.into(), format!("{}/node", self.depth)),
-            (self.index.into(), format!("{}/index", self.depth)),
             (self.into_left.into(), format!("{}/into_left", self.depth)),
-        ]
+        ];
+
+        if let Some(index) = self.index {
+            annots.push((index.into(), format!("{}/index", self.depth)))
+        }
+
+        if let Some(sibling_index) = self.sibling_index {
+            annots.push((
+                sibling_index.into(),
+                format!("{}/sibling_index", self.depth),
+            ))
+        }
+
+        annots
     }
 
     pub fn annotate_columns_in_region(&self, region: &mut Region<'_, F>) {
@@ -145,10 +169,6 @@ impl<F: Field> TreeLevel<F> {
         meta.query_advice(self.sibling, Rotation(offset))
     }
 
-    pub fn sibling_index(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
-        meta.query_advice(self.sibling_index, Rotation::cur())
-    }
-
     pub fn node(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
         meta.query_advice(self.node, Rotation::cur())
     }
@@ -161,10 +181,6 @@ impl<F: Field> TreeLevel<F> {
         meta.query_advice(self.node, Rotation(offset))
     }
 
-    pub fn index(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
-        meta.query_advice(self.index, Rotation::cur())
-    }
-
     pub fn into_left(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
         meta.query_advice(self.into_left, Rotation::cur())
     }
@@ -175,9 +191,9 @@ impl<F: Field> From<TreeLevel<F>> for StateTable {
         StateTable {
             is_enabled: val.q_enabled,
             sibling: val.sibling,
-            sibling_index: val.sibling_index,
+            sibling_index: val.sibling_index.expect("cannot use tree levels without leaves"),
             node: val.node,
-            index: val.index,
+            index: val.index.expect("cannot use tree levels without leaves"),
         }
     }
 }

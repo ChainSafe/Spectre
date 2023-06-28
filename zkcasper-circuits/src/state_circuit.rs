@@ -6,6 +6,7 @@ pub mod constraint_builder;
 use constraint_builder::ConstraintBuilder;
 
 pub mod merkle_tree;
+use log::{info};
 use merkle_tree::TreeLevel;
 
 use crate::{
@@ -52,8 +53,8 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
     fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         let sha256_table = args.sha256_table;
 
-        let pubkeys_level = TreeLevel::configure(meta, PUBKEYS_LEVEL, 0, 3);
-        let validators_level = TreeLevel::configure(meta, VALIDATORS_LEVEL, 0, 0);
+        let pubkeys_level = TreeLevel::configure(meta, PUBKEYS_LEVEL, 0, 3, true);
+        let validators_level = TreeLevel::configure(meta, VALIDATORS_LEVEL, 0, 0, true);
 
         let state_table: [StateTable; 2] = [
             pubkeys_level.clone().into(),
@@ -65,7 +66,7 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         let mut padding = 0;
         for i in (2..=TREE_DEPTH - 2).rev() {
             padding = padding * 2 + 1;
-            let level = TreeLevel::configure(meta, i, 0, padding);
+            let level = TreeLevel::configure(meta, i, 0, padding, false);
             tree.push(level);
         }
 
@@ -107,6 +108,8 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
                 sha256_table.build_lookup(meta, selector * into_sibling, node, sibling, parent)
             });
         }
+
+        info!("state circuit degree={}", meta.degree());
 
         StateSSZCircuitConfig {
             tree,
@@ -203,7 +206,7 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
     ) -> Result<(), Error> {
         let num_rows = config.assign(layouter, &self.trace, challenges.sha256_input())?;
 
-        println!("state ssz circuit rows: {}", num_rows);
+        info!("state ssz circuit rows: {}", num_rows);
 
         Ok(())
     }
@@ -213,16 +216,14 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
 mod tests {
     use super::*;
     use crate::{
-        sha256_circuit::{Sha256Circuit, Sha256CircuitConfig},
         witness::{MerkleTrace, Validator},
     };
     use halo2_proofs::{
-        circuit::{SimpleFloorPlanner, Value},
+        circuit::{SimpleFloorPlanner},
         dev::MockProver,
         halo2curves::bn256::Fr,
         plonk::Circuit,
     };
-    use itertools::Itertools;
     use std::{fs, marker::PhantomData};
 
     #[derive(Debug, Clone)]

@@ -50,6 +50,8 @@ impl MerkleTrace {
             .sorted_by_key(|e| e.depth)
             .rev()
             .collect_vec();
+
+        // filter out the first (root) level as it require no hashing.
         if steps_sorted.last().unwrap().depth == 1 {
             steps_sorted.pop();
         }

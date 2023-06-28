@@ -19,6 +19,7 @@ pub struct StateTables(HashMap<StateTreeLevel, StateTable>);
 pub struct StateTable {
     pub is_enabled: Column<Fixed>,
     pub sibling: Column<Advice>,
+    // TODO: remove `sibling_index` and do lookups to `index` with `gindex +- 1`
     pub sibling_index: Column<Advice>,
     pub node: Column<Advice>,
     pub index: Column<Advice>,
