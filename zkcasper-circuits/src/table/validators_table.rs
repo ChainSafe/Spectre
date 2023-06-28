@@ -1,5 +1,4 @@
 use gadgets::util::{not, Expr};
-use itertools::Itertools;
 
 use crate::{
     util::layout::{ValueRlcColumn, ValueRlcExpr},

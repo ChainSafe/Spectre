@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-use gadgets::impl_expr;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use strum_macros::EnumIter;
 
 use super::HashInput;
 
@@ -26,17 +24,17 @@ pub struct MerkleTraceStep {
 }
 
 impl MerkleTrace {
-    pub fn trace_by_levels<'a>(&'a self) -> Vec<Vec<&'a MerkleTraceStep>> {
+    pub fn trace_by_levels(&self) -> Vec<Vec<&MerkleTraceStep>> {
         self.0
             .iter()
             .group_by(|step| step.depth)
             .into_iter()
-            .sorted_by_key(|(depth, steps)| depth.clone())
-            .map(|(depth, steps)| steps.collect_vec())
+            .sorted_by_key(|(depth, _steps)| *depth)
+            .map(|(_depth, steps)| steps.collect_vec())
             .collect_vec()
     }
 
-    pub fn trace_by_level_map<'a>(&'a self) -> HashMap<usize, Vec<&'a MerkleTraceStep>> {
+    pub fn trace_by_level_map(&self) -> HashMap<usize, Vec<&MerkleTraceStep>> {
         self.0.iter().into_group_map_by(|step| step.depth)
     }
 
@@ -55,7 +53,7 @@ impl MerkleTrace {
             .into_iter()
             .map(|step| {
                 assert_eq!(
-                    sha2::Sha256::digest(&vec![step.node.clone(), step.sibling.clone()].concat())
+                    sha2::Sha256::digest(vec![step.node.clone(), step.sibling.clone()].concat())
                         .to_vec(),
                     step.parent
                 );

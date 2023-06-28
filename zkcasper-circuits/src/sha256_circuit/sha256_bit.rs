@@ -1,19 +1,9 @@
 use super::util::*;
-use crate::{
-    util::{not, rlc, BaseConstraintBuilder, Expr},
-    witness::HashInput,
-};
+use crate::{util::rlc, witness::HashInput};
 use eth_types::Field;
-use gadgets::util::{and, select, sum, xor};
-use halo2_proofs::{
-    circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
-    poly::Rotation,
-};
+
 use itertools::Itertools;
-use log::{debug, info};
-use snark_verifier::loader::LoadedScalar;
-use std::{env::var, io::Read, marker::PhantomData, vec};
+use log::debug;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShaRow<F> {
@@ -41,15 +31,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F) 
     let input_len = inputs[0].len() + inputs[1].len();
     // end
 
-    let mut bits = left_bits
-        .iter()
-        .copied()
-        .chain(right_bits.clone())
-        .collect_vec();
+    let mut bits = left_bits.iter().copied().chain(right_bits).collect_vec();
 
     // Prepare inputs RLCs in advance
     let mut inputs_rlc = [F::zero(), F::zero()];
-    for (idx, bytes) in inputs.iter().enumerate() {
+    for (idx, _bytes) in inputs.iter().enumerate() {
         for byte in inputs[idx].iter() {
             inputs_rlc[idx] = inputs_rlc[idx] * rnd + F::from(*byte as u64);
         }
@@ -67,16 +53,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F) 
     assert!(bits.len() % RATE_IN_BITS == 0);
 
     // Set the initial state
-    let mut hs: [u64; 8] = H
-        .iter()
-        .map(|v| *v as u64)
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let mut hs: [u64; 8] = H.to_vec().try_into().unwrap();
     let mut length = 0usize;
     let mut data_rlc = F::zero();
-    let mut limbs_rlc = [F::zero(); 2];
-    let mut cur_limb_idx = 0;
+    let _limbs_rlc = [F::zero(); 2];
+    let _cur_limb_idx = 0;
     let mut base_pow = F::zero();
 
     let mut in_padding = false;
@@ -104,7 +85,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F) 
                 into_bits(&value.to_be_bytes())[64 - num_bits..64]
                     .iter()
                     .map(|b| *b != 0)
-                    .into_iter()
                     .collect::<Vec<_>>()
             };
 
@@ -185,7 +165,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F) 
                         }
                         if length > inputs[0].len() {
                             is_right = true;
-                            base_pow = base_pow * rnd;
+                            base_pow *= rnd;
                         }
                         // end
                     }

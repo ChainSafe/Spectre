@@ -1,5 +1,5 @@
 use eth_types::Field;
-use gadgets::impl_expr;
+
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{Advice, Column, ConstraintSystem, Error, *},

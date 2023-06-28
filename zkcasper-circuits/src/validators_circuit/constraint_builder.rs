@@ -1,15 +1,11 @@
 use super::cell_manager::*;
 use crate::{
-    gadget::LtGadget,
-    table::{state_table::StateTables, validators_table::ValidatorTableQueries},
+    table::validators_table::ValidatorTableQueries,
     util::{Cell, CellType, ConstrainBuilderCommon, Constraint, Expr, Lookup},
-    witness::{CasperEntity, CasperEntityRow, Committee, StateTag, Validator},
-    N_BYTES_U64,
 };
 use eth_types::Field;
-use gadgets::{binary_number::BinaryNumberConfig, util::not};
-use halo2_proofs::{circuit::Region, plonk::Expression};
-use strum::IntoEnumIterator;
+
+use halo2_proofs::plonk::Expression;
 
 pub struct ConstraintBuilder<'a, F: Field> {
     pub constraints: Vec<Constraint<F>>,

@@ -4,10 +4,9 @@ use banshee_preprocessor::util::pad_to_ssz_chunk;
 use eth_types::Field;
 use gadgets::impl_expr;
 use gadgets::util::rlc;
-use halo2_base::utils::decompose_bigint_option;
-use halo2_proofs::halo2curves::bn256::G1Affine;
+
+use halo2_proofs::circuit::Value;
 use halo2_proofs::plonk::Expression;
-use halo2_proofs::{circuit::Value, halo2curves::bn256::Fr};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
@@ -47,7 +46,7 @@ impl Validator {
             is_active: Value::known(F::from(self.is_active as u64)),
             is_attested: Value::known(F::from(self.is_attested as u64)),
             balance: ValueRLC::new(
-                Value::known(F::from(self.effective_balance as u64)),
+                Value::known(F::from(self.effective_balance)),
                 randomness.map(|rnd| {
                     rlc::value(
                         &pad_to_ssz_chunk(&self.effective_balance.to_le_bytes()),
@@ -60,13 +59,13 @@ impl Validator {
                 randomness.map(|rnd| rlc::value(&pad_to_ssz_chunk(&[self.slashed as u8]), rnd)),
             ),
             activation_epoch: ValueRLC::new(
-                Value::known(F::from(self.activation_epoch as u64)),
+                Value::known(F::from(self.activation_epoch)),
                 randomness.map(|rnd| {
                     rlc::value(&pad_to_ssz_chunk(&self.activation_epoch.to_le_bytes()), rnd)
                 }),
             ),
             exit_epoch: ValueRLC::new(
-                Value::known(F::from(self.exit_epoch as u64)),
+                Value::known(F::from(self.exit_epoch)),
                 randomness
                     .map(|rnd| rlc::value(&pad_to_ssz_chunk(&self.exit_epoch.to_le_bytes()), rnd)),
             ),
@@ -89,7 +88,7 @@ impl Committee {
             is_active: Value::known(F::zero()),
             is_attested: Value::known(F::zero()),
             balance: ValueRLC::new(
-                Value::known(F::from(self.accumulated_balance as u64)),
+                Value::known(F::from(self.accumulated_balance)),
                 randomness.map(|rnd| {
                     rlc::value(
                         &pad_to_ssz_chunk(&self.accumulated_balance.to_le_bytes()),
@@ -133,7 +132,7 @@ pub fn into_casper_entities<'a>(
     let validators_per_committees = {
         groups
             .into_iter()
-            .sorted_by_key(|(committee, vs)| *committee)
+            .sorted_by_key(|(committee, _vs)| *committee)
             .map(|(_, vs)| vs.collect_vec())
     };
 
@@ -146,7 +145,7 @@ pub fn into_casper_entities<'a>(
     committees.sort_by_key(|v| v.id);
 
     for (comm_idx, validators) in validators_per_committees.enumerate() {
-        casper_entity.extend(validators.into_iter().map(|v| CasperEntity::Validator(v)));
+        casper_entity.extend(validators.into_iter().map(CasperEntity::Validator));
         casper_entity.push(CasperEntity::Committee(committees[comm_idx]));
     }
 

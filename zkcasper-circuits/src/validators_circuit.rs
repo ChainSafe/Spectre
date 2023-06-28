@@ -5,33 +5,22 @@ use crate::{
     gadget::LtGadget,
     table::{
         state_table::{StateTables, StateTreeLevel},
-        validators_table::ValidatorTableQueries,
         LookupTable, ValidatorsTable,
     },
-    util::{Cell, Challenges, ConstrainBuilderCommon, SubCircuit, SubCircuitConfig},
-    witness::{
-        self, into_casper_entities, CasperEntity, CasperEntityRow, Committee, StateTag, Validator,
-    },
-    MAX_VALIDATORS, N_BYTES_U64, VALIDATOR0_GINDEX,
+    util::{Challenges, ConstrainBuilderCommon, SubCircuit, SubCircuitConfig},
+    witness::{self, into_casper_entities, CasperEntity, Committee, Validator},
+    MAX_VALIDATORS, N_BYTES_U64,
 };
 use cell_manager::CellManager;
 use constraint_builder::*;
 use eth_types::*;
-use gadgets::{
-    batched_is_zero::{BatchedIsZeroChip, BatchedIsZeroConfig},
-    binary_number::{BinaryNumberChip, BinaryNumberConfig},
-    util::{not, Expr},
-};
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
-    plonk::{
-        Advice, Any, Column, ConstraintSystem, Error, Expression, FirstPhase, Fixed, Instance,
-        SecondPhase, Selector, VirtualCells,
-    },
+    plonk::{Advice, Any, Column, ConstraintSystem, Error, FirstPhase, Fixed, VirtualCells},
     poly::Rotation,
 };
 use itertools::Itertools;
-use lazy_static::lazy::Lazy;
+
 use std::{iter, marker::PhantomData};
 
 pub(crate) const N_BYTE_LOOKUPS: usize = 16; // 8 per lt gadget (target_gte_activation, target_lt_exit)
@@ -142,8 +131,8 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
                 )
             });
 
-            config.target_gte_activation.insert(target_gte_activation);
-            config.target_lt_exit.insert(target_lt_exit);
+            config.target_gte_activation = Some(target_gte_activation);
+            config.target_lt_exit = Some(target_lt_exit);
 
             cb.add_lookup(
                 "validator.balance in state table",
@@ -274,9 +263,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                     challange,
                 )
             },
-        );
-
-        Ok(())
+        )
     }
 
     fn assign_with_region(
@@ -322,13 +309,13 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                         offset,
                         F::from(validator.activation_epoch),
                         F::from(target_epoch + 1),
-                    );
+                    )?;
                     target_lt_exit.assign(
                         region,
                         offset,
                         F::from(target_epoch),
                         F::from(validator.exit_epoch),
-                    );
+                    )?;
 
                     let validator_rows = validator.table_assignment(randomness);
 
@@ -410,7 +397,7 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
     }
 
     /// Return the minimum number of rows required to prove the block
-    fn min_num_rows_block(block: &witness::Block<F>) -> (usize, usize) {
+    fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
         todo!()
     }
 
@@ -432,9 +419,7 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
                     challenges.sha256_input(),
                 )
             },
-        );
-
-        Ok(())
+        )
     }
 
     /// powers of randomness for instance columns
@@ -454,20 +439,16 @@ fn queries<F: Field>(
     }
 }
 
+#[cfg(test)]
+
 mod tests {
     use super::*;
-    use crate::{
-        table::state_table::StateTables,
-        witness::{Committee, MerkleTrace, Validator},
-    };
+    use crate::{table::state_table::StateTables, witness::MerkleTrace};
     use halo2_proofs::{
-        circuit::{SimpleFloorPlanner, Value},
-        dev::MockProver,
-        halo2curves::bn256::Fr,
-        plonk::Circuit,
+        circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
-    use itertools::Itertools;
-    use std::{fs, marker::PhantomData, vec};
+
+    use std::{fs, marker::PhantomData};
 
     #[derive(Debug, Clone)]
     struct TestValidators<F: Field> {

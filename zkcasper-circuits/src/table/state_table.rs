@@ -1,5 +1,5 @@
 use gadgets::util::rlc;
-use itertools::Itertools;
+
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -94,14 +94,14 @@ impl StateTable {
                 || "sibling_index",
                 self.sibling_index,
                 i,
-                || Value::known(F::from(step.sibling_index as u64)),
+                || Value::known(F::from(step.sibling_index)),
             )?;
             region.assign_advice(|| "node", self.node, i, || node_rlc)?;
             region.assign_advice(
                 || "index",
                 self.index,
                 i,
-                || Value::known(F::from(step.index as u64)),
+                || Value::known(F::from(step.index)),
             )?;
         }
 
@@ -153,8 +153,7 @@ impl StateTables {
 
                 Ok(())
             },
-        );
-
+        )?;
         Ok(())
     }
 

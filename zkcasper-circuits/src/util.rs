@@ -13,10 +13,7 @@ use eth_types::*;
 pub use gadgets::util::{and, not, or, rlc, select, sum, xor, Expr};
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
-    plonk::{
-        Advice, Challenge, Circuit, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase,
-        VirtualCells,
-    },
+    plonk::{Challenge, ConstraintSystem, Error, Expression, SecondPhase, VirtualCells},
 };
 
 pub(crate) fn query_expression<F: Field, T>(

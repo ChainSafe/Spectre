@@ -1,19 +1,9 @@
 use crate::{
     state_circuit::TREE_LEVEL_AUX_COLUMNS,
-    util::{query_expression, Cell, CellType, Challenges, Expr},
-    witness::*,
+    util::{query_expression, Cell, CellType},
 };
 use eth_types::*;
-use halo2_proofs::{
-    circuit::{AssignedCell, Region, Value},
-    plonk::{Advice, Assigned, Column, ConstraintSystem, Error, Expression, VirtualCells},
-    poly::Rotation,
-};
-use itertools::Itertools;
-use std::{
-    collections::BTreeMap,
-    hash::{Hash, Hasher},
-};
+use halo2_proofs::plonk::{Advice, Column, ConstraintSystem};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CellColumn {
@@ -50,7 +40,7 @@ impl<F: Field> CellManager<F> {
                 columns.push(CellColumn {
                     index: c,
                     cell_type: CellType::storage_for_column::<F>(&layout[c]),
-                    height: height,
+                    height,
                 });
             }
             for c in 0..aux.len() {

@@ -1,15 +1,6 @@
-use super::cell_manager::CellManager;
-use crate::{
-    state_circuit::{StateSSZCircuitConfig, TREE_LEVEL_AUX_COLUMNS},
-    table::state_table::StateTable,
-    util::{Cell, CellType},
-    witness::{MerkleTrace, MerkleTraceStep},
-};
+use crate::{table::state_table::StateTable, witness::MerkleTraceStep};
 use eth_types::*;
-use gadgets::{
-    binary_number::BinaryNumberConfig,
-    util::{rlc, Expr},
-};
+use gadgets::util::rlc;
 use halo2_proofs::{
     circuit::{Region, Value},
     plonk::{
@@ -17,8 +8,6 @@ use halo2_proofs::{
     },
     poly::Rotation,
 };
-use itertools::Itertools;
-use rand_chacha::rand_core::le;
 
 #[derive(Clone, Debug)]
 pub struct TreeLevel<F> {
@@ -96,14 +85,14 @@ impl<F: Field> TreeLevel<F> {
                 || "sibling_index",
                 self.sibling_index,
                 offset,
-                || Value::known(F::from(step.sibling_index as u64)),
+                || Value::known(F::from(step.sibling_index)),
             )?;
             region.assign_advice(|| "node", self.node, offset, || node_rlc)?;
             region.assign_advice(
                 || "index",
                 self.index,
                 offset,
-                || Value::known(F::from(step.index as u64)),
+                || Value::known(F::from(step.index)),
             )?;
             region.assign_advice(
                 || "into_left",
@@ -181,14 +170,14 @@ impl<F: Field> TreeLevel<F> {
     }
 }
 
-impl<F: Field> Into<StateTable> for TreeLevel<F> {
-    fn into(self) -> StateTable {
+impl<F: Field> From<TreeLevel<F>> for StateTable {
+    fn from(val: TreeLevel<F>) -> Self {
         StateTable {
-            is_enabled: self.q_enabled,
-            sibling: self.sibling,
-            sibling_index: self.sibling_index,
-            node: self.node,
-            index: self.index,
+            is_enabled: val.q_enabled,
+            sibling: val.sibling,
+            sibling_index: val.sibling_index,
+            node: val.node,
+            index: val.index,
         }
     }
 }

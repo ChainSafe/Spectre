@@ -1,4 +1,3 @@
-use super::cell_manager::*;
 use crate::{
     state_circuit::*,
     util::{Cell, CellType, ConstrainBuilderCommon, Constraint, Expr, Lookup},
@@ -11,16 +10,16 @@ pub struct ConstraintBuilder<F: Field> {
     lookups: Vec<Lookup<F>>,
     condition: Expression<F>,
 }
-
-impl<F: Field> ConstraintBuilder<F> {
-    pub fn new() -> Self {
+impl<F: Field> Default for ConstraintBuilder<F> {
+    fn default() -> Self {
         Self {
             constraints: vec![],
             lookups: vec![],
             condition: 1.expr(),
         }
     }
-
+}
+impl<F: Field> ConstraintBuilder<F> {
     pub fn gate(&self, condition: Expression<F>) -> Vec<(&'static str, Expression<F>)> {
         self.constraints
             .iter()
@@ -36,7 +35,7 @@ impl<F: Field> ConstrainBuilderCommon<F> for ConstraintBuilder<F> {
             .push((name, self.condition.clone() * constraint));
     }
 
-    fn query_cells(&mut self, cell_type: CellType, count: usize) -> Vec<Cell<F>> {
+    fn query_cells(&mut self, _cell_type: CellType, _count: usize) -> Vec<Cell<F>> {
         // self.cell_manager.query_cells(cell_type, count)
         unimplemented!()
     }

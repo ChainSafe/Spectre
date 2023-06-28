@@ -1,15 +1,12 @@
-use crate::util::{query_expression, Challenges, Expr};
+use crate::util::Expr;
 use eth_types::*;
 use halo2_proofs::{
     circuit::{AssignedCell, Region, Value},
-    plonk::{Advice, Assigned, Column, ConstraintSystem, Error, Expression, VirtualCells},
+    plonk::{Advice, Column, Error, Expression, VirtualCells},
     poly::Rotation,
 };
-use itertools::Itertools;
-use std::{
-    collections::BTreeMap,
-    hash::{Hash, Hasher},
-};
+
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug)]
 pub struct Cell<F> {

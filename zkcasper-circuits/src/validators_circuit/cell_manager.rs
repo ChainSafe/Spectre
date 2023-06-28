@@ -1,19 +1,9 @@
 use crate::{
-    util::{query_expression, Cell, CellType, Challenges, Expr},
+    util::{query_expression, Cell, CellType},
     validators_circuit::N_BYTE_LOOKUPS,
-    witness::*,
 };
 use eth_types::*;
-use halo2_proofs::{
-    circuit::{AssignedCell, Region, Value},
-    plonk::{Advice, Assigned, Column, ConstraintSystem, Error, Expression, VirtualCells},
-    poly::Rotation,
-};
-use itertools::Itertools;
-use std::{
-    collections::BTreeMap,
-    hash::{Hash, Hasher},
-};
+use halo2_proofs::plonk::{Advice, Column, ConstraintSystem};
 
 #[derive(Clone, Debug)]
 pub(crate) struct CellColumn {
@@ -53,13 +43,10 @@ impl<F: Field> CellManager<F> {
             }
         });
 
-        let mut column_idx = 0;
-
         // Mark columns used for byte lookup
-        for _ in 0..N_BYTE_LOOKUPS {
+        for (column_idx, _) in (0..N_BYTE_LOOKUPS).enumerate() {
             columns[column_idx].cell_type = CellType::LookupByte;
             assert_eq!(advices[column_idx].column_type().phase(), 0);
-            column_idx += 1;
         }
 
         Self {

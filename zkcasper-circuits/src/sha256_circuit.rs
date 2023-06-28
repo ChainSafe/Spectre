@@ -10,19 +10,18 @@ use std::marker::PhantomData;
 
 use crate::{
     table::{LookupTable, SHA256Table},
-    util::{not, rlc, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
+    util::{not, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
     witness::{self, HashInput},
 };
 use eth_types::Field;
 use gadgets::util::{and, select, sum, xor};
 use halo2_proofs::{
-    circuit::{AssignedCell, Chip, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
+    circuit::{AssignedCell, Layouter, Region, Value},
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
     poly::Rotation,
 };
-use itertools::Itertools;
-use lazy_static::lazy_static;
-use log::{debug, info};
+
+use log::debug;
 use snark_verifier::loader::LoadedScalar;
 use util::*;
 
@@ -92,7 +91,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
         let hash_table = args;
         let is_enabled = hash_table.is_enabled;
         let length = hash_table.input_len;
-        let limbs_rlc = hash_table.limbs_rlc;
+        let _limbs_rlc = hash_table.limbs_rlc;
         let data_rlc = hash_table.input_rlc;
         let hash_rlc = hash_table.hash_rlc;
         let base_pow = meta.advice_column();
@@ -475,7 +474,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
                 );
                 new_data_rlc = meta.query_advice(data_rlcs[0], Rotation::cur());
 
-                let new_data_rlc_cur = new_data_rlc.clone();
+                let _new_data_rlc_cur = new_data_rlc.clone();
                 for (idx, (byte, is_padding)) in
                     input_bytes.iter().zip(is_paddings.iter()).enumerate()
                 {
@@ -675,7 +674,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
                     .collect::<Result<Vec<Vec<AssignedCell<F, F>>>, Error>>()?;
                 let filtered = vec_vecs
                     .into_iter()
-                    .filter(|vec| vec.len() > 0)
+                    .filter(|vec| !vec.is_empty())
                     .collect::<Vec<Vec<AssignedCell<F, F>>>>();
                 Ok(filtered)
             },
@@ -733,12 +732,12 @@ impl<F: Field> Sha256CircuitConfig<F> {
             (
                 "Ha",
                 self.h_a,
-                F::from(if round < 4 { H[3 - round] as u64 } else { 0 }),
+                F::from(if round < 4 { H[3 - round] } else { 0 }),
             ),
             (
                 "He",
                 self.h_e,
-                F::from(if round < 4 { H[7 - round] as u64 } else { 0 }),
+                F::from(if round < 4 { H[7 - round] } else { 0 }),
             ),
         ] {
             region.assign_fixed(
@@ -870,7 +869,7 @@ impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
     /// The `block.circuits_params.keccak_padding` parmeter, when enabled, sets
     /// up the circuit to support a fixed number of permutations/keccak_f's,
     /// independently of the permutations required by `inputs`.
-    fn new_from_block(block: &witness::Block<F>) -> Self {
+    fn new_from_block(_block: &witness::Block<F>) -> Self {
         // Self::new(
         //     block.circuits_params.max_keccak_rows,
         //     block.keccak_inputs.clone(),
@@ -879,7 +878,7 @@ impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
     }
 
     /// Return the minimum number of rows required to prove the block
-    fn min_num_rows_block(block: &witness::Block<F>) -> (usize, usize) {
+    fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
         // let rows_per_chunk = (NUM_ROUNDS + 1) * get_num_rows_per_round();
         // (
         //     block
@@ -927,7 +926,7 @@ impl<F: Field> Sha256Circuit<F> {
     }
 
     /// Sets the witness using the data to be hashed
-    pub(crate) fn generate_witness(&self, challenges: Challenges<F, Value<F>>) -> Vec<ShaRow<F>> {
+    pub(crate) fn generate_witness(&self, _challenges: Challenges<F, Value<F>>) -> Vec<ShaRow<F>> {
         multi_sha256(&self.inputs, Sha256CircuitConfig::fixed_challenge())
     }
 }
@@ -935,7 +934,9 @@ impl<F: Field> Sha256Circuit<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use halo2_proofs::{
+        circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
+    };
 
     #[derive(Default, Debug, Clone)]
     struct TestSha256<F: Field> {
