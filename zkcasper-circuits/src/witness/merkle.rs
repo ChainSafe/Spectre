@@ -18,6 +18,7 @@ pub struct MerkleTraceStep {
     pub into_left: bool,
     pub is_left: bool,
     pub is_right: bool,
+    pub is_rlc: [bool; 2],
     pub parent: Vec<u8>,
     pub parent_index: u64,
     pub depth: usize,
@@ -63,7 +64,11 @@ impl MerkleTrace {
                         .to_vec(),
                     step.parent
                 );
-                HashInput::MerklePair(step.node, step.sibling)
+                HashInput::TwoToOne {
+                    left: step.node,
+                    right: step.sibling,
+                    is_rlc: step.is_rlc,
+                }
             })
             .collect_vec()
     }

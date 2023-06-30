@@ -6,7 +6,7 @@ use halo2_proofs::{
     poly::Rotation,
 };
 
-use std::hash::{Hash, Hasher};
+use std::hash::{Hash};
 
 #[derive(Clone, Debug)]
 pub struct Cell<F> {

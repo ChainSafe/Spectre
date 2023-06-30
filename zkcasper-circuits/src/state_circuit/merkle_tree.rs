@@ -82,8 +82,16 @@ impl<F: Field> TreeLevel<F> {
             let offset = self.offset + i * (self.padding + 1);
             assert_eq!(step.sibling.len(), 32);
             assert_eq!(step.node.len(), 32);
-            let node_rlc = challange.map(|rnd| rlc::value(&step.node, rnd));
-            let sibling_rlc = challange.map(|rnd| rlc::value(&step.sibling, rnd));
+            let node = if step.is_rlc[0] {
+                challange.map(|rnd| rlc::value(&step.node, rnd))
+            } else {
+                Value::known(F::from_bytes_le_unsecure(&step.node))
+            };
+            let sibling = if step.is_rlc[1] {
+                challange.map(|rnd| rlc::value(&step.sibling, rnd))
+            } else {
+                Value::known(F::from_bytes_le_unsecure(&step.sibling))
+            };
 
             // TODO: fixed q_enabled should be set seprarately to the bottom of the table
             region.assign_fixed(
@@ -92,7 +100,7 @@ impl<F: Field> TreeLevel<F> {
                 offset,
                 || Value::known(F::one()),
             )?;
-            region.assign_advice(|| "sibling", self.sibling, offset, || sibling_rlc)?;
+            region.assign_advice(|| "sibling", self.sibling, offset, || sibling)?;
             if let Some(sibling_index) = self.sibling_index {
                 region.assign_advice(
                     || "sibling_index",
@@ -101,7 +109,7 @@ impl<F: Field> TreeLevel<F> {
                     || Value::known(F::from(step.sibling_index)),
                 )?;
             }
-            region.assign_advice(|| "node", self.node, offset, || node_rlc)?;
+            region.assign_advice(|| "node", self.node, offset, || node)?;
             if let Some(index) = self.index {
                 region.assign_advice(
                     || "index",

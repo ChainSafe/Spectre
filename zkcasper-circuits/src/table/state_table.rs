@@ -81,8 +81,16 @@ impl StateTable {
         for (i, step) in steps.into_iter().enumerate() {
             assert_eq!(step.sibling.len(), 32);
             assert_eq!(step.node.len(), 32);
-            let node_rlc = challange.map(|rnd| rlc::value(&step.node, rnd));
-            let sibling_rlc = challange.map(|rnd| rlc::value(&step.sibling, rnd));
+            let node = if step.is_rlc[0] {
+                challange.map(|rnd| rlc::value(&step.node, rnd))
+            } else {
+                Value::known(F::from_bytes_le_unsecure(&step.node))
+            };
+            let sibling = if step.is_rlc[1] {
+                challange.map(|rnd| rlc::value(&step.sibling, rnd))
+            } else {
+                Value::known(F::from_bytes_le_unsecure(&step.sibling))
+            };
 
             region.assign_fixed(
                 || "is_enabled",
@@ -90,14 +98,14 @@ impl StateTable {
                 i,
                 || Value::known(F::one()),
             )?;
-            region.assign_advice(|| "sibling", self.sibling, i, || sibling_rlc)?;
+            region.assign_advice(|| "sibling", self.sibling, i, || sibling)?;
             region.assign_advice(
                 || "sibling_index",
                 self.sibling_index,
                 i,
                 || Value::known(F::from(step.sibling_index)),
             )?;
-            region.assign_advice(|| "node", self.node, i, || node_rlc)?;
+            region.assign_advice(|| "node", self.node, i, || node)?;
             region.assign_advice(
                 || "index",
                 self.index,
@@ -193,5 +201,14 @@ impl StateTables {
                 meta.query_advice(index_col, Rotation::cur()),
             ),
         ]
+    }
+
+    pub fn annotate_columns_in_region<F: Field>(
+        &self,
+        region: &mut Region<'_, F>,
+    ) {
+        let lookup_table = self.0.iter().for_each(|(_, table)| {
+            table.annotate_columns_in_region(region);
+        });
     }
 }

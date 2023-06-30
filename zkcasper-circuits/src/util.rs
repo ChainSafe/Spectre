@@ -1,7 +1,5 @@
 //! Common utility traits and functions.
 
-pub mod layout;
-
 mod cell_manager;
 pub use cell_manager::*;
 

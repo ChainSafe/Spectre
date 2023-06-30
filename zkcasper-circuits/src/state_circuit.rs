@@ -6,7 +6,7 @@ pub mod constraint_builder;
 use constraint_builder::ConstraintBuilder;
 
 pub mod merkle_tree;
-use log::{info};
+use log::info;
 use merkle_tree::TreeLevel;
 
 use crate::{
@@ -109,7 +109,7 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
             });
         }
 
-        info!("state circuit degree={}", meta.degree());
+        println!("state circuit degree={}", meta.degree());
 
         StateSSZCircuitConfig {
             tree,
@@ -215,20 +215,14 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        witness::{MerkleTrace, Validator},
-    };
+    use crate::witness::MerkleTrace;
     use halo2_proofs::{
-        circuit::{SimpleFloorPlanner},
-        dev::MockProver,
-        halo2curves::bn256::Fr,
-        plonk::Circuit,
+        circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
     use std::{fs, marker::PhantomData};
 
     #[derive(Debug, Clone)]
     struct TestStateSSZ<F: Field> {
-        validators: Vec<Validator>,
         state_circuit: StateSSZCircuit<F>,
         _f: PhantomData<F>,
     }
@@ -272,13 +266,10 @@ mod tests {
     #[test]
     fn test_state_ssz_circuit() {
         let k = 10;
-        let validators: Vec<Validator> =
-            serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
         let merkle_trace: MerkleTrace =
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
 
         let circuit = TestStateSSZ::<Fr> {
-            validators,
             state_circuit: StateSSZCircuit::new(merkle_trace),
             _f: PhantomData,
         };

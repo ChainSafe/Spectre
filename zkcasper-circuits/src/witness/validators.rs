@@ -12,8 +12,6 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
-use super::ValueRLC;
-
 /// Beacon validator
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Validator {
@@ -46,30 +44,10 @@ impl Validator {
             tag: Value::known(F::one()),
             is_active: Value::known(F::from(self.is_active as u64)),
             is_attested: Value::known(F::from(self.is_attested as u64)),
-            balance: ValueRLC::new(
-                Value::known(F::from(self.effective_balance)),
-                randomness.map(|rnd| {
-                    rlc::value(
-                        &pad_to_ssz_chunk(&self.effective_balance.to_le_bytes()),
-                        rnd,
-                    )
-                }),
-            ),
-            slashed: ValueRLC::new(
-                Value::known(F::from(self.slashed as u64)),
-                randomness.map(|rnd| rlc::value(&pad_to_ssz_chunk(&[self.slashed as u8]), rnd)),
-            ),
-            activation_epoch: ValueRLC::new(
-                Value::known(F::from(self.activation_epoch)),
-                randomness.map(|rnd| {
-                    rlc::value(&pad_to_ssz_chunk(&self.activation_epoch.to_le_bytes()), rnd)
-                }),
-            ),
-            exit_epoch: ValueRLC::new(
-                Value::known(F::from(self.exit_epoch)),
-                randomness
-                    .map(|rnd| rlc::value(&pad_to_ssz_chunk(&self.exit_epoch.to_le_bytes()), rnd)),
-            ),
+            balance: Value::known(F::from(self.effective_balance)),
+            slashed: Value::known(F::from(self.slashed as u64)),
+            activation_epoch: Value::known(F::from(self.activation_epoch)),
+            exit_epoch: Value::known(F::from(self.exit_epoch)),
             pubkey: [
                 randomness.map(|rnd| rlc::value(&self.pubkey[0..32], rnd)),
                 randomness.map(|rnd| rlc::value(&pad_to_ssz_chunk(&self.pubkey[32..48]), rnd)),
@@ -128,18 +106,10 @@ impl Committee {
             tag: Value::known(F::zero()),
             is_active: Value::known(F::zero()),
             is_attested: Value::known(F::zero()),
-            balance: ValueRLC::new(
-                Value::known(F::from(self.accumulated_balance)),
-                randomness.map(|rnd| {
-                    rlc::value(
-                        &pad_to_ssz_chunk(&self.accumulated_balance.to_le_bytes()),
-                        rnd,
-                    )
-                }),
-            ),
-            slashed: ValueRLC::empty(),
-            activation_epoch: ValueRLC::empty(),
-            exit_epoch: ValueRLC::empty(),
+            balance: Value::known(F::from(self.accumulated_balance)),
+            slashed: Value::known(F::zero()),
+            activation_epoch: Value::known(F::zero()),
+            exit_epoch: Value::known(F::zero()),
             pubkey: [Value::known(F::zero()), Value::known(F::zero())], // TODO:
                                                                         // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
                                                                         // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
@@ -225,9 +195,9 @@ pub struct CasperEntityRow<F: Field> {
     pub(crate) tag: Value<F>,
     pub(crate) is_active: Value<F>,
     pub(crate) is_attested: Value<F>,
-    pub(crate) balance: ValueRLC<F>,
-    pub(crate) slashed: ValueRLC<F>,
-    pub(crate) activation_epoch: ValueRLC<F>,
-    pub(crate) exit_epoch: ValueRLC<F>,
+    pub(crate) balance: Value<F>,
+    pub(crate) slashed: Value<F>,
+    pub(crate) activation_epoch: Value<F>,
+    pub(crate) exit_epoch: Value<F>,
     pub(crate) pubkey: [Value<F>; 2],
 }
