@@ -10,10 +10,12 @@ use halo2_proofs::{
     },
     poly::Rotation,
 };
+use itertools::Itertools;
 
 #[derive(Clone, Debug)]
 pub struct LongMerkleTree<F> {
     enable: Column<Fixed>,
+    root: Column<Fixed>,
     node: Column<Advice>,
     sibling: Column<Advice>,
     parent: Column<Advice>,
@@ -32,6 +34,8 @@ impl<F: Field> LongMerkleTree<F> {
         let depth = meta.advice_column();
         let enable = meta.fixed_column();
         let parent_index = meta.advice_column();
+        let root = meta.fixed_column();
+
 
         // enable permutation checks
         meta.enable_equality(node);
@@ -48,6 +52,7 @@ impl<F: Field> LongMerkleTree<F> {
             _f: std::marker::PhantomData,
             enable,
             parent_index,
+            root,
         };
 
         // Annotate columns
@@ -68,6 +73,7 @@ impl<F: Field> LongMerkleTree<F> {
             (self.depth.into(), String::from("depth")),
             (self.enable.into(), String::from("enable")),
             (self.parent_index.into(), String::from("parent_index")),
+            (self.root.into(), String::from("root")),
         ]
     }
 
@@ -98,6 +104,9 @@ impl<F: Field> LongMerkleTree<F> {
     pub fn enable(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
         meta.query_fixed(self.enable, Rotation::cur())
     }
+    pub fn root(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
+        meta.query_fixed(self.root, Rotation::cur())
+    }
 
     // Assigns the columns given the MerkleTraceSteps which are indexed by their Gindex
     pub fn assign_with_region(
@@ -107,29 +116,33 @@ impl<F: Field> LongMerkleTree<F> {
         challange: Value<F>,
     ) -> Result<(), Error> {
         // First row
-        region.assign_advice(
-            || "node",
-            self.node,
-            0,
-            || challange.map(|rnd| rlc::value(&steps[&0].node, rnd)),
-        )?;
-        region.assign_advice(|| "index", self.index, 0, || Value::known(F::one()))?;
-        region.assign_advice(
-            || "parent index",
-            self.parent_index,
-            0,
-            || Value::known(F::zero()),
-        )?;
-        region.assign_advice(|| "parent", self.parent, 0, || Value::known(F::zero()))?;
-        region.assign_advice(|| "sibling", self.sibling, 0, || Value::known(F::zero()))?;
-        region.assign_advice(|| "depth", self.depth, 0, || Value::known(F::one()))?;
-        region.assign_fixed(|| "enable", self.enable, 0, || Value::known(F::one()))?;
+        // let root_cell = (
+        //     region.assign_advice(|| "parent", self.parent, 1, || Value::known(F::zero()))?,
+        //     region.assign_advice(
+        //         || "parent index",
+        //         self.parent_index,
+        //         1,
+        //         || Value::known(F::zero()),
+        //     )?,
+        //     region.assign_advice(
+        //         || "node",
+        //         self.node,
+        //         1,
+        //         || challange.map(|rnd| rlc::value(&steps[&1].node, rnd)),
+        //     )?,
+        //     region.assign_advice(|| "sibling", self.sibling, 1, || Value::known(F::zero()))?,
+        //     region.assign_advice(|| "depth", self.depth, 1, || Value::known(F::one()))?,
+
+        //     region.assign_fixed(|| "enable", self.enable, 1, || Value::known(F::one()))?,
+        
+        //     region.assign_advice(|| "index", self.index, 1, || Value::known(F::one()))?,
+        //     region.assign_fixed(|| "root", self.root, 1, || Value::known(F::one()))?,
+        // );
 
         // Assign all other rows/depths
-
-        let cells = steps
+        let mut cells = steps
             .iter()
-            .skip(1)
+            .filter(|(_, entry)| entry.index != 1)
             .map(|(_, entry)| {
                 let index = entry.index;
                 let p_index = entry.parent_index;
@@ -189,6 +202,12 @@ impl<F: Field> LongMerkleTree<F> {
                     index as usize,
                     || Value::known(F::one()),
                 )?;
+                let root_cell = region.assign_fixed(
+                    || "root",
+                    self.root,
+                    index as usize,
+                    || Value::known(F::zero()),
+                )?;
                 Ok((
                     index,
                     (
@@ -199,10 +218,14 @@ impl<F: Field> LongMerkleTree<F> {
                         depth_cell,
                         enable_cell,
                         index_cell,
+                        root_cell,
                     ),
                 ))
             })
             .collect::<Result<HashMap<u64, _>, Error>>()?;
+
+            // cells.insert(1, root_cell);
+        let cells = cells;
 
         // Apply equality constraints
         for (index, cell) in cells.iter() {
@@ -214,7 +237,9 @@ impl<F: Field> LongMerkleTree<F> {
                 _depth_cell,
                 _enable_cell,
                 _index_cell,
+                _root_cell,
             ): &(
+                halo2_proofs::circuit::AssignedCell<F, F>,
                 halo2_proofs::circuit::AssignedCell<F, F>,
                 halo2_proofs::circuit::AssignedCell<F, F>,
                 halo2_proofs::circuit::AssignedCell<F, F>,
@@ -226,13 +251,24 @@ impl<F: Field> LongMerkleTree<F> {
             if *index == 1 {
                 continue;
             } else {
-                let (parent_index, right) = (index / 2, index % 2);
+
+                let parent_index = index / 2;
+                let right = parent_index % 2;
+
+                if parent_index == 1 {
+                    // parent is root node
+                    // region.constrain_equal(parent_cell.cell(), cells[&1].2.cell())?;
+                    continue;
+                }
+
                 // if parent index is odd, that means its a sibling node
                 // TODO: Rename node to "left" and sibling to "right"
                 let parent_node_cell = if right == 0 {
+                    // node cell (left)
                     &cells[&parent_index].2
                 } else if right == 1 {
-                    &cells[&parent_index].3
+                    // sibling cell (right)
+                    &cells[&(parent_index - 1)].3
                 } else {
                     unreachable!()
                 };

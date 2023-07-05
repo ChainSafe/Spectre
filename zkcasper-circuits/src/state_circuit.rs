@@ -57,13 +57,12 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         // Also enforces that the node and sibling are the left and right node
         meta.lookup_any("hash(node, sibling) == parent is in sha256 table", |meta| {
             let selector = tree.enable(meta);
-            // let into_node = tree.into_left(meta);
             let node = tree.node(meta);
-            let index = tree.index(meta);
             // TODO: Check if this is the left or right node using the gindex
             let sibling = tree.sibling(meta);
             let parent = tree.parent(meta);
-            sha256_table.build_lookup(meta, selector, node, sibling, parent)
+            let root = tree.root(meta);
+            sha256_table.build_lookup(meta, selector * (Expression::Negated(Box::new(root))), node, sibling, parent)
         });
 
         println!("state circuit degree={}", meta.degree());
@@ -90,6 +89,7 @@ impl<F: Field> StateSSZCircuitConfig<F> {
         challenge: Value<F>,
     ) -> Result<(), Error> {
         let trace_by_depth = witness.trace_by_gindex();
+
         layouter.assign_region(
             || "state ssz circuit",
             |mut region| {
@@ -199,10 +199,10 @@ mod tests {
 
     #[test]
     fn test_state_ssz_circuit() {
-        let k = 10;
+        let k = 18;
         let merkle_trace: MerkleTrace =
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
-
+        println!("merkle trace len={}", merkle_trace.0.len());
         let circuit = TestStateSSZ::<Fr> {
             state_circuit: StateSSZCircuit::new(merkle_trace),
             _f: PhantomData,
