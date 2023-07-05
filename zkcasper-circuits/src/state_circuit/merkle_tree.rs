@@ -155,16 +155,13 @@ impl <F: Field> LongMerkleTree<F> {
         // let mut parent_index_cell = region.assign_advice(|| "parent_index", self.parent_index, 0, || Value::known(F::zero()))?;
 
         // let mut enable_cell = region.assign_fixed(|| "enable", self.enable, 0, || Value::known(F::one()))?;
-        let cells = steps.iter().map(|(_, entry)|  {
+
+        let cells = steps.iter().skip(1).map(|(_, entry)|  {
                 let index = entry.index;
                 let p_index = entry.parent_index;
                 let index_cell = region.assign_advice(|| "index", self.index, index as usize, || Value::known(F::from(index as u64)))?;
                 let parent_cell = region.assign_advice(|| "parent", self.parent, index as usize, || {
-                    if entry.is_rlc[2] {
                         challange.map(|rnd| rlc::value(&entry.parent, rnd))
-                    } else {
-                        Value::known(F::from_bytes_le_unsecure(&entry.parent))
-                    }
                 })?;
                 let parent_index_cell = region.assign_advice(|| "parent_index", self.parent_index, index as usize, || Value::known(F::from(p_index as u64)))?;
                 
