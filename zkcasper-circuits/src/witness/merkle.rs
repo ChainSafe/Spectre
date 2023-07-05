@@ -35,12 +35,16 @@ impl MerkleTrace {
             .group_by(|step| step.depth)
             .into_iter()
             .sorted_by_key(|(depth, _steps)| *depth)
-            .map(|(_depth, steps)| steps.collect_vec())
+            .map(|(_depth, steps)| steps.sorted_by_key(|x| x.index).collect_vec())
             .collect_vec()
     }
 
     pub fn trace_by_level_map(&self) -> HashMap<usize, Vec<&MerkleTraceStep>> {
         self.0.iter().into_group_map_by(|step| step.depth)
+    }
+
+    pub fn trace_by_gindex(&self) -> HashMap<usize, &MerkleTraceStep> {
+        self.0.iter().map(|step| (step.index as usize, step)).collect()
     }
 
     pub fn sha256_inputs(&self) -> Vec<HashInput> {
