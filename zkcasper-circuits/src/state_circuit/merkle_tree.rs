@@ -10,7 +10,6 @@ use halo2_proofs::{
     },
     poly::Rotation,
 };
-use rand::seq::index;
 
 #[derive(Clone, Debug)]
 pub struct LongMerkleTree<F> {
@@ -128,34 +127,18 @@ impl <F: Field> LongMerkleTree<F> {
         challange: Value<F>,
     ) -> Result<(), Error> {
 
-        // Assign every cell
-        // TODO: Do the first level separately
+        
         // First row 
-        // let mut node = if steps[0][0].is_rlc[0] {
-        //     challange.map(|rnd| rlc::value(&steps[0][0].node, rnd))
-        // } else {
-        //     Value::known(F::from_bytes_le_unsecure(&steps[0][0].node))
-        // };
+        region.assign_advice(|| "node", self.node, 0, || challange.map(|rnd| rlc::value(&steps[&0].node, rnd)))?;
+        region.assign_advice(|| "index", self.index, 0, || Value::known(F::one()))?;
+        region.assign_advice(|| "parent index", self.parent_index, 0, || Value::known(F::zero()))?;
+        region.assign_advice(|| "parent", self.parent, 0, || Value::known(F::zero()))?;
+        region.assign_advice(|| "sibling", self.sibling, 0, || Value::known(F::zero()))?;
+        region.assign_advice(|| "depth", self.depth, 0, || Value::known(F::one()))?;
+        region.assign_fixed(|| "enable", self.enable, 0, || Value::known(F::one()))?;
 
-        // let mut node_cell = region.assign_advice(
-        //     || "node",
-        //     self.node,
-        //     0,
-        //     || node,
-        // )?;
-        // let mut sibling_cell = region.assign_advice(
-        //     || "sibling",
-        //     self.sibling,
-        //     0,
-        //     || Value::known(F::zero()),
-        // )?;
-        // let mut parent_cell = region.assign_advice(|| "parent", self.parent, 0, || Value::known(F::zero()))?;
-        // let mut index_cell = region.assign_advice(|| "index", self.index, 0, || Value::known(F::one()))?;
-        // let mut depth_cell = region.assign_advice(|| "depth", self.depth, 0, || Value::known(F::one()))?;
-        // let mut parent_index_cell = region.assign_advice(|| "parent_index", self.parent_index, 0, || Value::known(F::zero()))?;
-
-        // let mut enable_cell = region.assign_fixed(|| "enable", self.enable, 0, || Value::known(F::one()))?;
-
+        // Assign all other rows/depths
+        
         let cells = steps.iter().skip(1).map(|(_, entry)|  {
                 let index = entry.index;
                 let p_index = entry.parent_index;
