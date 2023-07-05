@@ -71,17 +71,6 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
             let parent = tree.parent(meta);
             sha256_table.build_lookup(meta, selector, node, sibling, parent)
         });
-        
-        meta.create_gate("table constraints", |meta| {
-            let selector = tree.selector(meta);
-            let mut cb = ConstraintBuilder::default();
-            let parent = tree.parent(meta);
-            let index = tree.index(meta);
-            let two = Expression::Constant(F::from(2));
-            cb.require_zero("index must be parent * 2", parent * two - index);
-            
-            cb.gate(selector)
-        });
 
         println!("state circuit degree={}", meta.degree());
 
