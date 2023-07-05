@@ -59,18 +59,20 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         // Annotate circuit
         sha256_table.annotate_columns(meta);
 
-        
         // TODO: Make sure that the sibling too
-        meta.lookup_any("hash(node, sibling) == next_level.node is in sha256 table", |meta| {
-            let selector = tree.selector(meta);
-            // let into_node = tree.into_left(meta);
-            let node = tree.node(meta);
-            let index = tree.index(meta);
-            // TODO: Check if this is the left or right node using the gindex
-            let sibling = tree.sibling(meta);
-            let parent = tree.parent(meta);
-            sha256_table.build_lookup(meta, selector, node, sibling, parent)
-        });
+        meta.lookup_any(
+            "hash(node, sibling) == next_level.node is in sha256 table",
+            |meta| {
+                let selector = tree.selector(meta);
+                // let into_node = tree.into_left(meta);
+                let node = tree.node(meta);
+                let index = tree.index(meta);
+                // TODO: Check if this is the left or right node using the gindex
+                let sibling = tree.sibling(meta);
+                let parent = tree.parent(meta);
+                sha256_table.build_lookup(meta, selector, node, sibling, parent)
+            },
+        );
 
         println!("state circuit degree={}", meta.degree());
 
@@ -102,7 +104,8 @@ impl<F: Field> StateSSZCircuitConfig<F> {
             || "state ssz circuit",
             |mut region| {
                 self.annotate_columns_in_region(&mut region);
-                self.tree.assign_with_region(&mut region, &trace_by_depth, challenge)?;
+                self.tree
+                    .assign_with_region(&mut region, &trace_by_depth, challenge)?;
                 Ok(())
             },
         )?;

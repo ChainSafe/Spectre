@@ -44,7 +44,10 @@ impl MerkleTrace {
     }
 
     pub fn trace_by_gindex(&self) -> HashMap<usize, &MerkleTraceStep> {
-        self.0.iter().map(|step| (step.index as usize, step)).collect()
+        self.0
+            .iter()
+            .map(|step| (step.index as usize, step))
+            .collect()
     }
 
     pub fn sha256_inputs(&self) -> Vec<HashInput> {

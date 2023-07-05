@@ -31,7 +31,7 @@ pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Or
 
     fn pow_const(&self, mut exp: usize) -> Self {
         if exp == 0 {
-            return Self::one()
+            return Self::one();
         }
 
         let mut base = self.clone();
@@ -63,8 +63,6 @@ pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Or
         value
     }
 }
-
-
 
 // Impl custom `Field` trait for BN256 Fr to be used and consistent with the
 // rest of the workspace.

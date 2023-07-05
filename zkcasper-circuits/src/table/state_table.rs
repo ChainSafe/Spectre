@@ -203,10 +203,7 @@ impl StateTables {
         ]
     }
 
-    pub fn annotate_columns_in_region<F: Field>(
-        &self,
-        region: &mut Region<'_, F>,
-    ) {
+    pub fn annotate_columns_in_region<F: Field>(&self, region: &mut Region<'_, F>) {
         let lookup_table = self.0.iter().for_each(|(_, table)| {
             table.annotate_columns_in_region(region);
         });

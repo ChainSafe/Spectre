@@ -85,10 +85,10 @@ impl SHA256Table {
                     input.clone(),
                 )
             }
-            HashInput::TwoToOne{
+            HashInput::TwoToOne {
                 left,
                 right,
-                is_rlc
+                is_rlc,
             } => {
                 let chunk_rlcs = [
                     challenge.map(|randomness| rlc::value(left, randomness)),
@@ -102,8 +102,16 @@ impl SHA256Table {
                 let input_rlc = challenge.map(|randomness| rlc::value(&preimage, randomness));
 
                 let input_chunks = [
-                    if is_rlc[0] { chunk_rlcs[0] } else { Value::known(chunk_vals[0]) },
-                    if is_rlc[1] { chunk_rlcs[1] } else { Value::known(chunk_vals[1]) },
+                    if is_rlc[0] {
+                        chunk_rlcs[0]
+                    } else {
+                        Value::known(chunk_vals[0])
+                    },
+                    if is_rlc[1] {
+                        chunk_rlcs[1]
+                    } else {
+                        Value::known(chunk_vals[1])
+                    },
                 ];
 
                 (input_chunks, input_rlc, preimage)

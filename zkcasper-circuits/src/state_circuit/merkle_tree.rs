@@ -39,10 +39,8 @@ pub struct TreeLevel<F> {
     // pub(super) cell_manager: CellManager<F>,
 }
 
-impl <F: Field> LongMerkleTree<F> {
-    pub(crate) fn configure(
-        meta: &mut ConstraintSystem<F>,
-    ) -> Self {
+impl<F: Field> LongMerkleTree<F> {
+    pub(crate) fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let node = meta.advice_column();
         let sibling = meta.advice_column();
         let parent = meta.advice_column();
@@ -95,7 +93,6 @@ impl <F: Field> LongMerkleTree<F> {
             .for_each(|(col, ann)| region.name_column(|| &ann, col));
     }
 
-
     pub fn node(&self, meta: &mut VirtualCells<'_, F>) -> Expression<F> {
         meta.query_advice(self.node, Rotation::cur())
     }
@@ -126,56 +123,120 @@ impl <F: Field> LongMerkleTree<F> {
         steps: &HashMap<usize, &MerkleTraceStep>,
         challange: Value<F>,
     ) -> Result<(), Error> {
-
-        
-        // First row 
-        region.assign_advice(|| "node", self.node, 0, || challange.map(|rnd| rlc::value(&steps[&0].node, rnd)))?;
+        // First row
+        region.assign_advice(
+            || "node",
+            self.node,
+            0,
+            || challange.map(|rnd| rlc::value(&steps[&0].node, rnd)),
+        )?;
         region.assign_advice(|| "index", self.index, 0, || Value::known(F::one()))?;
-        region.assign_advice(|| "parent index", self.parent_index, 0, || Value::known(F::zero()))?;
+        region.assign_advice(
+            || "parent index",
+            self.parent_index,
+            0,
+            || Value::known(F::zero()),
+        )?;
         region.assign_advice(|| "parent", self.parent, 0, || Value::known(F::zero()))?;
         region.assign_advice(|| "sibling", self.sibling, 0, || Value::known(F::zero()))?;
         region.assign_advice(|| "depth", self.depth, 0, || Value::known(F::one()))?;
         region.assign_fixed(|| "enable", self.enable, 0, || Value::known(F::one()))?;
 
         // Assign all other rows/depths
-        
-        let cells = steps.iter().skip(1).map(|(_, entry)|  {
+
+        let cells = steps
+            .iter()
+            .skip(1)
+            .map(|(_, entry)| {
                 let index = entry.index;
                 let p_index = entry.parent_index;
-                let index_cell = region.assign_advice(|| "index", self.index, index as usize, || Value::known(F::from(index as u64)))?;
-                let parent_cell = region.assign_advice(|| "parent", self.parent, index as usize, || {
-                        challange.map(|rnd| rlc::value(&entry.parent, rnd))
-                })?;
-                let parent_index_cell = region.assign_advice(|| "parent_index", self.parent_index, index as usize, || Value::known(F::from(p_index as u64)))?;
-                
-                let node_cell = region.assign_advice(|| "node", self.node, index as usize, || {
-                    if entry.is_rlc[0] {
-                        challange.map(|rnd| rlc::value(&entry.node, rnd))
-                    } else {
-                        Value::known(F::from_bytes_le_unsecure(&entry.node))
-                    }
-                })?;
-                let sibling_cell = region.assign_advice(|| "sibling", self.sibling, index as usize, || {
-                    if entry.is_rlc[1] {
-                        challange.map(|rnd| rlc::value(&entry.sibling, rnd))
-                    } else {
-                        Value::known(F::from_bytes_le_unsecure(&entry.sibling))
-                    }
-                })?;
-    
-                let depth_cell = region.assign_advice(|| "depth", self.depth, index as usize, || Value::known(F::from(entry.depth as u64)))?;
-                let enable_cell = region.assign_fixed(|| "enable", self.enable, index as usize, || Value::known(F::one()))?;
-                Ok((index, (parent_cell, parent_index_cell, node_cell, sibling_cell, depth_cell, enable_cell, index_cell)))
-        }).collect::<Result<HashMap<u64, _>, Error>>()?;
+                let index_cell = region.assign_advice(
+                    || "index",
+                    self.index,
+                    index as usize,
+                    || Value::known(F::from(index as u64)),
+                )?;
+                let parent_cell = region.assign_advice(
+                    || "parent",
+                    self.parent,
+                    index as usize,
+                    || challange.map(|rnd| rlc::value(&entry.parent, rnd)),
+                )?;
+                let parent_index_cell = region.assign_advice(
+                    || "parent_index",
+                    self.parent_index,
+                    index as usize,
+                    || Value::known(F::from(p_index as u64)),
+                )?;
 
-        // Apply equality constraints 
+                let node_cell = region.assign_advice(
+                    || "node",
+                    self.node,
+                    index as usize,
+                    || {
+                        if entry.is_rlc[0] {
+                            challange.map(|rnd| rlc::value(&entry.node, rnd))
+                        } else {
+                            Value::known(F::from_bytes_le_unsecure(&entry.node))
+                        }
+                    },
+                )?;
+                let sibling_cell = region.assign_advice(
+                    || "sibling",
+                    self.sibling,
+                    index as usize,
+                    || {
+                        if entry.is_rlc[1] {
+                            challange.map(|rnd| rlc::value(&entry.sibling, rnd))
+                        } else {
+                            Value::known(F::from_bytes_le_unsecure(&entry.sibling))
+                        }
+                    },
+                )?;
+
+                let depth_cell = region.assign_advice(
+                    || "depth",
+                    self.depth,
+                    index as usize,
+                    || Value::known(F::from(entry.depth as u64)),
+                )?;
+                let enable_cell = region.assign_fixed(
+                    || "enable",
+                    self.enable,
+                    index as usize,
+                    || Value::known(F::one()),
+                )?;
+                Ok((
+                    index,
+                    (
+                        parent_cell,
+                        parent_index_cell,
+                        node_cell,
+                        sibling_cell,
+                        depth_cell,
+                        enable_cell,
+                        index_cell,
+                    ),
+                ))
+            })
+            .collect::<Result<HashMap<u64, _>, Error>>()?;
+
+        // Apply equality constraints
         for (index, cell) in cells.iter() {
-            let (parent_cell, parent_index_cell, node_cell, sibling_cell, depth_cell, enable_cell, index_cell) = cell;
+            let (
+                parent_cell,
+                parent_index_cell,
+                node_cell,
+                sibling_cell,
+                depth_cell,
+                enable_cell,
+                index_cell,
+            ) = cell;
             if *index == 1 {
                 continue;
             } else {
-                let (parent_index, right) = (index / 2, index % 2); 
-                // if parent index is odd, that means its a sibling node 
+                let (parent_index, right) = (index / 2, index % 2);
+                // if parent index is odd, that means its a sibling node
                 // TODO: Rename node to "left" and sibling to "right"
                 let parent_node_cell = if right == 0 {
                     &cells[&parent_index].2
@@ -187,7 +248,7 @@ impl <F: Field> LongMerkleTree<F> {
 
                 region.constrain_equal(parent_cell.cell(), parent_node_cell.cell())?;
             }
-        };
+        }
 
         Ok(())
     }
@@ -367,7 +428,9 @@ impl<F: Field> From<TreeLevel<F>> for StateTable {
         StateTable {
             is_enabled: val.q_enabled,
             sibling: val.sibling,
-            sibling_index: val.sibling_index.expect("cannot use tree levels without leaves"),
+            sibling_index: val
+                .sibling_index
+                .expect("cannot use tree levels without leaves"),
             node: val.node,
             index: val.index.expect("cannot use tree levels without leaves"),
         }
