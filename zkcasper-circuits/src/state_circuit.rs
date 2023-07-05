@@ -7,7 +7,6 @@ use constraint_builder::ConstraintBuilder;
 
 pub mod merkle_tree;
 use log::info;
-use merkle_tree::TreeLevel;
 
 use crate::{
     table::{LookupTable, SHA256Table},
@@ -21,11 +20,7 @@ use halo2_proofs::{
     plonk::{ConstraintSystem, Error, Expression},
 };
 use itertools::Itertools;
-use std::{
-    marker::PhantomData,
-    ops::{Add, Mul},
-    vec,
-};
+use std::{marker::PhantomData, vec};
 
 use self::merkle_tree::LongMerkleTree;
 
@@ -41,7 +36,7 @@ pub const VALIDATORS_LEVEL: usize = PUBKEYS_LEVEL - 1;
 pub struct StateSSZCircuitConfig<F: Field> {
     tree: LongMerkleTree<F>,
     sha256_table: SHA256Table,
-    pub state_table: [StateTable; 2],
+    pub state_table: StateTable,
 }
 
 pub struct StateSSZCircuitArgs {
@@ -59,34 +54,29 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         // Annotate circuit
         sha256_table.annotate_columns(meta);
 
-        // TODO: Make sure that the sibling too
-        meta.lookup_any(
-            "hash(node, sibling) == next_level.node is in sha256 table",
-            |meta| {
-                let selector = tree.selector(meta);
-                // let into_node = tree.into_left(meta);
-                let node = tree.node(meta);
-                let index = tree.index(meta);
-                // TODO: Check if this is the left or right node using the gindex
-                let sibling = tree.sibling(meta);
-                let parent = tree.parent(meta);
-                sha256_table.build_lookup(meta, selector, node, sibling, parent)
-            },
-        );
+        // Also enforces that the node and sibling are the left and right node
+        meta.lookup_any("hash(node, sibling) == parent is in sha256 table", |meta| {
+            let selector = tree.enable(meta);
+            // let into_node = tree.into_left(meta);
+            let node = tree.node(meta);
+            let index = tree.index(meta);
+            // TODO: Check if this is the left or right node using the gindex
+            let sibling = tree.sibling(meta);
+            let parent = tree.parent(meta);
+            sha256_table.build_lookup(meta, selector, node, sibling, parent)
+        });
 
         println!("state circuit degree={}", meta.degree());
 
         StateSSZCircuitConfig {
-            tree,
+            tree: tree.clone(),
             sha256_table,
-            state_table: todo!(),
+            state_table: tree.clone().into(),
         }
     }
 
     fn annotate_columns_in_region(&self, region: &mut Region<'_, F>) {
-        self.state_table
-            .iter()
-            .for_each(|table| table.annotate_columns_in_region(region));
+        self.state_table.annotate_columns_in_region(region);
         self.sha256_table.annotate_columns_in_region(region);
         self.tree.annotate_columns_in_region(region);
     }

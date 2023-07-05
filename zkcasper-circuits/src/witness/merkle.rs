@@ -43,6 +43,7 @@ impl MerkleTrace {
         self.0.iter().into_group_map_by(|step| step.depth)
     }
 
+    // Returns the MerkleTraceSteps indexed by their gindex.
     pub fn trace_by_gindex(&self) -> HashMap<usize, &MerkleTraceStep> {
         self.0
             .iter()

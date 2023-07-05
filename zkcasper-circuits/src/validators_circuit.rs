@@ -4,7 +4,7 @@ pub(crate) mod constraint_builder;
 use crate::{
     gadget::LtGadget,
     table::{
-        state_table::{StateTables, StateTreeLevel},
+        state_table::{StateTable, StateTreeLevel},
         LookupTable, ValidatorsTable,
     },
     util::{Challenges, ConstrainBuilderCommon, SubCircuit, SubCircuitConfig},
@@ -32,7 +32,7 @@ pub struct ValidatorsCircuitConfig<F: Field> {
     q_enabled: Column<Fixed>,
     is_validator: Column<Advice>,
     is_committee: Column<Advice>,
-    state_tables: StateTables,
+    state_tables: StateTable,
     pub validators_table: ValidatorsTable,
     storage_phase1: Column<Advice>,
     byte_lookup: [Column<Advice>; N_BYTE_LOOKUPS],
@@ -44,7 +44,7 @@ pub struct ValidatorsCircuitConfig<F: Field> {
 }
 
 pub struct ValidatorsCircuitArgs {
-    pub state_tables: StateTables,
+    pub state_tables: StateTable,
 }
 
 impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
@@ -439,7 +439,7 @@ fn queries<F: Field>(
 
 mod tests {
     use super::*;
-    use crate::{table::state_table::StateTables, witness::MerkleTrace};
+    use crate::{table::state_table::StateTable, witness::MerkleTrace};
     use halo2_proofs::{
         circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
@@ -463,7 +463,7 @@ mod tests {
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let args = ValidatorsCircuitArgs {
-                state_tables: StateTables::dev_construct(meta),
+                state_tables: StateTable::dev_construct(meta),
             };
 
             (

@@ -11,16 +11,11 @@ use crate::{
 
 use super::*;
 
-#[derive(Clone, Debug)]
-pub struct StateTables(HashMap<StateTreeLevel, StateTable>);
-
 /// The StateTable contains records of the state of the beacon chain.
 #[derive(Clone, Debug)]
 pub struct StateTable {
     pub is_enabled: Column<Fixed>,
     pub sibling: Column<Advice>,
-    // TODO: remove `sibling_index` and do lookups to `index` with `gindex +- 1`
-    pub sibling_index: Column<Advice>,
     pub node: Column<Advice>,
     pub index: Column<Advice>,
 }
@@ -36,7 +31,6 @@ impl<F: Field> LookupTable<F> for StateTable {
         vec![
             self.is_enabled.into(),
             self.sibling.into(),
-            self.sibling_index.into(),
             self.node.into(),
             self.index.into(),
         ]
@@ -46,7 +40,6 @@ impl<F: Field> LookupTable<F> for StateTable {
         vec![
             String::from("is_enabled"),
             String::from("sibling"),
-            String::from("sibling_index"),
             String::from("node"),
             String::from("index"),
         ]
@@ -58,14 +51,12 @@ impl StateTable {
     fn constuct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
         let is_enabled = meta.fixed_column();
         let sibling = meta.advice_column();
-        let sibling_index = meta.advice_column_in(FirstPhase);
         let node = meta.advice_column();
         let index = meta.advice_column_in(FirstPhase);
 
         Self {
             is_enabled,
             sibling,
-            sibling_index,
             node,
             index,
         }
@@ -99,12 +90,6 @@ impl StateTable {
                 || Value::known(F::one()),
             )?;
             region.assign_advice(|| "sibling", self.sibling, i, || sibling)?;
-            region.assign_advice(
-                || "sibling_index",
-                self.sibling_index,
-                i,
-                || Value::known(F::from(step.sibling_index)),
-            )?;
             region.assign_advice(|| "node", self.node, i, || node)?;
             region.assign_advice(
                 || "index",
@@ -114,55 +99,6 @@ impl StateTable {
             )?;
         }
 
-        Ok(())
-    }
-}
-
-impl StateTables {
-    /// Construct a new [`ValidatorsTable`] outside of [`StateTable`].
-    pub fn dev_construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
-        StateTables(
-            StateTreeLevel::iter()
-                .map(|level| (level, StateTable::constuct(meta)))
-                .collect(),
-        )
-    }
-
-    /// Load state tables without running the full [`StateTable`].
-    pub fn dev_load<F: Field>(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        trace: &MerkleTrace,
-        challenge: Value<F>,
-    ) -> Result<(), Error> {
-        let mut trace_by_depth = trace.trace_by_level_map();
-
-        let pubkey_level_trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
-        let validators_level_trace = trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap();
-
-        let pubkey_table = self.0.get(&StateTreeLevel::PubKeys).unwrap();
-        let validators_table = self.0.get(&StateTreeLevel::Validators).unwrap();
-
-        layouter.assign_region(
-            || "dev load state tables",
-            |mut region| {
-                pubkey_table.annotate_columns_in_region(&mut region);
-                validators_table.annotate_columns_in_region(&mut region);
-
-                pubkey_table.assign_with_region(
-                    &mut region,
-                    pubkey_level_trace.clone(),
-                    challenge,
-                )?;
-                validators_table.assign_with_region(
-                    &mut region,
-                    validators_level_trace.clone(),
-                    challenge,
-                )?;
-
-                Ok(())
-            },
-        )?;
         Ok(())
     }
 
@@ -175,22 +111,19 @@ impl StateTables {
         gindex: Expression<F>,
         value_rlc: Expression<F>,
     ) -> Vec<(Expression<F>, Expression<F>)> {
-        let lookup_table = self.0.get(&level).unwrap();
-        let value_col = if is_left {
-            lookup_table.node
+        let value_col = if is_left { self.node } else { self.sibling };
+        let index_col = self.index;
+
+        let gindex = if is_left {
+            gindex
         } else {
-            lookup_table.sibling
-        };
-        let index_col = if is_left {
-            lookup_table.index
-        } else {
-            lookup_table.sibling_index
+            gindex - Expression::Constant(F::one())
         };
 
         vec![
             (
                 enable.clone(),
-                meta.query_fixed(lookup_table.is_enabled, Rotation::cur()),
+                meta.query_fixed(self.is_enabled, Rotation::cur()),
             ),
             (
                 value_rlc * enable.clone(),
@@ -203,9 +136,33 @@ impl StateTables {
         ]
     }
 
-    pub fn annotate_columns_in_region<F: Field>(&self, region: &mut Region<'_, F>) {
-        let lookup_table = self.0.iter().for_each(|(_, table)| {
-            table.annotate_columns_in_region(region);
-        });
+    /// Load state table without running the full [`StateTable`].
+    pub fn dev_load<F: Field>(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        trace: &MerkleTrace,
+        challenge: Value<F>,
+    ) -> Result<(), Error> {
+        let mut trace_by_depth = trace.trace_by_level_map();
+
+        let pubkey_level_trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
+        let validators_level_trace = trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap();
+
+        layouter.assign_region(
+            || "dev load state tables",
+            |mut region| {
+                self.annotate_columns_in_region(&mut region);
+                self.assign_with_region(&mut region, pubkey_level_trace.clone(), challenge)?;
+                self.assign_with_region(&mut region, validators_level_trace.clone(), challenge)?;
+
+                Ok(())
+            },
+        )?;
+        Ok(())
+    }
+
+    /// Construct a new [`ValidatorsTable`] outside of [`StateTable`].
+    pub fn dev_construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
+        StateTable::constuct(meta)
     }
 }
