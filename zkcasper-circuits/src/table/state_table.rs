@@ -62,23 +62,23 @@ impl StateTable {
         }
     }
 
-    // For `StateTables::dev_constract` only. Must not be used in `StateCircuit` as it does not adds padding.
+    // For `StateTables::dev_construct` only. Must not be used in `StateCircuit` as it does not adds padding.
     fn assign_with_region<F: Field>(
         &self,
         region: &mut Region<'_, F>,
         steps: Vec<&MerkleTraceStep>,
-        challange: Value<F>,
+        challenge: Value<F>,
     ) -> Result<(), Error> {
         for (i, step) in steps.into_iter().enumerate() {
             assert_eq!(step.sibling.len(), 32);
             assert_eq!(step.node.len(), 32);
             let node = if step.is_rlc[0] {
-                challange.map(|rnd| rlc::value(&step.node, rnd))
+                challenge.map(|rnd| rlc::value(&step.node, rnd))
             } else {
                 Value::known(F::from_bytes_le_unsecure(&step.node))
             };
             let sibling = if step.is_rlc[1] {
-                challange.map(|rnd| rlc::value(&step.sibling, rnd))
+                challenge.map(|rnd| rlc::value(&step.sibling, rnd))
             } else {
                 Value::known(F::from_bytes_le_unsecure(&step.sibling))
             };
@@ -145,15 +145,14 @@ impl StateTable {
     ) -> Result<(), Error> {
         let mut trace_by_depth = trace.trace_by_level_map();
 
-        let pubkey_level_trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
-        let validators_level_trace = trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap();
+        let mut trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
+        trace.extend(trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap());
 
         layouter.assign_region(
             || "dev load state tables",
             |mut region| {
                 self.annotate_columns_in_region(&mut region);
-                self.assign_with_region(&mut region, pubkey_level_trace.clone(), challenge)?;
-                self.assign_with_region(&mut region, validators_level_trace.clone(), challenge)?;
+                self.assign_with_region(&mut region, trace.clone(), challenge)?;
 
                 Ok(())
             },

@@ -62,7 +62,13 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
             let sibling = tree.sibling(meta);
             let parent = tree.parent(meta);
             let root = tree.root(meta);
-            sha256_table.build_lookup(meta, selector * (Expression::Negated(Box::new(root))), node, sibling, parent)
+            sha256_table.build_lookup(
+                meta,
+                selector * (Expression::Negated(Box::new(root))),
+                node,
+                sibling,
+                parent,
+            )
         });
 
         println!("state circuit degree={}", meta.degree());
@@ -199,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_state_ssz_circuit() {
-        let k = 18;
+        let k = 20;
         let merkle_trace: MerkleTrace =
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
         println!("merkle trace len={}", merkle_trace.0.len());

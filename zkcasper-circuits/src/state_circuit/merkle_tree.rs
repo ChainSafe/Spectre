@@ -36,7 +36,6 @@ impl<F: Field> LongMerkleTree<F> {
         let parent_index = meta.advice_column();
         let root = meta.fixed_column();
 
-
         // enable permutation checks
         meta.enable_equality(node);
         meta.enable_equality(sibling);
@@ -134,7 +133,7 @@ impl<F: Field> LongMerkleTree<F> {
         //     region.assign_advice(|| "depth", self.depth, 1, || Value::known(F::one()))?,
 
         //     region.assign_fixed(|| "enable", self.enable, 1, || Value::known(F::one()))?,
-        
+
         //     region.assign_advice(|| "index", self.index, 1, || Value::known(F::one()))?,
         //     region.assign_fixed(|| "root", self.root, 1, || Value::known(F::one()))?,
         // );
@@ -224,7 +223,7 @@ impl<F: Field> LongMerkleTree<F> {
             })
             .collect::<Result<HashMap<u64, _>, Error>>()?;
 
-            // cells.insert(1, root_cell);
+        // cells.insert(1, root_cell);
         let cells = cells;
 
         // Apply equality constraints
@@ -251,7 +250,6 @@ impl<F: Field> LongMerkleTree<F> {
             if *index == 1 {
                 continue;
             } else {
-
                 let parent_index = index / 2;
                 let right = parent_index % 2;
 
