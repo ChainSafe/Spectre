@@ -199,7 +199,9 @@ impl<F: Field> From<TreeLevel<F>> for StateTable {
         StateTable {
             is_enabled: val.q_enabled,
             sibling: val.sibling,
-            sibling_index: val.sibling_index.expect("cannot use tree levels without leaves"),
+            sibling_index: val
+                .sibling_index
+                .expect("cannot use tree levels without leaves"),
             node: val.node,
             index: val.index.expect("cannot use tree levels without leaves"),
         }

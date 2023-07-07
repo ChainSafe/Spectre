@@ -112,8 +112,8 @@ impl Committee {
             activation_epoch: Value::known(F::zero()),
             exit_epoch: Value::known(F::zero()),
             pubkey: [Value::known(F::zero()), Value::known(F::zero())], // TODO:
-                                                                        // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
-                                                                        // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
+            // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
+            // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
             row_type: CasperTag::Committee,
         }]
     }
@@ -182,4 +182,5 @@ pub struct CasperEntityRow<F: Field> {
     pub(crate) activation_epoch: Value<F>,
     pub(crate) exit_epoch: Value<F>,
     pub(crate) pubkey: [Value<F>; 2],
+    pub(crate) pubkey_uncompressed: [Value<F>; 4],
 }

@@ -559,10 +559,12 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
             let is_enabled = meta.query_advice(is_enabled, Rotation::cur());
             let input_rlcs = input_rlcs
                 .iter()
-                .map(|col| meta.query_advice(*col, Rotation::cur())).collect_vec();
+                .map(|col| meta.query_advice(*col, Rotation::cur()))
+                .collect_vec();
             let input_chunks = input_chunks
                 .iter()
-                .map(|col| meta.query_advice(*col, Rotation::cur())).collect_vec();
+                .map(|col| meta.query_advice(*col, Rotation::cur()))
+                .collect_vec();
             let data_rlc = meta.query_advice(data_rlc, Rotation::cur());
             let base_pow = meta.query_advice(rnd_pow, Rotation::cur());
             let is_rlc = [
@@ -570,10 +572,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
                 meta.query_advice(is_rlc[1], Rotation::cur()),
             ];
 
-            for (i, (input_rlc, input_chunk)) in input_rlcs.iter()
-                .zip(input_chunks)
-                .enumerate()
-            {
+            for (i, (input_rlc, input_chunk)) in input_rlcs.iter().zip(input_chunks).enumerate() {
                 cb.condition(is_rlc[i].clone(), |cb| {
                     cb.require_equal(
                         "input_rlc == input_hunk when is_rlc",
