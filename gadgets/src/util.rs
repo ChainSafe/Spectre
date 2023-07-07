@@ -223,6 +223,7 @@ pub mod rlc {
 
     use crate::util::Expr;
     use eth_types::Field;
+    use halo2_base::{safe_types::GateInstructions, AssignedValue, Context, QuantumCell};
     use halo2_proofs::plonk::Expression;
 
     /// Returns an expression that represents the random linear combination.
@@ -251,11 +252,31 @@ pub mod rlc {
         }
     }
 
-    fn generic<V, I>(values: I, randomness: V) -> V
+    /// Returns the random linear combination of the halo2-lib assigned values.
+    pub fn assigned_value<F: Field>(
+        values: &[AssignedValue<F>],
+        randomness: &QuantumCell<F>,
+        gate: &impl GateInstructions<F>,
+        ctx: &mut Context<F>,
+    ) -> AssignedValue<F> {
+        if !values.is_empty() {
+            let mut values = values.into_iter().rev();
+            let init = values.next().expect("values should not be empty");
+
+            values.fold(*init, |acc, value| {
+                gate.mul_add(ctx, acc, *randomness, *value)
+            })
+        } else {
+            ctx.load_zero()
+        }
+    }
+
+    fn generic<V, I, R>(values: I, randomness: R) -> V
     where
         I: IntoIterator<Item = V>,
         <I as IntoIterator>::IntoIter: DoubleEndedIterator,
-        V: Clone + Add<Output = V> + Mul<Output = V>,
+        V: Clone + Add<R, Output = V> + Add<Output = V> + Mul<R, Output = V>,
+        R: Clone,
     {
         let mut values = values.into_iter().rev();
         let init = values.next().expect("values should not be empty");

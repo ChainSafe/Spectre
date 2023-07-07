@@ -3,7 +3,6 @@ use crate::{util::rlc, witness::HashInput};
 use eth_types::Field;
 use itertools::Itertools;
 use log::debug;
-use snark_verifier::loader::LoadedScalar;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShaRow<F> {

@@ -12,6 +12,7 @@ members = [
 # [patch."https://github.com/privacy-scaling-explorations/zkevm-circuits.git"]
 # eth-types = { path = "./eth-types" }
 
+
 # Definition of benchmarks profile to use.
 [profile.bench]
 opt-level = 3
@@ -31,3 +32,13 @@ overflow-checks = true
 rpath = false
 lto = "thin"
 incremental = true
+
+[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
+halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "zkcasper" }
+
+[patch."https://github.com/axiom-crypto/halo2-lib"]
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "zkcasper", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "zkcasper", default-features = false }

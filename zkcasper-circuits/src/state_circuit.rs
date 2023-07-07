@@ -200,7 +200,7 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
 
     fn synthesize_sub(
         &self,
-        config: &Self::Config,
+        config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<(), Error> {
@@ -245,7 +245,7 @@ mod tests {
 
         fn synthesize(
             &self,
-            config: Self::Config,
+            mut config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             let challenge = config.1.sha256_input();
@@ -255,7 +255,7 @@ mod tests {
                 .sha256_table
                 .dev_load(&mut layouter, &hash_inputs, challenge.clone())?;
             self.state_circuit.synthesize_sub(
-                &config.0,
+                &mut config.0,
                 &config.1.values(&mut layouter),
                 &mut layouter,
             )?;

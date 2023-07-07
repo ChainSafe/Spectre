@@ -1,7 +1,8 @@
 use gadgets::util::{not, Expr};
+use halo2_proofs::circuit::Cell;
 
 use crate::{
-    witness::{into_casper_entities, CasperEntityRow, Committee, Validator},
+    witness::{into_casper_entities, CasperEntityRow, CasperTag, Committee, Validator},
     VALIDATOR0_GINDEX,
 };
 
@@ -28,6 +29,8 @@ pub struct ValidatorsTable {
     pub exit_epoch: Column<Advice>,
     /// Public key of a validator/committee.
     pub pubkey: [Column<Advice>; 2],
+
+    pub pubkey_cells: Vec<[Cell; 2]>,
 }
 
 impl<F: Field> LookupTable<F> for ValidatorsTable {
@@ -65,7 +68,7 @@ impl<F: Field> LookupTable<F> for ValidatorsTable {
 impl ValidatorsTable {
     /// Construct a new [`ValidatorsTable`]
     pub fn construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
-        Self {
+        let config = Self {
             id: meta.advice_column(),
             tag: meta.advice_column(),
             is_active: meta.advice_column(),
@@ -78,16 +81,22 @@ impl ValidatorsTable {
                 meta.advice_column_in(SecondPhase),
                 meta.advice_column_in(SecondPhase),
             ],
+            pubkey_cells: vec![],
+        };
+
+        for col in config.pubkey {
+            meta.enable_equality(col)
         }
+
+        config
     }
 
     pub fn assign_with_region<F: Field>(
-        &self,
+        &mut self,
         region: &mut Region<'_, F>,
         offset: usize,
         row: &CasperEntityRow<F>,
     ) -> Result<(), Error> {
-        // println!("assigning row.ssz_rlc: {:?}", row.ssz_rlc);
         for (column, value) in [
             (self.id, row.id),
             (self.tag, row.tag),
@@ -97,22 +106,41 @@ impl ValidatorsTable {
             (self.slashed, row.slashed),
             (self.activation_epoch, row.activation_epoch),
             (self.exit_epoch, row.exit_epoch),
-            (self.pubkey[0], row.pubkey[0]),
-            (self.pubkey[1], row.pubkey[1]),
         ] {
             region.assign_advice(
-                || "assign state row on state table",
+                || "assign validator row on state table",
                 column,
                 offset,
                 || value,
             )?;
         }
+
+        let assigned_cells = [
+            (self.pubkey[0], row.pubkey[0]),
+            (self.pubkey[1], row.pubkey[1]),
+        ]
+        .map(|(column, value)| {
+            region
+                .assign_advice(
+                    || "assign state row on state table",
+                    column,
+                    offset,
+                    || value,
+                )
+                .expect("pubkey assign")
+                .cell()
+        });
+
+        if row.row_type == CasperTag::Validator {
+            self.pubkey_cells.push(assigned_cells);
+        }
+
         Ok(())
     }
 
     /// Load the validators table into the circuit.
     pub fn dev_load<F: Field>(
-        &self,
+        &mut self,
         layouter: &mut impl Layouter<F>,
         validators: &[Validator],
         committees: &[Committee],
@@ -121,7 +149,7 @@ impl ValidatorsTable {
         let casper_entities = into_casper_entities(validators.iter(), committees.iter());
 
         layouter.assign_region(
-            || "dev load state table",
+            || "dev load validators table",
             |mut region| {
                 self.annotate_columns_in_region(&mut region);
                 for (offset, row) in casper_entities

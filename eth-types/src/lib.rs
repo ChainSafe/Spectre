@@ -31,7 +31,7 @@ pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Or
 
     fn pow_const(&self, mut exp: usize) -> Self {
         if exp == 0 {
-            return Self::one()
+            return Self::one();
         }
 
         let mut base = self.clone();
@@ -64,8 +64,6 @@ pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Or
     }
 }
 
-
-
 // Impl custom `Field` trait for BN256 Fr to be used and consistent with the
 // rest of the workspace.
 impl Field for Fr {}
@@ -73,6 +71,10 @@ impl Field for Fr {}
 // Impl custom `Field` trait for BN256 Frq to be used and consistent with the
 // rest of the workspace.
 impl Field for Fq {}
+
+// pub trait G1Curve: CurveExt + UncompressedEncoding {}
+
+// impl G1Curve for G1 {}
 
 /// Trait used to define types that can be converted to a 256 bit scalar value.
 pub trait ToScalar<F> {

@@ -24,6 +24,7 @@
   "dependencies": {
     "@chainsafe/persistent-merkle-tree": "^0.6.1",
     "@chainsafe/ssz": "^0.11.1",
-    "@lodestar/types": "^1.8.0"
+    "@lodestar/types": "^1.8.0",
+    "@noble/curves": "^1.1.0"
   }
 }

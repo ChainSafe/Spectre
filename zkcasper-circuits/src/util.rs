@@ -103,7 +103,7 @@ pub trait SubCircuit<F: Field> {
     /// to.
     fn synthesize_sub(
         &self,
-        config: &Self::Config,
+        config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<(), Error>;

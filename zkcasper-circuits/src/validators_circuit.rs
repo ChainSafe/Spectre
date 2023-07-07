@@ -20,7 +20,6 @@ use halo2_proofs::{
     poly::Rotation,
 };
 use itertools::Itertools;
-use log::info;
 
 use std::{iter, marker::PhantomData};
 
@@ -30,8 +29,6 @@ pub(crate) const MAX_DEGREE: usize = 5;
 #[derive(Clone, Debug)]
 pub struct ValidatorsCircuitConfig<F: Field> {
     q_enabled: Column<Fixed>,
-    is_validator: Column<Advice>,
-    is_committee: Column<Advice>,
     state_tables: StateTables,
     pub validators_table: ValidatorsTable,
     storage_phase1: Column<Advice>,
@@ -52,8 +49,6 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
 
     fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         let q_enabled = meta.fixed_column();
-        let is_validator = meta.advice_column();
-        let is_committee = meta.advice_column();
         let target_epoch = meta.advice_column();
         let state_tables = args.state_tables;
         let validators_table: ValidatorsTable = ValidatorsTable::construct(meta);
@@ -73,8 +68,6 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
 
         let mut config = Self {
             q_enabled,
-            is_validator,
-            is_committee,
             target_epoch,
             state_tables,
             validators_table,
@@ -241,7 +234,7 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
 
 impl<F: Field> ValidatorsCircuitConfig<F> {
     fn assign(
-        &self,
+        &mut self,
         layouter: &mut impl Layouter<F>,
         validators: &[Validator],
         committees: &[Committee],
@@ -263,7 +256,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
     }
 
     fn assign_with_region(
-        &self,
+        &mut self,
         region: &mut Region<'_, F>,
         validators: &[Validator],
         committees: &[Committee],
@@ -343,7 +336,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
 
     pub fn annotations(&self) -> Vec<(Column<Any>, String)> {
         let mut annotations = vec![
-            (self.is_validator.into(), "q_enabled".to_string()),
+            (self.q_enabled.into(), "q_enabled".to_string()),
             (self.storage_phase1.into(), "storage_phase1".to_string()),
             (self.target_epoch.into(), "epoch".to_string()),
         ];
@@ -356,7 +349,6 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
     }
 }
 
-/// State Circuit for proving RwTable is valid
 #[derive(Default, Clone, Debug)]
 pub struct ValidatorsCircuit<F> {
     pub(crate) validators: Vec<Validator>,
@@ -366,7 +358,6 @@ pub struct ValidatorsCircuit<F> {
 }
 
 impl<F: Field> ValidatorsCircuit<F> {
-    /// make a new state circuit from an RwMap
     pub fn new(validators: Vec<Validator>, committees: Vec<Committee>, target_epoch: u64) -> Self {
         Self {
             validators,
@@ -392,7 +383,6 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
         todo!()
     }
 
-    /// Return the minimum number of rows required to prove the block
     fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
         todo!()
     }
@@ -400,7 +390,7 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
     /// Make the assignments to the ValidatorsCircuit
     fn synthesize_sub(
         &self,
-        config: &Self::Config,
+        config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<(), Error> {
@@ -418,7 +408,6 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
         )
     }
 
-    /// powers of randomness for instance columns
     fn instance(&self) -> Vec<Vec<F>> {
         vec![]
     }
@@ -448,7 +437,7 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct TestValidators<F: Field> {
-        validators_circuit: ValidatorsCircuit<F>,
+        inner: ValidatorsCircuit<F>,
         state_tree_trace: MerkleTrace,
         _f: PhantomData<F>,
     }
@@ -474,7 +463,7 @@ mod tests {
 
         fn synthesize(
             &self,
-            config: Self::Config,
+            mut config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             let challenge = config.1.sha256_input();
@@ -482,8 +471,8 @@ mod tests {
                 .0
                 .state_tables
                 .dev_load(&mut layouter, &self.state_tree_trace, challenge)?;
-            self.validators_circuit.synthesize_sub(
-                &config.0,
+            self.inner.synthesize_sub(
+                &mut config.0,
                 &config.1.values(&mut layouter),
                 &mut layouter,
             )?;
@@ -502,7 +491,7 @@ mod tests {
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
 
         let circuit = TestValidators::<Fr> {
-            validators_circuit: ValidatorsCircuit::new(validators, committees, 25),
+            inner: ValidatorsCircuit::new(validators, committees, 25),
             state_tree_trace,
             _f: PhantomData,
         };
