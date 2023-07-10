@@ -130,12 +130,9 @@ impl ValidatorsTable {
                 .expect("pubkey assign")
                 .cell()
         });
-        
 
         if row.row_type == CasperTag::Validator {
-            self.pubkey_cells
-                .push(assigned_cells[0..2].try_into().unwrap());
-
+            self.pubkey_cells.push(assigned_cells);
         }
 
         Ok(())

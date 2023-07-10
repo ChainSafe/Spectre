@@ -14,34 +14,18 @@ use crate::{
 use cell_manager::CellManager;
 use constraint_builder::*;
 use eth_types::*;
-use halo2_base::{
-    gates::{builder::GateThreadBuilder, GateChip, range::RangeConfig},
-    safe_types::RangeChip,
-    Context,
-};
-use halo2_ecc::{
-    bigint::{CRTInteger, ProperCrtUint, ProperUint},
-    bn254::FpPoint,
-    ecc::{EcPoint, EccChip},
-    fields::FieldChip,
-};
+
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, FirstPhase, Fixed, VirtualCells},
     poly::Rotation,
 };
-use halo2curves::{bn256::G1Affine, group::GroupEncoding};
 use itertools::Itertools;
-use num_bigint::BigUint;
-
 
 use std::{cell::RefCell, iter, marker::PhantomData};
 
 pub(crate) const N_BYTE_LOOKUPS: usize = 16; // 8 per lt gadget (target_gte_activation, target_lt_exit)
 pub(crate) const MAX_DEGREE: usize = 5;
-
-pub const LIMB_BITS: usize = 88;
-pub const NUM_LIMBS: usize = 3;
 
 #[derive(Clone, Debug)]
 pub struct ValidatorsCircuitConfig<F: Field> {
@@ -60,10 +44,6 @@ pub struct ValidatorsCircuitConfig<F: Field> {
 pub struct ValidatorsCircuitArgs {
     pub state_tables: StateTables,
 }
-pub type FpChip<'range, F> = halo2_ecc::fields::fp::FpChip<'range, F, halo2curves::bn256::Fq>;
-
-// Given a compressed 48byte pubkey, return the y^2 coordinate of the uncompressed pubkey
-
 
 impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
     type ConfigArgs = ValidatorsCircuitArgs;
@@ -283,7 +263,6 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
         committees: &[Committee],
         target_epoch: u64,
         randomness: Value<F>,
-        
     ) -> Result<(), Error> {
         let casper_entities = into_casper_entities(validators.iter(), committees.iter());
 
@@ -371,19 +350,15 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValidatorsCircuit< F: Field> {
+pub struct ValidatorsCircuit<F> {
     pub(crate) validators: Vec<Validator>,
     pub(crate) committees: Vec<Committee>,
     target_epoch: u64,
     _f: PhantomData<F>,
 }
 
-impl<'a, F: Field> ValidatorsCircuit< F> {
-    pub fn new(
-        validators: Vec<Validator>,
-        committees: Vec<Committee>,
-        target_epoch: u64,
-    ) -> Self {
+impl<F: Field> ValidatorsCircuit<F> {
+    pub fn new(validators: Vec<Validator>, committees: Vec<Committee>, target_epoch: u64) -> Self {
         Self {
             validators,
             committees,
@@ -393,16 +368,15 @@ impl<'a, F: Field> ValidatorsCircuit< F> {
     }
 }
 
-impl<F: Field> SubCircuit<F> for ValidatorsCircuit< F> {
+impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
     type Config = ValidatorsCircuitConfig<F>;
 
     fn new_from_block(block: &witness::Block<F>) -> Self {
-        todo!()
-        // Self::new(
-        //     block.validators.clone(),
-        //     block.committees.clone(),
-        //     block.target_epoch,
-        // )
+        Self::new(
+            block.validators.clone(),
+            block.committees.clone(),
+            block.target_epoch,
+        )
     }
 
     fn unusable_rows() -> usize {

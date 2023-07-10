@@ -14,16 +14,17 @@ use halo2_base::{
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bigint::{ProperUint, CRTInteger, ProperCrtUint},
+    bigint::{CRTInteger, ProperCrtUint, ProperUint},
     bn254::FpPoint,
-    ecc::{EcPoint, EccChip}, fields::FieldChip,
+    ecc::{EcPoint, EccChip},
+    fields::FieldChip,
 };
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{ConstraintSystem, Error},
 };
 use halo2curves::{
-    bn256::{G1Affine, Fq},
+    bn256::{Fq, G1Affine},
     group::{ff::PrimeField, GroupEncoding, UncompressedEncoding},
     CurveAffine,
 };
@@ -89,20 +90,24 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         range: &'a RangeChip<F>,
     ) -> Self {
         let fp_chip = FpChip::new(range, LIMB_BITS, NUM_LIMBS);
-        let validators_y = validators.iter().map(|v| {
-            let g1_affine = G1Affine::from_bytes(&v.pubkey.as_slice().try_into().unwrap()).unwrap();
-            let g1_uncompressed = g1_affine.to_uncompressed();
-            let g1_uncompressed_affine = G1Affine::from_uncompressed(&g1_uncompressed).unwrap();
-            g1_uncompressed_affine.y
-        }).collect();
-        
+        let validators_y = validators
+            .iter()
+            .map(|v| {
+                let g1_affine =
+                    G1Affine::from_bytes(&v.pubkey.as_slice().try_into().unwrap()).unwrap();
+                let g1_uncompressed = g1_affine.to_uncompressed();
+                let g1_uncompressed_affine = G1Affine::from_uncompressed(&g1_uncompressed).unwrap();
+                g1_uncompressed_affine.y
+            })
+            .collect();
+
         Self {
             builder: RefCell::new(builder),
             range,
             fp_chip,
             validators,
             _committees: committees,
-            validators_y
+            validators_y,
         }
     }
 
@@ -131,8 +136,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
 
                     let builder = &mut self.builder.borrow_mut();
                     let ctx = builder.main(0);
-                    let (_aggregated_pubkeys, pubkeys_compressed) =
-                        self.process_validators(ctx );
+                    let (_aggregated_pubkeys, pubkeys_compressed) = self.process_validators(ctx);
 
                     let ctx = builder.main(1);
 
@@ -197,14 +201,12 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         // TODO: norm?
         let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
         let x_cubed = field_chip.mul(ctx, x_squared, x.clone());
-    
+
         let mut c_x = field_chip.scalar_mul_no_carry(ctx, x.clone(), 3);
-        
+
         let x_cubed_plus_cx = field_chip.add_no_carry(ctx, x_cubed, c_x);
-        let plus_b = field_chip
-            .add_constant_no_carry(ctx, x_cubed_plus_cx, 3.into());
+        let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed_plus_cx, 3.into());
         field_chip.carry_mod(ctx, plus_b)
-    
     }
     fn process_validators(
         &self,
@@ -234,16 +236,11 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                 let pk_compressed = validator.pubkey[..G1_FQ_BYTES].to_vec();
 
                 // FIXME: replace with retriving y coordinate from cached map.
-                let x_coord =
-                    Fq::from_bytes(pk_compressed.as_slice().try_into().unwrap()).unwrap();
+                let x_coord = Fq::from_bytes(pk_compressed.as_slice().try_into().unwrap()).unwrap();
 
                 // FIXME: constraint y coordinate field
                 let assigned_compressed: [AssignedValue<F>; G1_FQ_BYTES] = ctx
-                    .assign_witnesses(
-                        pk_compressed
-                            .iter()
-                            .map(|&b| F::from(b as u64)),
-                    )
+                    .assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)))
                     .try_into()
                     .unwrap();
                 let x_crt = self.compressed_to_fq(assigned_compressed, &x_coord, ctx);
@@ -272,7 +269,6 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                 });
 
                 in_committee_pubkeys.push(EcPoint::new(x_crt, y_crt));
-
             }
 
             // let pk_affine = G1Affine::random(&mut rand::thread_rng());
@@ -357,7 +353,6 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                     .unwrap()
             })
             .collect_vec();
-
 
         let x = {
             let assigned_uint = ProperUint::new(field_limbs[0].to_vec());
