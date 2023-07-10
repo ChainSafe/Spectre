@@ -94,13 +94,14 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
             .iter()
             .map(|v| {
                 let g1_affine =
-                    G1Affine::from_bytes(&v.pubkey.as_slice().try_into().unwrap()).unwrap();
+                    G1Affine::from_bytes(&v.pubkey[..G1_FQ_BYTES].try_into().unwrap()).unwrap();
                 let g1_uncompressed = g1_affine.to_uncompressed();
-                let g1_uncompressed_affine = G1Affine::from_uncompressed(&g1_uncompressed).unwrap();
-                g1_uncompressed_affine.y
+                let y =
+                    Fq::from_bytes(&g1_uncompressed.as_ref()[G1_FQ_BYTES..].try_into().unwrap())
+                        .unwrap();
+                y
             })
             .collect();
-
         Self {
             builder: RefCell::new(builder),
             range,
@@ -236,7 +237,9 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                 let pk_compressed = validator.pubkey[..G1_FQ_BYTES].to_vec();
 
                 // FIXME: replace with retriving y coordinate from cached map.
-                let x_coord = Fq::from_bytes(pk_compressed.as_slice().try_into().unwrap()).unwrap();
+                let g1_aff =
+                    G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap();
+                let x_coord = g1_aff.x;
 
                 // FIXME: constraint y coordinate field
                 let assigned_compressed: [AssignedValue<F>; G1_FQ_BYTES] = ctx
