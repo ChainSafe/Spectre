@@ -22,7 +22,7 @@ use halo2_proofs::{
 };
 use itertools::Itertools;
 
-use std::{cell::RefCell, iter, marker::PhantomData};
+use std::{iter, marker::PhantomData};
 
 pub(crate) const N_BYTE_LOOKUPS: usize = 16; // 8 per lt gadget (target_gte_activation, target_lt_exit)
 pub(crate) const MAX_DEGREE: usize = 5;

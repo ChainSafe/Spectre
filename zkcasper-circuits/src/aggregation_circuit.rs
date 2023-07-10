@@ -14,7 +14,7 @@ use halo2_base::{
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bigint::{CRTInteger, ProperCrtUint, ProperUint},
+    bigint::{ProperCrtUint, ProperUint},
     bn254::FpPoint,
     ecc::{EcPoint, EccChip},
     fields::FieldChip,
@@ -26,7 +26,6 @@ use halo2_proofs::{
 use halo2curves::{
     bn256::{Fq, G1Affine},
     group::{ff::PrimeField, GroupEncoding, UncompressedEncoding},
-    CurveAffine,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;

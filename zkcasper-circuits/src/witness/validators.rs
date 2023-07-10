@@ -3,15 +3,10 @@ use std::vec;
 use banshee_preprocessor::util::pad_to_ssz_chunk;
 use eth_types::Field;
 use ethereum_consensus::phase0::is_active_validator;
-use gadgets::impl_expr;
 use gadgets::util::rlc;
 
 use halo2_proofs::circuit::Value;
-use halo2_proofs::plonk::Expression;
-use halo2curves::bn256::G1Affine;
-use halo2curves::bn256::G1;
-use halo2curves::group::GroupEncoding;
-use halo2curves::group::UncompressedEncoding;
+
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
