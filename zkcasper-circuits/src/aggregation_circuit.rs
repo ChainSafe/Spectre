@@ -14,16 +14,16 @@ use halo2_base::{
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bigint::ProperUint,
+    bigint::{ProperUint, CRTInteger, ProperCrtUint},
     bn254::FpPoint,
-    ecc::{EcPoint, EccChip},
+    ecc::{EcPoint, EccChip}, fields::FieldChip,
 };
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{ConstraintSystem, Error},
 };
 use halo2curves::{
-    bn256::G1Affine,
+    bn256::{G1Affine, Fq},
     group::{ff::PrimeField, GroupEncoding, UncompressedEncoding},
     CurveAffine,
 };
@@ -78,6 +78,7 @@ pub struct AggregationCircuitBuilder<'a, F: Field> {
     // Witness
     validators: &'a [Validator],
     _committees: &'a [Committee],
+    validators_y: Vec<Fq>,
 }
 
 impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
@@ -88,12 +89,20 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         range: &'a RangeChip<F>,
     ) -> Self {
         let fp_chip = FpChip::new(range, LIMB_BITS, NUM_LIMBS);
+        let validators_y = validators.iter().map(|v| {
+            let g1_affine = G1Affine::from_bytes(&v.pubkey.as_slice().try_into().unwrap()).unwrap();
+            let g1_uncompressed = g1_affine.to_uncompressed();
+            let g1_uncompressed_affine = G1Affine::from_uncompressed(&g1_uncompressed).unwrap();
+            g1_uncompressed_affine.y
+        }).collect();
+        
         Self {
             builder: RefCell::new(builder),
             range,
             fp_chip,
             validators,
             _committees: committees,
+            validators_y
         }
     }
 
@@ -122,7 +131,8 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
 
                     let builder = &mut self.builder.borrow_mut();
                     let ctx = builder.main(0);
-                    let (_aggregated_pubkeys, pubkeys_compressed) = self.process_validators(ctx);
+                    let (_aggregated_pubkeys, pubkeys_compressed) =
+                        self.process_validators(ctx );
 
                     let ctx = builder.main(1);
 
@@ -179,6 +189,23 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
             .unwrap();
     }
 
+    fn calculate_ysquared(
+        ctx: &mut Context<F>,
+        field_chip: &FpChip<'_, F>,
+        x: ProperCrtUint<F>,
+    ) -> ProperCrtUint<F> {
+        // TODO: norm?
+        let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
+        let x_cubed = field_chip.mul(ctx, x_squared, x.clone());
+    
+        let mut c_x = field_chip.scalar_mul_no_carry(ctx, x.clone(), 3);
+        
+        let x_cubed_plus_cx = field_chip.add_no_carry(ctx, x_cubed, c_x);
+        let plus_b = field_chip
+            .add_constant_no_carry(ctx, x_cubed_plus_cx, 3.into());
+        field_chip.carry_mod(ctx, plus_b)
+    
+    }
     fn process_validators(
         &self,
         ctx: &mut Context<F>,
@@ -197,48 +224,55 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         for (_committee, validators) in self
             .validators
             .into_iter()
-            .group_by(|v| v.committee)
+            .zip(self.validators_y.iter())
+            .group_by(|v| v.0.committee)
             .into_iter()
         {
             let mut in_committee_pubkeys = vec![];
 
-            for validator in validators {
+            for (i, (validator, y_coord)) in validators.into_iter().enumerate() {
                 let pk_compressed = validator.pubkey[..G1_FQ_BYTES].to_vec();
 
                 // FIXME: replace with retriving y coordinate from cached map.
-                let pk_affine =
-                    G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap();
+                let x_coord =
+                    Fq::from_bytes(pk_compressed.as_slice().try_into().unwrap()).unwrap();
 
-                // FIXME: constraint y coordinate bytes.
-                let assigned_uncompressed: [AssignedValue<F>; G1_BYTES_UNCOMPRESSED] = ctx
+                // FIXME: constraint y coordinate field
+                let assigned_compressed: [AssignedValue<F>; G1_FQ_BYTES] = ctx
                     .assign_witnesses(
-                        pk_affine
-                            .to_uncompressed()
-                            .as_ref()
+                        pk_compressed
                             .iter()
                             .map(|&b| F::from(b as u64)),
                     )
                     .try_into()
                     .unwrap();
+                let x_crt = self.compressed_to_fq(assigned_compressed, &x_coord, ctx);
+
+                // Load private witness y coordinate
+                let y_crt = fp_chip.load_private(ctx, *y_coord);
+                // Square y coordinate
+                let ysq = fp_chip.mul(ctx, y_crt.clone(), y_crt.clone());
+                // Calculate y^2 using the elliptic curve equation
+                let ysp_calc = Self::calculate_ysquared(ctx, fp_chip, x_crt.clone());
+                // Constrain witness y^2 to be equal to calculated y^2
+                fp_chip.assert_equal(ctx, ysq, ysp_calc);
 
                 // load masked bit from compressed representation
                 let masked_byte = ctx.load_witness(F::from(pk_compressed[G1_FQ_BYTES - 1] as u64));
                 let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
+
                 // constraint that the loaded masked byte is consistent with the assigned bytes used to construct the point.
-                ctx.constrain_equal(&cleared_byte, &assigned_uncompressed[G1_FQ_BYTES - 1]);
+                ctx.constrain_equal(&cleared_byte, &assigned_compressed[G1_FQ_BYTES - 1]);
 
                 // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
                 pubkeys_compressed.push({
-                    let mut compressed_bytes = assigned_uncompressed[..G1_FQ_BYTES - 1].to_vec();
+                    let mut compressed_bytes = assigned_compressed[..G1_FQ_BYTES - 1].to_vec();
                     compressed_bytes.push(masked_byte);
                     compressed_bytes.try_into().unwrap()
                 });
 
-                in_committee_pubkeys.push(self.uncompressed_to_g1affine(
-                    assigned_uncompressed,
-                    &pk_affine,
-                    ctx,
-                ));
+                in_committee_pubkeys.push(EcPoint::new(x_crt, y_crt));
+
             }
 
             // let pk_affine = G1Affine::random(&mut rand::thread_rng());
@@ -291,13 +325,13 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         range.div_mod(ctx, b_shift_msb, BigUint::from(2u64), 8).0
     }
 
-    /// Converts uncompressed pubkey bytes to G1Affine point.
-    pub fn uncompressed_to_g1affine(
+    /// Converts compressed pubkey bytes to Fq point.
+    pub fn compressed_to_fq(
         &self,
-        assigned_bytes: [AssignedValue<F>; G1_BYTES_UNCOMPRESSED],
-        pk_affine: &G1Affine,
+        assigned_bytes: [AssignedValue<F>; G1_FQ_BYTES],
+        fq: &Fq,
         ctx: &mut Context<F>,
-    ) -> EcPoint<F, FpPoint<F>> {
+    ) -> ProperCrtUint<F> {
         let range = self.range();
         let gate = range.gate();
         let fp_chip = self.fp_chip();
@@ -324,20 +358,13 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
             })
             .collect_vec();
 
-        let pk_coords = pk_affine.coordinates().unwrap();
 
         let x = {
             let assigned_uint = ProperUint::new(field_limbs[0].to_vec());
-            let value = BigUint::from_bytes_le(pk_coords.x().to_repr().as_ref());
+            let value = BigUint::from_bytes_le(fq.to_repr().as_ref());
             assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, LIMB_BITS)
         };
-        let y = {
-            let assigned_uint = ProperUint::new(field_limbs[1].to_vec());
-            let value = BigUint::from_bytes_le(pk_coords.y().to_repr().as_ref());
-            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, LIMB_BITS)
-        };
-
-        EcPoint::new(x, y)
+        x
     }
 
     fn g1_chip(&'a self) -> EccChip<'a, F, FpChip<'a, F>> {

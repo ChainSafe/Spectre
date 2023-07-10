@@ -8,6 +8,10 @@ use gadgets::util::rlc;
 
 use halo2_proofs::circuit::Value;
 use halo2_proofs::plonk::Expression;
+use halo2curves::bn256::G1Affine;
+use halo2curves::bn256::G1;
+use halo2curves::group::GroupEncoding;
+use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
@@ -39,6 +43,13 @@ impl Validator {
         &self,
         randomness: Value<F>,
     ) -> Vec<CasperEntityRow<F>> {
+        // TODO: This will crash because were using bn256 when we should really be using bls12_381
+        let pk_affine = G1Affine::from_bytes(&self.pubkey.as_slice().try_into().unwrap()).unwrap();
+        let binding = pk_affine.to_uncompressed();
+        let pk_affine_uncompressed = G1Affine::from_uncompressed(&binding).unwrap();
+        let y = pk_affine_uncompressed.y;
+        let y_squared = y.square().to_bytes(); 
+
         vec![CasperEntityRow {
             id: Value::known(F::from(self.id as u64)),
             tag: Value::known(F::one()),
@@ -51,6 +62,11 @@ impl Validator {
             pubkey: [
                 randomness.map(|rnd| rlc::value(&self.pubkey[0..32], rnd)),
                 randomness.map(|rnd| rlc::value(&pad_to_ssz_chunk(&self.pubkey[32..48]), rnd)),
+            ],
+            pubkey_ysquared: [
+                randomness.map(|rnd| rlc::value(&y_squared[0..32], rnd)),
+                randomness.map(|rnd| rlc::value(&y_squared[32..48], rnd)),
+                // TODO: Do i need to do ssz_chunk padding? also is ysquared also only 48 bytes?
             ],
             row_type: CasperTag::Validator,
         }]
@@ -115,6 +131,7 @@ impl Committee {
             // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
             // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
             row_type: CasperTag::Committee,
+            pubkey_ysquared: [Value::known(F::zero()); 2], // TODO:
         }]
     }
 }
@@ -182,5 +199,5 @@ pub struct CasperEntityRow<F: Field> {
     pub(crate) activation_epoch: Value<F>,
     pub(crate) exit_epoch: Value<F>,
     pub(crate) pubkey: [Value<F>; 2],
-    pub(crate) pubkey_uncompressed: [Value<F>; 4],
+    pub(crate) pubkey_ysquared: [Value<F>; 2],
 }

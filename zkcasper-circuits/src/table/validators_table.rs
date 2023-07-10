@@ -29,12 +29,8 @@ pub struct ValidatorsTable {
     pub exit_epoch: Column<Advice>,
     /// Public key of a validator/committee.
     pub pubkey: [Column<Advice>; 2],
-    /// Public key of a validator/committee in uncompressed form.
-    /// First 2 columns represent the x coordinate, last 2 columns represent the y coordinate.
-    pub pubkey_uncompressed: [Column<Advice>; 4],
 
     pub pubkey_cells: Vec<[Cell; 2]>,
-    pub pubkey_uncompressed_cells: Vec<[Cell; 2]>,
 }
 
 impl<F: Field> LookupTable<F> for ValidatorsTable {
@@ -50,10 +46,6 @@ impl<F: Field> LookupTable<F> for ValidatorsTable {
             self.exit_epoch.into(),
             self.pubkey[0].into(),
             self.pubkey[1].into(),
-            self.pubkey_uncompressed[0].into(),
-            self.pubkey_uncompressed[1].into(),
-            self.pubkey_uncompressed[2].into(),
-            self.pubkey_uncompressed[3].into(),
         ]
     }
 
@@ -69,10 +61,6 @@ impl<F: Field> LookupTable<F> for ValidatorsTable {
             String::from("exit_epoch"),
             String::from("pubkey[0]"),
             String::from("pubkey[1]"),
-            String::from("pubkey_uncompressed[0]"),
-            String::from("pubkey_uncompressed[1]"),
-            String::from("pubkey_uncompressed[2]"),
-            String::from("pubkey_uncompressed[3]"),
         ]
     }
 }
@@ -93,14 +81,7 @@ impl ValidatorsTable {
                 meta.advice_column_in(SecondPhase),
                 meta.advice_column_in(SecondPhase),
             ],
-            pubkey_uncompressed: [
-                meta.advice_column_in(SecondPhase),
-                meta.advice_column_in(SecondPhase),
-                meta.advice_column_in(SecondPhase),
-                meta.advice_column_in(SecondPhase),
-            ],
             pubkey_cells: vec![],
-            pubkey_uncompressed_cells: vec![],
         };
 
         for col in config.pubkey {
@@ -137,10 +118,6 @@ impl ValidatorsTable {
         let assigned_cells = [
             (self.pubkey[0], row.pubkey[0]),
             (self.pubkey[1], row.pubkey[1]),
-            (self.pubkey_uncompressed[0], row.pubkey_uncompressed[0]),
-            (self.pubkey_uncompressed[1], row.pubkey_uncompressed[1]),
-            (self.pubkey_uncompressed[2], row.pubkey_uncompressed[2]),
-            (self.pubkey_uncompressed[3], row.pubkey_uncompressed[3]),
         ]
         .map(|(column, value)| {
             region
@@ -153,12 +130,12 @@ impl ValidatorsTable {
                 .expect("pubkey assign")
                 .cell()
         });
+        
 
         if row.row_type == CasperTag::Validator {
             self.pubkey_cells
                 .push(assigned_cells[0..2].try_into().unwrap());
-            self.pubkey_uncompressed_cells
-                .push(assigned_cells[2..].try_into().unwrap());
+
         }
 
         Ok(())
