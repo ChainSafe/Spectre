@@ -13,7 +13,7 @@ use crate::{
     util::{not, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
     witness::{self, HashInput},
 };
-use eth_types::Field;
+use eth_types::{Field, Spec};
 use gadgets::util::{and, select, sum, xor};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
@@ -68,7 +68,7 @@ pub struct Sha256CircuitConfig<F> {
 impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
     type ConfigArgs = SHA256Table;
 
-    fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
+    fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         // consts
         let two = F::from(2);
         let f256 = two.pow_const(8);
@@ -1108,6 +1108,8 @@ mod tests {
         circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
 
+    use eth_types::Test as S;
+
     #[derive(Default, Debug, Clone)]
     struct TestSha256<F: Field> {
         inputs: Vec<HashInput>,
@@ -1124,7 +1126,7 @@ mod tests {
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let hash_table = SHA256Table::construct(meta);
-            Sha256CircuitConfig::new(meta, hash_table)
+            Sha256CircuitConfig::new::<S>(meta, hash_table)
         }
 
         fn synthesize(

@@ -3,7 +3,7 @@ use crate::{
     table::validators_table::ValidatorTableQueries,
     util::{Cell, CellType, ConstrainBuilderCommon, Constraint, Expr, Lookup},
 };
-use eth_types::Field;
+use eth_types::{Field, Spec};
 
 use halo2_proofs::plonk::Expression;
 
@@ -84,13 +84,13 @@ impl<'a, F: Field> ConstrainBuilderCommon<F> for ConstraintBuilder<'a, F> {
 }
 
 #[derive(Clone)]
-pub struct Queries<F: Field> {
+pub struct Queries<S: Spec, F: Field> {
     pub q_enabled: Expression<F>,
     pub target_epoch: Expression<F>,
-    pub table: ValidatorTableQueries<F>,
+    pub table: ValidatorTableQueries<S, F>,
 }
 
-impl<F: Field> Queries<F> {
+impl<S: Spec, F: Field> Queries<S, F> {
     pub fn selector(&self) -> Expression<F> {
         self.q_enabled.clone()
     }

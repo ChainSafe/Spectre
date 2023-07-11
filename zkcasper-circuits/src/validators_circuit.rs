@@ -9,7 +9,7 @@ use crate::{
     },
     util::{Challenges, ConstrainBuilderCommon, SubCircuit, SubCircuitConfig},
     witness::{self, into_casper_entities, CasperEntity, Committee, Validator},
-    MAX_VALIDATORS, N_BYTES_U64,
+    N_BYTES_U64,
 };
 use cell_manager::CellManager;
 use constraint_builder::*;
@@ -21,6 +21,7 @@ use halo2_proofs::{
     poly::Rotation,
 };
 use itertools::Itertools;
+use log::info;
 
 use std::{iter, marker::PhantomData};
 
@@ -48,7 +49,7 @@ pub struct ValidatorsCircuitArgs {
 impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
     type ConfigArgs = ValidatorsCircuitArgs;
 
-    fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
+    fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         let q_enabled = meta.fixed_column();
         let target_epoch = meta.advice_column();
         let state_tables = args.state_tables;
@@ -65,7 +66,7 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
             .chain(byte_lookup.iter().copied())
             .collect_vec();
 
-        let cell_manager = CellManager::new(meta, MAX_VALIDATORS, &cm_advices);
+        let cell_manager = CellManager::new(meta, S::VALIDATOR_REGISTRY_LIMIT, &cm_advices);
 
         let mut config = Self {
             q_enabled,
@@ -88,7 +89,7 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
         let mut lookups = Vec::new();
 
         meta.create_gate("validators constraints", |meta| {
-            let q = queries(meta, &config);
+            let q = queries::<S, F>(meta, &config);
             let mut cb = ConstraintBuilder::new(&mut config.cell_manager, MAX_DEGREE, q.selector());
 
             cb.require_boolean("tag in [validator/committee]", q.table.tag());
@@ -207,7 +208,7 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
         }
 
         meta.create_gate("committee constraints", |meta| {
-            let q = queries(meta, &config);
+            let q = queries::<S, F>(meta, &config);
             let mut cb = ConstraintBuilder::new(&mut config.cell_manager, MAX_DEGREE, q.selector());
 
             cb.require_boolean("tag in [validator/committee]", q.table.tag());
@@ -414,10 +415,10 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
     }
 }
 
-fn queries<F: Field>(
+fn queries<S: Spec, F: Field>(
     meta: &mut VirtualCells<'_, F>,
     config: &ValidatorsCircuitConfig<F>,
-) -> Queries<F> {
+) -> Queries<S, F> {
     Queries {
         q_enabled: meta.query_fixed(config.q_enabled, Rotation::cur()),
         target_epoch: meta.query_advice(config.target_epoch, Rotation::cur()),
@@ -435,6 +436,8 @@ mod tests {
     };
 
     use std::{fs, marker::PhantomData};
+
+    use eth_types::Test as S;
 
     #[derive(Debug, Clone)]
     struct TestValidators<F: Field> {
@@ -457,7 +460,7 @@ mod tests {
             };
 
             (
-                ValidatorsCircuitConfig::new(meta, args),
+                ValidatorsCircuitConfig::new::<S>(meta, args),
                 Challenges::construct(meta),
             )
         }
@@ -468,10 +471,11 @@ mod tests {
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             let challenge = config.1.sha256_input();
-            config
-                .0
-                .state_tables
-                .dev_load(&mut layouter, &self.state_tree_trace, challenge)?;
+            config.0.state_tables.dev_load::<S, _>(
+                &mut layouter,
+                &self.state_tree_trace,
+                challenge,
+            )?;
             self.inner.synthesize_sub(
                 &mut config.0,
                 &config.1.values(&mut layouter),
