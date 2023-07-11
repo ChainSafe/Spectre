@@ -5,9 +5,10 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 use crate::{
-    state_circuit::{PUBKEYS_LEVEL, VALIDATORS_LEVEL},
     witness::{MerkleTrace, MerkleTraceStep},
 };
+
+use eth_types::Spec;
 
 use super::*;
 
@@ -129,7 +130,7 @@ impl StateTables {
     }
 
     /// Load state tables without running the full [`StateTable`].
-    pub fn dev_load<F: Field>(
+    pub fn dev_load<S: Spec, F: Field>(
         &self,
         layouter: &mut impl Layouter<F>,
         trace: &MerkleTrace,
@@ -137,8 +138,8 @@ impl StateTables {
     ) -> Result<(), Error> {
         let mut trace_by_depth = trace.trace_by_level_map();
 
-        let pubkey_level_trace = trace_by_depth.remove(&PUBKEYS_LEVEL).unwrap();
-        let validators_level_trace = trace_by_depth.remove(&VALIDATORS_LEVEL).unwrap();
+        let pubkey_level_trace = trace_by_depth.remove(&S::STATE_TREE_LEVEL_PUBKEYS).unwrap();
+        let validators_level_trace = trace_by_depth.remove(&S::STATE_TREE_LEVEL_VALIDATORS).unwrap();
 
         let pubkey_table = self.0.get(&StateTreeLevel::PubKeys).unwrap();
         let validators_table = self.0.get(&StateTreeLevel::Validators).unwrap();

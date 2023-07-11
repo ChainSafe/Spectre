@@ -1,12 +1,12 @@
+use std::marker::PhantomData;
+
 use gadgets::util::{not, Expr};
 use halo2_proofs::circuit::Cell;
 
-use crate::{
-    witness::{into_casper_entities, CasperEntityRow, CasperTag, Committee, Validator},
-    VALIDATOR0_GINDEX,
-};
+use crate::witness::{into_casper_entities, CasperEntityRow, CasperTag, Committee, Validator};
 
 use super::*;
+use eth_types::Spec;
 
 /// The StateTable contains records of the state of the beacon chain.
 #[derive(Clone, Debug)]
@@ -165,7 +165,7 @@ impl ValidatorsTable {
         )
     }
 
-    pub fn queries<F: Field>(&self, meta: &mut VirtualCells<'_, F>) -> ValidatorTableQueries<F> {
+    pub fn queries<S: Spec, F: Field>(&self, meta: &mut VirtualCells<'_, F>) -> ValidatorTableQueries<S, F> {
         ValidatorTableQueries {
             id: meta.query_advice(self.id, Rotation::cur()),
             tag: meta.query_advice(self.tag, Rotation::cur()),
@@ -179,12 +179,13 @@ impl ValidatorsTable {
                 meta.query_advice(self.pubkey[0], Rotation::cur()),
                 meta.query_advice(self.pubkey[1], Rotation::cur()),
             ],
+            _spec: PhantomData,
         }
     }
 }
 
 #[derive(Clone)]
-pub struct ValidatorTableQueries<F: Field> {
+pub struct ValidatorTableQueries<S: Spec, F: Field> {
     pub id: Expression<F>,
     pub tag: Expression<F>,
     pub is_active: Expression<F>,
@@ -194,9 +195,10 @@ pub struct ValidatorTableQueries<F: Field> {
     pub exit_epoch: Expression<F>,
     pub slashed: Expression<F>,
     pub pubkey_rlc: [Expression<F>; 2],
+    pub _spec: PhantomData<S>,
 }
 
-impl<F: Field> ValidatorTableQueries<F> {
+impl<S: Spec, F: Field> ValidatorTableQueries<S, F> {
     pub fn is_validator(&self) -> Expression<F> {
         self.tag.clone()
     }
@@ -222,7 +224,7 @@ impl<F: Field> ValidatorTableQueries<F> {
     }
 
     pub fn balance_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id())
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id())
             * 2u64.pow(3).expr() // 3 levels deeper
             + 2.expr() // skip pubkeyRoot and withdrawalCredentials
     }
@@ -252,22 +254,23 @@ impl<F: Field> ValidatorTableQueries<F> {
     }
 
     pub fn slashed_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 3.expr()
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 3.expr()
     }
 
     pub fn activation_epoch_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr() // skip activationEligibilityEpoch
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr() // skip activationEligibilityEpoch
     }
 
     pub fn exit_epoch_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 6.expr()
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 6.expr()
     }
 
     pub fn pubkey_lo_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id()) * 2u64.pow(4).expr() // 4 levels deeper
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(4).expr() // 4 levels deeper 0 + 0 * 2^x = 94557999988736n
+        // d = sqrt(94557999988736n) = 1048576 sqrt(86)
     }
 
     pub fn pubkey_hi_gindex(&self) -> Expression<F> {
-        (VALIDATOR0_GINDEX.expr() + self.id()) * 2u64.pow(4).expr() + 1.expr()
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(4).expr() + 1.expr()
     }
 }

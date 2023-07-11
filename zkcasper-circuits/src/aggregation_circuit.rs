@@ -29,17 +29,11 @@ use halo2curves::{
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
-use std::cell::RefCell;
+use std::{cell::RefCell, marker::PhantomData};
 
 // TODO: Use halo2_ccc::bls12_381::FpChip after carry mod issue is resolved in halo2-lib.
 // for details see: https://github.com/flyingnobita/halo2-lib-no-fork/blob/bls12-381/halo2-ecc/src/bls12_381/notes.md
 pub type FpChip<'range, F> = halo2_ecc::fields::fp::FpChip<'range, F, halo2curves::bn256::Fq>;
-
-// TODO: move this into Spec trait
-pub const G1_FQ_BYTES: usize = 32; // TODO: 48 for BLS12-381.
-pub const G1_BYTES_UNCOMPRESSED: usize = G1_FQ_BYTES * 2;
-pub const LIMB_BITS: usize = 88;
-pub const NUM_LIMBS: usize = 3;
 
 #[derive(Clone, Debug)]
 pub struct AggregationCircuitConfig<F: Field> {
@@ -55,7 +49,7 @@ pub struct AggregationCircuitArgs<F: Field> {
 impl<F: Field> SubCircuitConfig<F> for AggregationCircuitConfig<F> {
     type ConfigArgs = AggregationCircuitArgs<F>;
 
-    fn new(_meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
+    fn new<S: Spec>(_meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         let validators_table = args.validators_table;
         let range = args.range;
 
@@ -71,29 +65,31 @@ impl<F: Field> SubCircuitConfig<F> for AggregationCircuitConfig<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct AggregationCircuitBuilder<'a, F: Field> {
+pub struct AggregationCircuitBuilder<'a, F: Field, S: Spec> {
     builder: RefCell<GateThreadBuilder<F>>,
     range: &'a RangeChip<F>,
     fp_chip: FpChip<'a, F>,
     // Witness
     validators: &'a [Validator],
     _committees: &'a [Committee],
+    _spec: PhantomData<S>,
 }
 
-impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
+impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
     pub fn new(
         builder: GateThreadBuilder<F>,
         validators: &'a [Validator],
         committees: &'a [Committee],
         range: &'a RangeChip<F>,
     ) -> Self {
-        let fp_chip = FpChip::new(range, LIMB_BITS, NUM_LIMBS);
+        let fp_chip = FpChip::new(range, S::LIMB_BITS, S::NUM_LIMBS);
         Self {
             builder: RefCell::new(builder),
             range,
             fp_chip,
             validators,
             _committees: committees,
+            _spec: PhantomData,
         }
     }
 
@@ -133,7 +129,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                     let pubkey_rlcs = pubkeys_compressed
                         .into_iter()
                         .map(|compressed| {
-                            self.get_rlc(&compressed[..G1_FQ_BYTES], &randomness, ctx)
+                            self.get_rlc(&compressed[..S::G1_FQ_BYTES], &randomness, ctx)
                         })
                         .collect_vec();
 
@@ -182,10 +178,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
     fn process_validators(
         &self,
         ctx: &mut Context<F>,
-    ) -> (
-        Vec<EcPoint<F, FpPoint<F>>>,
-        Vec<[AssignedValue<F>; G1_FQ_BYTES]>,
-    ) {
+    ) -> (Vec<EcPoint<F, FpPoint<F>>>, Vec<Vec<AssignedValue<F>>>) {
         let range = self.range();
 
         let fp_chip = self.fp_chip();
@@ -203,14 +196,14 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
             let mut in_committee_pubkeys = vec![];
 
             for validator in validators {
-                let pk_compressed = validator.pubkey[..G1_FQ_BYTES].to_vec();
+                let pk_compressed = validator.pubkey[..S::G1_FQ_BYTES].to_vec();
 
                 // FIXME: replace with retriving y coordinate from cached map.
                 let pk_affine =
                     G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap();
 
                 // FIXME: constraint y coordinate bytes.
-                let assigned_uncompressed: [AssignedValue<F>; G1_BYTES_UNCOMPRESSED] = ctx
+                let assigned_uncompressed: Vec<AssignedValue<F>> = ctx
                     .assign_witnesses(
                         pk_affine
                             .to_uncompressed()
@@ -221,15 +214,19 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                     .try_into()
                     .unwrap();
 
+                // assertion check for assigned_uncompressed vector to be equal to S::G1_BYTES_UNCOMPRESSED from specification
+                assert_eq!(assigned_uncompressed.len(), S::G1_BYTES_UNCOMPRESSED);
+
                 // load masked bit from compressed representation
-                let masked_byte = ctx.load_witness(F::from(pk_compressed[G1_FQ_BYTES - 1] as u64));
+                let masked_byte =
+                    ctx.load_witness(F::from(pk_compressed[S::G1_FQ_BYTES - 1] as u64));
                 let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
                 // constraint that the loaded masked byte is consistent with the assigned bytes used to construct the point.
-                ctx.constrain_equal(&cleared_byte, &assigned_uncompressed[G1_FQ_BYTES - 1]);
+                ctx.constrain_equal(&cleared_byte, &assigned_uncompressed[S::G1_FQ_BYTES - 1]);
 
                 // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
                 pubkeys_compressed.push({
-                    let mut compressed_bytes = assigned_uncompressed[..G1_FQ_BYTES - 1].to_vec();
+                    let mut compressed_bytes = assigned_uncompressed[..S::G1_FQ_BYTES - 1].to_vec();
                     compressed_bytes.push(masked_byte);
                     compressed_bytes.try_into().unwrap()
                 });
@@ -256,8 +253,9 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         randomness: &QuantumCell<F>,
         ctx: &mut Context<F>,
     ) -> [AssignedValue<F>; 2] {
-        assert_eq!(assigned_bytes.len(), G1_FQ_BYTES);
         let gate = self.range().gate();
+        // assertion check for assigned_bytes to be equal to S::G1_FQ_BYTES from specification
+        assert_eq!(assigned_bytes.len(), S::G1_FQ_BYTES);
 
         // TODO: remove next 2 lines after switching to bls12-381
         let mut assigned_bytes = assigned_bytes.to_vec();
@@ -294,7 +292,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
     /// Converts uncompressed pubkey bytes to G1Affine point.
     pub fn uncompressed_to_g1affine(
         &self,
-        assigned_bytes: [AssignedValue<F>; G1_BYTES_UNCOMPRESSED],
+        assigned_bytes: Vec<AssignedValue<F>>,
         pk_affine: &G1Affine,
         ctx: &mut Context<F>,
     ) -> EcPoint<F, FpPoint<F>> {
@@ -307,9 +305,9 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
 
         // TODO: try optimized solution if LIMB_BITS i a multiple of 8:
         // https://github.com/axiom-crypto/axiom-eth/blob/6d2a4acf559a8716b867a715f3acfab745fbad3f/src/util/mod.rs#L419
-        let bytes_per_limb = G1_FQ_BYTES / NUM_LIMBS + 1;
-        let field_limbs: Vec<[_; NUM_LIMBS]> = assigned_bytes
-            .chunks(G1_FQ_BYTES)
+        let bytes_per_limb = S::G1_FQ_BYTES / S::NUM_LIMBS + 1;
+        let field_limbs = &assigned_bytes
+            .chunks(S::G1_FQ_BYTES)
             .map(|fq_bytes| {
                 fq_bytes
                     .chunks(bytes_per_limb)
@@ -319,8 +317,6 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                         })
                     })
                     .collect_vec()
-                    .try_into()
-                    .unwrap()
             })
             .collect_vec();
 
@@ -329,13 +325,18 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         let x = {
             let assigned_uint = ProperUint::new(field_limbs[0].to_vec());
             let value = BigUint::from_bytes_le(pk_coords.x().to_repr().as_ref());
-            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, LIMB_BITS)
+            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, S::LIMB_BITS)
         };
         let y = {
             let assigned_uint = ProperUint::new(field_limbs[1].to_vec());
             let value = BigUint::from_bytes_le(pk_coords.y().to_repr().as_ref());
-            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, LIMB_BITS)
+            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, S::LIMB_BITS)
         };
+
+        // assertion check for field_limbs vector to be equal to S::NUM_LIMBS from specification
+        for fl in field_limbs.iter() {
+            assert_eq!(fl.len(), S::NUM_LIMBS);
+        }
 
         EcPoint::new(x, y)
     }
@@ -353,7 +354,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
     }
 }
 
-impl<'a, F: Field> SubCircuit<F> for AggregationCircuitBuilder<'a, F> {
+impl<'a, F: Field, S: Spec> SubCircuit<F> for AggregationCircuitBuilder<'a, F, S> {
     type Config = AggregationCircuitConfig<F>;
 
     fn new_from_block(_block: &witness::Block<F>) -> Self {
@@ -389,17 +390,18 @@ mod tests {
     use std::fs;
 
     use super::*;
+    use eth_types::Test as S;
     use halo2_base::gates::range::RangeStrategy;
     use halo2_proofs::{
         circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
 
     #[derive(Debug, Clone)]
-    struct TestCircuit<'a, F: Field> {
-        inner: AggregationCircuitBuilder<'a, F>,
+    struct TestCircuit<'a, F: Field, S: Spec> {
+        inner: AggregationCircuitBuilder<'a, F, S>,
     }
 
-    impl<'a, F: Field> TestCircuit<'a, F> {
+    impl<'a, F: Field, S: Spec> TestCircuit<'a, F, S> {
         const NUM_ADVICE: &[usize] = &[6, 1];
         const NUM_FIXED: usize = 1;
         const NUM_LOOKUP_ADVICE: usize = 1;
@@ -407,7 +409,7 @@ mod tests {
         const K: usize = 14;
     }
 
-    impl<'a, F: Field> Circuit<F> for TestCircuit<'a, F> {
+    impl<'a, F: Field, S: Spec> Circuit<F> for TestCircuit<'a, F, S> {
         type Config = (AggregationCircuitConfig<F>, Challenges<F>);
         type FloorPlanner = SimpleFloorPlanner;
 
@@ -426,7 +428,7 @@ mod tests {
                 Self::LOOKUP_BITS,
                 Self::K,
             );
-            let config = AggregationCircuitConfig::new(
+            let config = AggregationCircuitConfig::new::<S>(
                 meta,
                 AggregationCircuitArgs {
                     validators_table,
@@ -460,16 +462,16 @@ mod tests {
 
     #[test]
     fn test_aggregation_circuit() {
-        let k = TestCircuit::<Fr>::K;
+        let k = TestCircuit::<Fr, S>::K;
         let validators: Vec<Validator> =
             serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
         let committees: Vec<Committee> =
             serde_json::from_slice(&fs::read("../test_data/committees.json").unwrap()).unwrap();
 
-        let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
+        let range = RangeChip::default(TestCircuit::<Fr, S>::LOOKUP_BITS);
         let builder = GateThreadBuilder::new(false);
         builder.config(k, None);
-        let circuit = TestCircuit::<'_, Fr> {
+        let circuit = TestCircuit::<'_, Fr, S> {
             inner: AggregationCircuitBuilder::new(builder, &validators, &committees, &range),
         };
 

@@ -119,7 +119,7 @@ pub trait SubCircuitConfig<F: Field> {
     type ConfigArgs;
 
     /// Type constructor
-    fn new(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self;
+    fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self;
 
     /// Annotates columns of a circuit embedded within a circuit region.
     fn annotate_columns_in_region(&self, region: &mut Region<F>);
