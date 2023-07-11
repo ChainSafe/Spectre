@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use std::collections::HashMap;
+
+use crate::witness::HashInputChunk;
 
 use super::HashInput;
 
@@ -43,7 +44,7 @@ impl MerkleTrace {
         self.0.iter().into_group_map_by(|step| step.depth)
     }
 
-    pub fn sha256_inputs(&self) -> Vec<HashInput> {
+    pub fn sha256_inputs(&self) -> Vec<HashInput<u8>> {
         let mut steps_sorted = self
             .0
             .clone()
@@ -64,11 +65,11 @@ impl MerkleTrace {
                         .to_vec(),
                     step.parent
                 );
-                HashInput::TwoToOne {
-                    left: step.node,
-                    right: step.sibling,
-                    is_rlc: step.is_rlc,
-                }
+
+                HashInput::TwoToOne(
+                    HashInputChunk::new(step.node, step.is_rlc[0]),
+                    HashInputChunk::new(step.sibling, step.is_rlc[1]),
+                )
             })
             .collect_vec()
     }

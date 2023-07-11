@@ -6,7 +6,6 @@ use ethereum_consensus::phase0::is_active_validator;
 use gadgets::util::rlc;
 
 use halo2_proofs::circuit::Value;
-
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
@@ -74,7 +73,7 @@ impl Validator {
         // they require.
         for (id, eth_validator) in validators.enumerate() {
             let exit_epoch = eth_validator.exit_epoch;
-            let is_active = is_active_validator(&eth_validator, exit_epoch);
+            let is_active = is_active_validator(eth_validator, exit_epoch);
             // TODO: figure out how to set this. This needs to be determined from
             // https://eth2book.info/capella/annotated-spec/#beaconblockbody
             let is_attested = true;
@@ -100,7 +99,7 @@ impl Validator {
 impl Committee {
     pub(crate) fn table_assignment<F: Field>(
         &self,
-        randomness: Value<F>,
+        _randomness: Value<F>,
     ) -> Vec<CasperEntityRow<F>> {
         vec![CasperEntityRow {
             id: Value::known(F::from(self.id as u64)),

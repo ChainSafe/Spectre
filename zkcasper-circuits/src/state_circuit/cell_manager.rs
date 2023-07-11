@@ -33,9 +33,9 @@ impl<F: Field> CellManager<F> {
         let mut cells: Vec<Cell<F>> = Vec::with_capacity(height * width);
         let mut columns = Vec::with_capacity(width);
         query_expression(meta, |meta| {
-            for c in 0..layout.len() {
+            for (c, item) in layout.iter().enumerate() {
                 for r in 0..height {
-                    cells.push(Cell::new(meta, layout[c], offset + r, c));
+                    cells.push(Cell::new(meta, *item, offset + r, c));
                 }
                 columns.push(CellColumn {
                     index: c,
@@ -43,9 +43,9 @@ impl<F: Field> CellManager<F> {
                     height,
                 });
             }
-            for c in 0..aux.len() {
+            for (c, item) in aux.iter().enumerate() {
                 for r in 0..height {
-                    cells.push(Cell::new(meta, aux[c], offset + r, c));
+                    cells.push(Cell::new(meta, *item, offset + r, c));
                 }
                 columns.push(CellColumn {
                     index: c,

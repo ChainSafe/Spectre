@@ -31,9 +31,9 @@ impl<F: Field> CellManager<F> {
         let mut cells = Vec::with_capacity(height * width);
         let mut columns = Vec::with_capacity(width);
         query_expression(meta, |meta| {
-            for c in 0..width {
+            for (c, column) in advices.iter().enumerate() {
                 for r in 0..height {
-                    cells.push(Cell::new(meta, advices[c], r, c));
+                    cells.push(Cell::new(meta, *column, r, c));
                 }
                 columns.push(CellColumn {
                     index: c,

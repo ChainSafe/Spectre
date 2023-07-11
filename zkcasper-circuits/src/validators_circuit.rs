@@ -2,7 +2,7 @@ pub(crate) mod cell_manager;
 pub(crate) mod constraint_builder;
 
 use crate::{
-    gadget::LtGadget,
+    gadget::math::LtGadget,
     table::{
         state_table::{StateTables, StateTreeLevel},
         LookupTable, ValidatorsTable,
@@ -21,8 +21,6 @@ use halo2_proofs::{
     poly::Rotation,
 };
 use itertools::Itertools;
-use log::info;
-
 use std::{iter, marker::PhantomData};
 
 pub(crate) const N_BYTE_LOOKUPS: usize = 16; // 8 per lt gadget (target_gte_activation, target_lt_exit)

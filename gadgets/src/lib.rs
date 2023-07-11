@@ -5,6 +5,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // We want to have UPPERCASE idents sometimes.
 #![allow(clippy::upper_case_acronyms)]
+#![allow(clippy::uninlined_format_args)]
 // Catch documentation errors caused by code changes.
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(missing_docs)]
