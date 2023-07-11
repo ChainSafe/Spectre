@@ -89,16 +89,13 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         range: &'a RangeChip<F>,
     ) -> Self {
         let fp_chip = FpChip::new(range, LIMB_BITS, NUM_LIMBS);
+        // TODO: Cache this in Validator witness type
         let validators_y = validators
             .iter()
             .map(|v| {
                 let g1_affine =
                     G1Affine::from_bytes(&v.pubkey[..G1_FQ_BYTES].try_into().unwrap()).unwrap();
-                let g1_uncompressed = g1_affine.to_uncompressed();
-                let y =
-                    Fq::from_bytes(&g1_uncompressed.as_ref()[G1_FQ_BYTES..].try_into().unwrap())
-                        .unwrap();
-                y
+                g1_affine.y
             })
             .collect();
         Self {
@@ -193,6 +190,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
             .unwrap();
     }
 
+    // TODO: Change to +4 when we switch to BLS12-381
     // Calculates y^2 = x^3 + 3 (the curve equation for bn254)
     fn calculate_ysquared(
         ctx: &mut Context<F>,
@@ -228,14 +226,15 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
         {
             let mut in_committee_pubkeys = vec![];
 
-            for (i, (validator, y_coord)) in validators.into_iter().enumerate() {
+            for (validator, y_coord) in validators.into_iter() {
                 let pk_compressed = validator.pubkey[..G1_FQ_BYTES].to_vec();
+                let mut pk_compressed_cleared = pk_compressed.clone();
+                pk_compressed_cleared[G1_FQ_BYTES - 1] &= 0b0011_1111;
 
-                let g1_aff =
-                    G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap();
-                let x_coord = g1_aff.x;
+                let x_coord =
+                    Fq::from_bytes(&pk_compressed_cleared.as_slice().try_into().unwrap()).unwrap();
 
-                let assigned_compressed: [AssignedValue<F>; G1_FQ_BYTES] = ctx
+                let assigned_x_bytes: [AssignedValue<F>; G1_FQ_BYTES] = ctx
                     .assign_witnesses(
                         x_coord
                             .to_bytes()
@@ -245,27 +244,27 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
                     )
                     .try_into()
                     .unwrap();
-                let x_crt = self.compressed_to_fq(assigned_compressed, &x_coord, ctx);
+                let x_crt = self.decode_fq(assigned_x_bytes, &x_coord, ctx);
 
                 // Load private witness y coordinate
                 let y_crt = fp_chip.load_private(ctx, *y_coord);
                 // Square y coordinate
                 let ysq = fp_chip.mul(ctx, y_crt.clone(), y_crt.clone());
                 // Calculate y^2 using the elliptic curve equation
-                let ysp_calc = Self::calculate_ysquared(ctx, fp_chip, x_crt.clone());
+                let ysq_calc = Self::calculate_ysquared(ctx, fp_chip, x_crt.clone());
                 // Constrain witness y^2 to be equal to calculated y^2
-                fp_chip.assert_equal(ctx, ysq, ysp_calc);
+                fp_chip.assert_equal(ctx, ysq, ysq_calc);
 
                 // load masked bit from compressed representation
                 let masked_byte = ctx.load_witness(F::from(pk_compressed[G1_FQ_BYTES - 1] as u64));
                 let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
 
                 // constraint that the loaded masked byte is consistent with the assigned bytes used to construct the point.
-                ctx.constrain_equal(&cleared_byte, &assigned_compressed[G1_FQ_BYTES - 1]);
+                ctx.constrain_equal(&cleared_byte, &assigned_x_bytes[G1_FQ_BYTES - 1]);
 
                 // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
                 pubkeys_compressed.push({
-                    let mut compressed_bytes = assigned_compressed[..G1_FQ_BYTES - 1].to_vec();
+                    let mut compressed_bytes = assigned_x_bytes[..G1_FQ_BYTES - 1].to_vec();
                     compressed_bytes.push(masked_byte);
                     compressed_bytes.try_into().unwrap()
                 });
@@ -323,7 +322,7 @@ impl<'a, F: Field> AggregationCircuitBuilder<'a, F> {
     }
 
     /// Converts compressed pubkey bytes to Fq point.
-    pub fn compressed_to_fq(
+    pub fn decode_fq(
         &self,
         assigned_bytes: [AssignedValue<F>; G1_FQ_BYTES],
         fq: &Fq,
