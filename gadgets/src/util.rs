@@ -260,7 +260,7 @@ pub mod rlc {
         ctx: &mut Context<F>,
     ) -> AssignedValue<F> {
         if !values.is_empty() {
-            let mut values = values.into_iter().rev();
+            let mut values = values.iter().rev();
             let init = values.next().expect("values should not be empty");
 
             values.fold(*init, |acc, value| {

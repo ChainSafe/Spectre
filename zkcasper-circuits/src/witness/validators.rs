@@ -3,11 +3,9 @@ use std::vec;
 use banshee_preprocessor::util::pad_to_ssz_chunk;
 use eth_types::Field;
 use ethereum_consensus::phase0::is_active_validator;
-use gadgets::impl_expr;
 use gadgets::util::rlc;
 
 use halo2_proofs::circuit::Value;
-use halo2_proofs::plonk::Expression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
@@ -74,7 +72,7 @@ impl Validator {
         // they require.
         for (id, eth_validator) in validators.enumerate() {
             let exit_epoch = eth_validator.exit_epoch;
-            let is_active = is_active_validator(&eth_validator, exit_epoch);
+            let is_active = is_active_validator(eth_validator, exit_epoch);
             // TODO: figure out how to set this. This needs to be determined from
             // https://eth2book.info/capella/annotated-spec/#beaconblockbody
             let is_attested = true;
@@ -100,7 +98,7 @@ impl Validator {
 impl Committee {
     pub(crate) fn table_assignment<F: Field>(
         &self,
-        randomness: Value<F>,
+        _randomness: Value<F>,
     ) -> Vec<CasperEntityRow<F>> {
         vec![CasperEntityRow {
             id: Value::known(F::from(self.id as u64)),
@@ -112,8 +110,8 @@ impl Committee {
             activation_epoch: Value::known(F::zero()),
             exit_epoch: Value::known(F::zero()),
             pubkey: [Value::known(F::zero()), Value::known(F::zero())], // TODO:
-                                                                        // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
-                                                                        // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
+            // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.x), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
+            // .chain(decompose_bigint_option(Value::known(self.aggregated_pubkey.y), 7, 55).into_iter().map(|limb| new_state_row(FieldTag::PubKeyAffineX, 0, limb)))
             row_type: CasperTag::Committee,
         }]
     }

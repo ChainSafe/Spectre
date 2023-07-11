@@ -1,5 +1,6 @@
 use super::*;
 use crate::{util::rlc, witness::HashInput};
+use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 use sha2::Digest;
 
@@ -63,99 +64,15 @@ impl SHA256Table {
         region: &mut Region<F>,
         offset: usize,
         values: [Value<F>; 6],
-    ) -> Result<(), Error> {
-        for (&column, value) in <SHA256Table as LookupTable<F>>::advice_columns(self)
+    ) -> Result<[AssignedCell<F, F>; 6], Error> {
+        <SHA256Table as LookupTable<F>>::advice_columns(self)
             .iter()
             .zip(values.iter())
-        {
-            region.assign_advice(|| format!("assign {}", offset), column, offset, || *value)?;
-        }
-        Ok(())
-    }
-
-    /// Generate the sha256 table assignments from a byte array input.
-    pub fn assignments<F: Field>(input: &HashInput, challenge: Value<F>) -> [Value<F>; 6] {
-        let (input_chunks, input_rlc, preimage) = match input {
-            HashInput::Single(input) => {
-                let input_rlc = challenge.map(|randomness| rlc::value(input, randomness));
-
-                (
-                    [input_rlc, Value::known(F::zero())],
-                    input_rlc,
-                    input.clone(),
-                )
-            }
-            HashInput::TwoToOne{
-                left,
-                right,
-                is_rlc
-            } => {
-                let chunk_rlcs = [
-                    challenge.map(|randomness| rlc::value(left, randomness)),
-                    challenge.map(|randomness| rlc::value(right, randomness)),
-                ];
-                let chunk_vals = [
-                    F::from_bytes_le_unsecure(left),
-                    F::from_bytes_le_unsecure(right),
-                ];
-                let preimage = vec![left.clone(), right.clone()].concat();
-                let input_rlc = challenge.map(|randomness| rlc::value(&preimage, randomness));
-
-                let input_chunks = [
-                    if is_rlc[0] { chunk_rlcs[0] } else { Value::known(chunk_vals[0]) },
-                    if is_rlc[1] { chunk_rlcs[1] } else { Value::known(chunk_vals[1]) },
-                ];
-
-                (input_chunks, input_rlc, preimage)
-            }
-        };
-
-        let input_len = F::from(preimage.len() as u64);
-
-        let output = sha2::Sha256::digest(preimage).to_vec();
-        let output_rlc = challenge.map(|randomness| rlc::value(&output, randomness));
-
-        [
-            Value::known(F::one()),
-            input_chunks[0],
-            input_chunks[1],
-            input_rlc,
-            Value::known(input_len),
-            output_rlc,
-        ]
-    }
-
-    /// Load sha256 table without running the full sha256 circuit.
-    pub fn dev_load<'a, F: Field>(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        inputs: impl IntoIterator<Item = &'a HashInput> + Clone,
-        challenge: Value<F>,
-    ) -> Result<(), Error> {
-        layouter.assign_region(
-            || "sha256 table",
-            |mut region| {
-                let mut offset = 0;
-
-                self.annotate_columns_in_region(&mut region);
-
-                let sha256_table_columns = <SHA256Table as LookupTable<F>>::advice_columns(self);
-                for input in inputs.clone() {
-                    let row = Self::assignments(input, challenge);
-
-                    for (&column, value) in sha256_table_columns.iter().zip_eq(row) {
-                        region.assign_advice(
-                            || format!("sha256 table row {}", offset),
-                            column,
-                            offset,
-                            || value,
-                        )?;
-                    }
-                    offset += 1;
-                }
-                Ok(())
-            },
-        )
+            .map(|(&column, value)| {
+                region.assign_advice(|| format!("assign {}", offset), column, offset, || *value)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(|res| res.try_into().unwrap())
     }
 
     pub fn build_lookup<F: Field>(
@@ -183,6 +100,96 @@ impl SHA256Table {
                 enable * hash,
                 meta.query_advice(self.hash_rlc, Rotation::cur()),
             ),
+        ]
+    }
+
+    /// Load sha256 table without running the full sha256 circuit.
+    pub fn dev_load<'a, F: Field>(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        inputs: impl IntoIterator<Item = &'a HashInput<u8>> + Clone,
+        challenge: Value<F>,
+    ) -> Result<(), Error> {
+        layouter.assign_region(
+            || "sha256 table",
+            |mut region| {
+                self.annotate_columns_in_region(&mut region);
+
+                let sha256_table_columns = <SHA256Table as LookupTable<F>>::advice_columns(self);
+                for (offset, input) in inputs.clone().into_iter().enumerate() {
+                    let row = Self::assignments_dev(input, challenge);
+
+                    for (&column, value) in sha256_table_columns.iter().zip_eq(row) {
+                        region.assign_advice(
+                            || format!("sha256 table row {}", offset),
+                            column,
+                            offset,
+                            || value,
+                        )?;
+                    }
+                }
+                Ok(())
+            },
+        )
+    }
+
+    /// Generate the sha256 table assignments from a byte array input.
+    fn assignments_dev<F: Field>(input: &HashInput<u8>, challenge: Value<F>) -> [Value<F>; 6] {
+        let (input_chunks, input_rlc, preimage) = match input {
+            HashInput::Single(inner) => {
+                let input_rlc = if inner.is_rlc {
+                    challenge.map(|randomness| rlc::value(&inner.bytes, randomness))
+                } else {
+                    Value::known(F::from_bytes_le_unsecure(&inner.bytes))
+                };
+
+                (
+                    [input_rlc, Value::known(F::zero())],
+                    input_rlc,
+                    inner.bytes.clone(),
+                )
+            }
+            HashInput::TwoToOne(left, right) => {
+                let chunk_rlcs = [
+                    challenge.map(|randomness| rlc::value(&left.bytes, randomness)),
+                    challenge.map(|randomness| rlc::value(&right.bytes, randomness)),
+                ];
+                let chunk_vals = [
+                    F::from_bytes_le_unsecure(&left.bytes),
+                    F::from_bytes_le_unsecure(&right.bytes),
+                ];
+                let preimage = input.clone().to_vec();
+                let input_rlc = challenge.map(|randomness| rlc::value(&preimage, randomness));
+
+                let input_chunks = [
+                    if left.is_rlc {
+                        chunk_rlcs[0]
+                    } else {
+                        Value::known(chunk_vals[0])
+                    },
+                    if right.is_rlc {
+                        chunk_rlcs[1]
+                    } else {
+                        Value::known(chunk_vals[1])
+                    },
+                ];
+
+                (input_chunks, input_rlc, preimage)
+            }
+        };
+
+        let input_len = F::from(preimage.len() as u64);
+
+        let output = sha2::Sha256::digest(preimage).to_vec();
+        let output_rlc = challenge.map(|randomness| rlc::value(&output, randomness));
+
+        [
+            Value::known(F::one()),
+            input_chunks[0],
+            input_chunks[1],
+            input_rlc,
+            Value::known(input_len),
+            output_rlc,
         ]
     }
 }

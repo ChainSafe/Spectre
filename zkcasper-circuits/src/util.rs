@@ -6,6 +6,9 @@ pub use cell_manager::*;
 mod constraint_builder;
 pub use constraint_builder::*;
 
+mod conversion;
+pub use conversion::*;
+
 use crate::{sha256_circuit::Sha256CircuitConfig, witness};
 use eth_types::*;
 pub use gadgets::util::{and, not, or, rlc, select, sum, xor, Expr};

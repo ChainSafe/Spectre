@@ -6,6 +6,9 @@ pub use block::*;
 mod validators;
 pub use validators::*;
 
+mod attestation;
+pub use attestation::*;
+
 mod merkle;
 pub use merkle::*;
 

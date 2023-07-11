@@ -1,5 +1,5 @@
 mod spec;
-pub use spec::*;
+pub use spec::{Mainnet, Spec, Test};
 
 use core::hash::Hash;
 use halo2_proofs::{
@@ -38,14 +38,14 @@ pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Or
             return Self::one();
         }
 
-        let mut base = self.clone();
+        let mut base = *self;
 
         while exp & 1 == 0 {
             base = base.square();
             exp >>= 1;
         }
 
-        let mut acc = base.clone();
+        let mut acc = base;
         while exp > 1 {
             exp >>= 1;
             base = base.square();
