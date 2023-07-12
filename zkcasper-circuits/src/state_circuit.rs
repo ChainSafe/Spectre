@@ -48,7 +48,8 @@ impl<F: Field> SubCircuitConfig<F> for StateSSZCircuitConfig<F> {
         let sha256_table = args.sha256_table;
 
         let pubkeys_level = TreeLevel::configure(meta, S::STATE_TREE_LEVEL_PUBKEYS, 0, 3, true);
-        let validators_level = TreeLevel::configure(meta, S::STATE_TREE_LEVEL_VALIDATORS, 0, 0, true);
+        let validators_level =
+            TreeLevel::configure(meta, S::STATE_TREE_LEVEL_VALIDATORS, 0, 0, true);
 
         let state_table: [StateTable; 2] = [
             pubkeys_level.clone().into(),
@@ -210,11 +211,11 @@ impl<F: Field> SubCircuit<F> for StateSSZCircuit<F> {
 mod tests {
     use super::*;
     use crate::witness::MerkleTrace;
+    use eth_types::Test as S;
     use halo2_proofs::{
         circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
     use std::{fs, marker::PhantomData};
-    use eth_types::Test as S;
 
     #[derive(Debug, Clone)]
     struct TestStateSSZ<F: Field> {
@@ -233,7 +234,8 @@ mod tests {
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
             let sha256_table = SHA256Table::construct(meta);
 
-            let config = { StateSSZCircuitConfig::new::<S>(meta, StateSSZCircuitArgs { sha256_table }) };
+            let config =
+                { StateSSZCircuitConfig::new::<S>(meta, StateSSZCircuitArgs { sha256_table }) };
 
             (config, Challenges::construct(meta))
         }

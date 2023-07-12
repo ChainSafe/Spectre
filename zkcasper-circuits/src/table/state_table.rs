@@ -4,9 +4,7 @@ use std::collections::HashMap;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-use crate::{
-    witness::{MerkleTrace, MerkleTraceStep},
-};
+use crate::witness::{MerkleTrace, MerkleTraceStep};
 
 use eth_types::Spec;
 
@@ -139,7 +137,9 @@ impl StateTables {
         let mut trace_by_depth = trace.trace_by_level_map();
 
         let pubkey_level_trace = trace_by_depth.remove(&S::STATE_TREE_LEVEL_PUBKEYS).unwrap();
-        let validators_level_trace = trace_by_depth.remove(&S::STATE_TREE_LEVEL_VALIDATORS).unwrap();
+        let validators_level_trace = trace_by_depth
+            .remove(&S::STATE_TREE_LEVEL_VALIDATORS)
+            .unwrap();
 
         let pubkey_table = self.0.get(&StateTreeLevel::PubKeys).unwrap();
         let validators_table = self.0.get(&StateTreeLevel::Validators).unwrap();
@@ -204,10 +204,7 @@ impl StateTables {
         ]
     }
 
-    pub fn annotate_columns_in_region<F: Field>(
-        &self,
-        region: &mut Region<'_, F>,
-    ) {
+    pub fn annotate_columns_in_region<F: Field>(&self, region: &mut Region<'_, F>) {
         self.0.iter().for_each(|(_, table)| {
             table.annotate_columns_in_region(region);
         });

@@ -61,12 +61,7 @@ impl<F: Field> SubCircuitConfig<F> for AttestationsCircuitConfig<F> {
 }
 
 #[derive(Debug)]
-pub struct AttestationsCircuitBuilder<
-    'a,
-    S: Spec,
-    F: Field,
-    const COMMITTEE_MAX_SIZE: usize,
-> {
+pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize> {
     builder: RefCell<GateThreadBuilder<F>>,
     attestations: &'a [IndexedAttestation<COMMITTEE_MAX_SIZE>],
     range: &'a RangeChip<F>,
@@ -285,7 +280,8 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
     }
 }
 
-impl<'a, S: Spec, F: Field,const MAX_VALIDATORS_PER_COMMITTEE: usize> SubCircuit<F> for AttestationsCircuitBuilder<'a, S, F, MAX_VALIDATORS_PER_COMMITTEE>
+impl<'a, S: Spec, F: Field, const MAX_VALIDATORS_PER_COMMITTEE: usize> SubCircuit<F>
+    for AttestationsCircuitBuilder<'a, S, F, MAX_VALIDATORS_PER_COMMITTEE>
 {
     type Config = AttestationsCircuitConfig<F>;
 
@@ -334,13 +330,11 @@ mod tests {
     };
 
     #[derive(Debug)]
-    struct TestCircuit<'a, S: Spec, F: Field, const CMS: usize>
-    {
+    struct TestCircuit<'a, S: Spec, F: Field, const CMS: usize> {
         inner: AttestationsCircuitBuilder<'a, S, F, CMS>,
     }
 
-    impl<'a, S: Spec, F: Field, const CMS: usize> TestCircuit<'a, S, F, CMS>
-    {
+    impl<'a, S: Spec, F: Field, const CMS: usize> TestCircuit<'a, S, F, CMS> {
         const NUM_ADVICE: &[usize] = &[10];
         const NUM_FIXED: usize = 1;
         const NUM_LOOKUP_ADVICE: usize = 1;
@@ -395,16 +389,18 @@ mod tests {
 
     #[test]
     fn test_attestations_circuit() {
-        let k = TestCircuit::<Test, Fr, {Test::MAX_VALIDATORS_PER_COMMITTEE}>::K;
+        let k = TestCircuit::<Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }>::K;
 
-        let range = RangeChip::default(TestCircuit::<Test, Fr, {Test::MAX_VALIDATORS_PER_COMMITTEE}>::LOOKUP_BITS);
+        let range = RangeChip::default(
+            TestCircuit::<Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }>::LOOKUP_BITS,
+        );
         let builder = GateThreadBuilder::new(false);
         builder.config(k, None);
         let validators: Vec<Validator> =
             serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
         let attestations = attestations_dev(validators);
 
-        let circuit = TestCircuit::<'_, Test, Fr, {Test::MAX_VALIDATORS_PER_COMMITTEE}> {
+        let circuit = TestCircuit::<'_, Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }> {
             inner: AttestationsCircuitBuilder::new(builder, &attestations, &range),
         };
 

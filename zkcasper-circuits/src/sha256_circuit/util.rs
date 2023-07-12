@@ -50,7 +50,7 @@ pub struct Sha256AssignedRows<F: Field> {
     pub output_rlc: Vec<AssignedCell<F, F>>,
 }
 
-impl <F: Field> Sha256AssignedRows<F> {
+impl<F: Field> Sha256AssignedRows<F> {
     pub fn new(offset: usize) -> Self {
         Self {
             offset,

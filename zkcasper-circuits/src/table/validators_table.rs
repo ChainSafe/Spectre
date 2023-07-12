@@ -165,7 +165,10 @@ impl ValidatorsTable {
         )
     }
 
-    pub fn queries<S: Spec, F: Field>(&self, meta: &mut VirtualCells<'_, F>) -> ValidatorTableQueries<S, F> {
+    pub fn queries<S: Spec, F: Field>(
+        &self,
+        meta: &mut VirtualCells<'_, F>,
+    ) -> ValidatorTableQueries<S, F> {
         ValidatorTableQueries {
             id: meta.query_advice(self.id, Rotation::cur()),
             tag: meta.query_advice(self.tag, Rotation::cur()),
@@ -258,7 +261,8 @@ impl<S: Spec, F: Field> ValidatorTableQueries<S, F> {
     }
 
     pub fn activation_epoch_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr() // skip activationEligibilityEpoch
+        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr()
+        // skip activationEligibilityEpoch
     }
 
     pub fn exit_epoch_gindex(&self) -> Expression<F> {
@@ -267,7 +271,7 @@ impl<S: Spec, F: Field> ValidatorTableQueries<S, F> {
 
     pub fn pubkey_lo_gindex(&self) -> Expression<F> {
         (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(4).expr() // 4 levels deeper 0 + 0 * 2^x = 94557999988736n
-        // d = sqrt(94557999988736n) = 1048576 sqrt(86)
+                                                                         // d = sqrt(94557999988736n) = 1048576 sqrt(86)
     }
 
     pub fn pubkey_hi_gindex(&self) -> Expression<F> {

@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use halo2curves::{bn256, bls12_381, CurveExt};
+use halo2curves::{bls12_381, bn256, CurveExt};
 
 pub trait Spec: 'static + Default + Debug {
     const VALIDATOR_REGISTRY_LIMIT: usize;
@@ -10,7 +10,7 @@ pub trait Spec: 'static + Default + Debug {
     const VALIDATOR_0_G_INDEX: usize;
     const VALIDATOR_SSZ_CHUNKS: usize;
     const USED_CHUNKS_PER_VALIDATOR: usize;
-    const STATE_TREE_DEPTH: usize; 
+    const STATE_TREE_DEPTH: usize;
     const STATE_TREE_LEVEL_PUBKEYS: usize;
     const STATE_TREE_LEVEL_VALIDATORS: usize;
     const G1_BYTES_COMPRESSED: usize;
@@ -62,7 +62,7 @@ impl Spec for Mainnet {
     const STATE_TREE_LEVEL_PUBKEYS: usize = 49;
     const STATE_TREE_LEVEL_VALIDATORS: usize = Self::STATE_TREE_LEVEL_PUBKEYS - 1;
     const G1_BYTES_COMPRESSED: usize = 48;
-    const G1_BYTES_UNCOMPRESSED: usize = Self:: G1_BYTES_COMPRESSED * 2;
+    const G1_BYTES_UNCOMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
     const G2_BYTES_COMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
     const LIMB_BITS: usize = 112;
     const NUM_LIMBS: usize = 5;

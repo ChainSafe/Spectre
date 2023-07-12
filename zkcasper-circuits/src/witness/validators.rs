@@ -50,6 +50,7 @@ impl Validator {
                 randomness.map(|rnd| rlc::value(&self.pubkey[0..32], rnd)),
                 randomness.map(|rnd| rlc::value(&pad_to_ssz_chunk(&self.pubkey[32..48]), rnd)),
             ],
+
             row_type: CasperTag::Validator,
         }]
     }

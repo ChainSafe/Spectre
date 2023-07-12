@@ -3,7 +3,7 @@ use crate::{
     util::{Challenges, SubCircuit, SubCircuitConfig},
     witness::{self, Committee, Validator},
 };
-use eth_types::*;
+use eth_types::{Spec, *};
 use gadgets::util::rlc;
 use halo2_base::{
     gates::{
@@ -14,18 +14,18 @@ use halo2_base::{
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bigint::ProperUint,
+    bigint::{ProperCrtUint, ProperUint},
     bn254::FpPoint,
     ecc::{EcPoint, EccChip},
+    fields::FieldChip,
 };
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{ConstraintSystem, Error},
 };
 use halo2curves::{
-    bn256::G1Affine,
+    bn256::{Fq, G1Affine},
     group::{ff::PrimeField, GroupEncoding, UncompressedEncoding},
-    CurveAffine,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -72,6 +72,7 @@ pub struct AggregationCircuitBuilder<'a, F: Field, S: Spec> {
     // Witness
     validators: &'a [Validator],
     _committees: &'a [Committee],
+    validators_y: Vec<Fq>,
     _spec: PhantomData<S>,
 }
 
@@ -83,12 +84,23 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         range: &'a RangeChip<F>,
     ) -> Self {
         let fp_chip = FpChip::new(range, S::LIMB_BITS, S::NUM_LIMBS);
+        // TODO: Cache this in Validator witness type
+        let validators_y = validators
+            .iter()
+            .map(|v| {
+                let g1_affine =
+                    G1Affine::from_bytes(&v.pubkey[..S::G1_BYTES_COMPRESSED].try_into().unwrap())
+                        .unwrap();
+                g1_affine.y
+            })
+            .collect();
         Self {
             builder: RefCell::new(builder),
             range,
             fp_chip,
             validators,
             _committees: committees,
+            validators_y,
             _spec: PhantomData,
         }
     }
@@ -175,6 +187,20 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
             .unwrap();
     }
 
+    // TODO: Change to +4 when we switch to BLS12-381
+    // Calculates y^2 = x^3 + 3 (the curve equation for bn254)
+    fn calculate_ysquared(
+        ctx: &mut Context<F>,
+        field_chip: &FpChip<'_, F>,
+        x: ProperCrtUint<F>,
+    ) -> ProperCrtUint<F> {
+        let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
+        let x_cubed = field_chip.mul(ctx, x_squared, x);
+
+        let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, 3.into());
+        field_chip.carry_mod(ctx, plus_b)
+    }
+
     fn process_validators(
         &self,
         ctx: &mut Context<F>,
@@ -187,51 +213,63 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
 
         let mut aggregated_pubkeys = vec![];
 
-        for (_committee, validators) in self.validators.iter().group_by(|v| v.committee).into_iter()
+        for (_committee, validators) in self
+            .validators
+            .iter()
+            .zip(self.validators_y.iter())
+            .group_by(|v| v.0.committee)
+            .into_iter()
         {
             let mut in_committee_pubkeys = vec![];
 
-            for validator in validators {
+            for (validator, y_coord) in validators {
                 let pk_compressed = validator.pubkey[..S::G1_BYTES_COMPRESSED].to_vec();
 
-                // FIXME: replace with retriving y coordinate from cached map.
-                let pk_affine =
-                    G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap();
-
-                // FIXME: constraint y coordinate bytes.
-                let assigned_uncompressed: Vec<AssignedValue<F>> = ctx.assign_witnesses(
-                    pk_affine
-                        .to_uncompressed()
-                        .as_ref()
-                        .iter()
-                        .map(|&b| F::from(b as u64)),
-                );
+                let assigned_x_compressed_bytes: Vec<AssignedValue<F>> =
+                    ctx.assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)));
 
                 // assertion check for assigned_uncompressed vector to be equal to S::G1_BYTES_UNCOMPRESSED from specification
-                assert_eq!(assigned_uncompressed.len(), S::G1_BYTES_UNCOMPRESSED);
+                assert_eq!(assigned_x_compressed_bytes.len(), S::G1_BYTES_COMPRESSED);
 
-                // load masked bit from compressed representation
-                let masked_byte =
-                    ctx.load_witness(F::from(pk_compressed[S::G1_BYTES_COMPRESSED - 1] as u64));
-                let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
+                // Clear the sign bit from the last byte of the compressed representation to construct the x coordinate in Fq
+                let mut pk_compressed_cleared = pk_compressed;
+                pk_compressed_cleared[S::G1_BYTES_COMPRESSED - 1] &= 0b0011_1111;
+                let x_coord =
+                    Fq::from_bytes(&pk_compressed_cleared.as_slice().try_into().unwrap()).unwrap();
+
+                // masked byte from compressed representation
+                let masked_byte = &assigned_x_compressed_bytes[S::G1_BYTES_COMPRESSED - 1];
+                // clear the sign bit from masked byte
+                let cleared_byte = self.clear_ysign_mask(masked_byte, ctx);
+                // Use the cleared byte to construct the x coordinate
+                let assigned_x_bytes_cleared = [
+                    &assigned_x_compressed_bytes.as_slice()[..S::G1_BYTES_COMPRESSED - 1],
+                    &[cleared_byte],
+                ]
+                .concat();
+
+                let x_crt = self.decode_fq(&assigned_x_bytes_cleared, &x_coord, ctx);
+
+                // Load private witness y coordinate
+                let y_crt = fp_chip.load_private(ctx, *y_coord);
+                // Square y coordinate
+                let ysq = fp_chip.mul(ctx, y_crt.clone(), y_crt.clone());
+                // Calculate y^2 using the elliptic curve equation
+                let ysq_calc = Self::calculate_ysquared(ctx, fp_chip, x_crt.clone());
+                // Constrain witness y^2 to be equal to calculated y^2
+                fp_chip.assert_equal(ctx, ysq, ysq_calc);
+
                 // constraint that the loaded masked byte is consistent with the assigned bytes used to construct the point.
-                ctx.constrain_equal(&cleared_byte, &assigned_uncompressed[S::G1_BYTES_COMPRESSED - 1]);
+                // ctx.constrain_equal(&cleared_byte, &assigned_x_bytes[S::G1_BYTES_COMPRESSED - 1]);
 
                 // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
-                pubkeys_compressed.push({
-                    let mut compressed_bytes = assigned_uncompressed[..S::G1_BYTES_COMPRESSED - 1].to_vec();
-                    compressed_bytes.push(masked_byte);
-                    compressed_bytes
-                });
-
-                in_committee_pubkeys.push(self.uncompressed_to_g1affine(
-                    assigned_uncompressed,
-                    &pk_affine,
-                    ctx,
-                ));
+                pubkeys_compressed.push(assigned_x_compressed_bytes);
+                // Normally, we would need to take into account the sign of the y coordinate, but
+                // because we are concerned only with signature forgery, if this is the wrong
+                // sign, the signature will be invalid anyway and thus verification fails.
+                in_committee_pubkeys.push(EcPoint::new(x_crt, y_crt));
             }
 
-            // let pk_affine = G1Affine::random(&mut rand::thread_rng());
             aggregated_pubkeys.push(g1_chip.sum::<G1Affine>(ctx, in_committee_pubkeys));
         }
 
@@ -282,13 +320,13 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         range.div_mod(ctx, b_shift_msb, BigUint::from(2u64), 8).0
     }
 
-    /// Converts uncompressed pubkey bytes to G1Affine point.
-    pub fn uncompressed_to_g1affine(
+    /// Converts Fq bytes to Fq point.
+    pub fn decode_fq(
         &self,
-        assigned_bytes: Vec<AssignedValue<F>>,
-        pk_affine: &G1Affine,
+        assigned_bytes: &[AssignedValue<F>],
+        fq: &Fq,
         ctx: &mut Context<F>,
-    ) -> EcPoint<F, FpPoint<F>> {
+    ) -> ProperCrtUint<F> {
         let range = self.range();
         let gate = range.gate();
         let fp_chip = self.fp_chip();
@@ -313,16 +351,9 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
             })
             .collect_vec();
 
-        let pk_coords = pk_affine.coordinates().unwrap();
-
         let x = {
             let assigned_uint = ProperUint::new(field_limbs[0].to_vec());
-            let value = BigUint::from_bytes_le(pk_coords.x().to_repr().as_ref());
-            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, S::LIMB_BITS)
-        };
-        let y = {
-            let assigned_uint = ProperUint::new(field_limbs[1].to_vec());
-            let value = BigUint::from_bytes_le(pk_coords.y().to_repr().as_ref());
+            let value = BigUint::from_bytes_le(fq.to_repr().as_ref());
             assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, S::LIMB_BITS)
         };
 
@@ -330,8 +361,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         for fl in field_limbs.iter() {
             assert_eq!(fl.len(), S::NUM_LIMBS);
         }
-
-        EcPoint::new(x, y)
+        x
     }
 
     fn g1_chip(&'a self) -> EccChip<'a, F, FpChip<'a, F>> {

@@ -14,6 +14,7 @@ use crate::{
 use cell_manager::CellManager;
 use constraint_builder::*;
 use eth_types::*;
+
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, FirstPhase, Fixed, VirtualCells},
@@ -306,7 +307,6 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                     )?;
 
                     let validator_rows = validator.table_assignment(randomness);
-
                     for (i, row) in validator_rows.into_iter().enumerate() {
                         self.validators_table
                             .assign_with_region(region, offset + i, &row)?;
@@ -348,7 +348,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct ValidatorsCircuit<F> {
     pub(crate) validators: Vec<Validator>,
     pub(crate) committees: Vec<Committee>,
@@ -402,7 +402,8 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
                     &self.committees,
                     self.target_epoch,
                     challenges.sha256_input(),
-                )
+                )?;
+                Ok(())
             },
         )
     }
@@ -468,10 +469,11 @@ mod tests {
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             let challenge = config.1.sha256_input();
-            config
-                .0
-                .state_tables
-                .dev_load::<S, _>(&mut layouter, &self.state_tree_trace, challenge)?;
+            config.0.state_tables.dev_load::<S, _>(
+                &mut layouter,
+                &self.state_tree_trace,
+                challenge,
+            )?;
             self.inner.synthesize_sub(
                 &mut config.0,
                 &config.1.values(&mut layouter),
