@@ -195,7 +195,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         x: ProperCrtUint<F>,
     ) -> ProperCrtUint<F> {
         let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
-        let x_cubed = field_chip.mul(ctx, x_squared, x.clone());
+        let x_cubed = field_chip.mul(ctx, x_squared, x);
 
         let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, 3.into());
         field_chip.carry_mod(ctx, plus_b)
@@ -215,20 +215,18 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
 
         for (_committee, validators) in self
             .validators
-            .into_iter()
+            .iter()
             .zip(self.validators_y.iter())
             .group_by(|v| v.0.committee)
             .into_iter()
         {
             let mut in_committee_pubkeys = vec![];
 
-            for (validator, y_coord) in validators.into_iter() {
+            for (validator, y_coord) in validators {
                 let pk_compressed = validator.pubkey[..S::G1_BYTES_COMPRESSED].to_vec();
 
-                let assigned_x_compressed_bytes: Vec<AssignedValue<F>> = ctx
-                    .assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)))
-                    .try_into()
-                    .unwrap();
+                let assigned_x_compressed_bytes: Vec<AssignedValue<F>> =
+                    ctx.assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)));
 
                 // assertion check for assigned_uncompressed vector to be equal to S::G1_BYTES_UNCOMPRESSED from specification
                 assert_eq!(assigned_x_compressed_bytes.len(), S::G1_BYTES_COMPRESSED);
@@ -242,7 +240,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
                 // masked byte from compressed representation
                 let masked_byte = &assigned_x_compressed_bytes[S::G1_BYTES_COMPRESSED - 1];
                 // clear the sign bit from masked byte
-                let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
+                let cleared_byte = self.clear_ysign_mask(masked_byte, ctx);
                 // Use the cleared byte to construct the x coordinate
                 let assigned_x_bytes_cleared = [
                     &assigned_x_compressed_bytes.as_slice()[..S::G1_BYTES_COMPRESSED - 1],
