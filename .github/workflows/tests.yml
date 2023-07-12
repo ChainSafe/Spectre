@@ -20,11 +20,13 @@ jobs:
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v3
-    - name: Install latest stable
+    - name: Install latest nightly-2022-10-28
       uses: dtolnay/rust-toolchain@stable
       with:
-          toolchain: stable
+          toolchain: nightly-2022-10-28
           override: true
           components: rustfmt
     - name: Check
       run: cargo check --all
+    - name: Check
+      run: RUST_LOG="preprocessor,eth-types,gadgets,zkcasper-circuits=debug" cargo test --all
