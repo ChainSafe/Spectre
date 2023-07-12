@@ -224,27 +224,33 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
 
             for (validator, y_coord) in validators.into_iter() {
                 let pk_compressed = validator.pubkey[..S::G1_BYTES_COMPRESSED].to_vec();
-                let mut pk_compressed_cleared = pk_compressed.clone();
-                pk_compressed_cleared[S::G1_BYTES_COMPRESSED - 1] &= 0b0011_1111;
 
-                let x_coord =
-                    Fq::from_bytes(&pk_compressed_cleared.as_slice().try_into().unwrap()).unwrap();
-
-                let assigned_x_bytes: Vec<AssignedValue<F>> = ctx
-                    .assign_witnesses(
-                        x_coord
-                            .to_bytes()
-                            .as_ref()
-                            .iter()
-                            .map(|&b| F::from(b as u64)),
-                    )
+                let assigned_x_compressed_bytes: Vec<AssignedValue<F>> = ctx
+                    .assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)))
                     .try_into()
                     .unwrap();
 
                 // assertion check for assigned_uncompressed vector to be equal to S::G1_BYTES_UNCOMPRESSED from specification
-                assert_eq!(assigned_x_bytes.len(), S::G1_BYTES_COMPRESSED);
+                assert_eq!(assigned_x_compressed_bytes.len(), S::G1_BYTES_COMPRESSED);
 
-                let x_crt = self.decode_fq(&assigned_x_bytes, &x_coord, ctx);
+                // Clear the sign bit from the last byte of the compressed representation to construct the x coordinate in Fq
+                let mut pk_compressed_cleared = pk_compressed;
+                pk_compressed_cleared[S::G1_BYTES_COMPRESSED - 1] &= 0b0011_1111;
+                let x_coord =
+                    Fq::from_bytes(&pk_compressed_cleared.as_slice().try_into().unwrap()).unwrap();
+
+                // masked byte from compressed representation
+                let masked_byte = &assigned_x_compressed_bytes[S::G1_BYTES_COMPRESSED - 1];
+                // clear the sign bit from masked byte
+                let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
+                // Use the cleared byte to construct the x coordinate
+                let assigned_x_bytes_cleared = [
+                    &assigned_x_compressed_bytes.as_slice()[..S::G1_BYTES_COMPRESSED - 1],
+                    &[cleared_byte],
+                ]
+                .concat();
+
+                let x_crt = self.decode_fq(&assigned_x_bytes_cleared, &x_coord, ctx);
 
                 // Load private witness y coordinate
                 let y_crt = fp_chip.load_private(ctx, *y_coord);
@@ -254,22 +260,15 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
                 let ysq_calc = Self::calculate_ysquared(ctx, fp_chip, x_crt.clone());
                 // Constrain witness y^2 to be equal to calculated y^2
                 fp_chip.assert_equal(ctx, ysq, ysq_calc);
-                // load masked bit from compressed representation
-                let masked_byte =
-                    ctx.load_witness(F::from(pk_compressed[S::G1_BYTES_COMPRESSED - 1] as u64));
-                let cleared_byte = self.clear_ysign_mask(&masked_byte, ctx);
 
                 // constraint that the loaded masked byte is consistent with the assigned bytes used to construct the point.
-                ctx.constrain_equal(&cleared_byte, &assigned_x_bytes[S::G1_BYTES_COMPRESSED - 1]);
+                // ctx.constrain_equal(&cleared_byte, &assigned_x_bytes[S::G1_BYTES_COMPRESSED - 1]);
 
                 // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
-                pubkeys_compressed.push({
-                    let mut compressed_bytes =
-                        assigned_x_bytes[..S::G1_BYTES_COMPRESSED - 1].to_vec();
-                    compressed_bytes.push(masked_byte);
-                    compressed_bytes
-                });
-
+                pubkeys_compressed.push(assigned_x_compressed_bytes);
+                // Normally, we would need to take into account the sign of the y coordinate, but
+                // because we are concerned only with signature forgery, if this is the wrong
+                // sign, the signature will be invalid anyway and thus verification fails.
                 in_committee_pubkeys.push(EcPoint::new(x_crt, y_crt));
             }
 
@@ -323,7 +322,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         range.div_mod(ctx, b_shift_msb, BigUint::from(2u64), 8).0
     }
 
-    /// Converts compressed pubkey bytes to Fq point.
+    /// Converts Fq bytes to Fq point.
     pub fn decode_fq(
         &self,
         assigned_bytes: &[AssignedValue<F>],
