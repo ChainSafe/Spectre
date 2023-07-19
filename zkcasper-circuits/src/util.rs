@@ -8,6 +8,17 @@ pub use constraint_builder::*;
 
 mod conversion;
 pub use conversion::*;
+use halo2_base::{
+    safe_types::{GateInstructions, RangeInstructions},
+    utils::ScalarField,
+    AssignedValue, Context, QuantumCell,
+};
+use halo2_ecc::{
+    bigint::{ProperCrtUint, ProperUint},
+    fields::{fp::FpChip, FieldChip},
+};
+use itertools::Itertools;
+use num_bigint::BigUint;
 
 use crate::{sha256_circuit::Sha256CircuitConfig, witness};
 use eth_types::*;
@@ -215,4 +226,76 @@ pub(crate) fn transpose_val_ret<F, E>(value: Value<Result<F, E>>) -> Result<Valu
 /// Ceiling of log_2(n)
 pub fn log2_ceil(n: usize) -> u32 {
     u32::BITS - (n as u32).leading_zeros() - (n & (n - 1) == 0) as u32
+}
+
+/// Converts assigned bytes into biginterger
+/// Warning: method does not perfrom any checks on input `bytes`.
+pub fn decode_into_field<S: Spec, F: Field>(
+    bytes: impl IntoIterator<Item = AssignedValue<F>>,
+    limb_bases: &[F],
+    gate: &impl GateInstructions<F>,
+    ctx: &mut Context<F>,
+) -> ProperCrtUint<F> {
+    let bytes = bytes.into_iter().collect_vec();
+    let limb_bytes = S::LIMB_BITS / 8;
+    let bits = S::NUM_LIMBS * S::LIMB_BITS;
+
+    let value = BigUint::from_bytes_le(
+        &bytes
+            .iter()
+            .map(|v| v.value().get_lower_32() as u8)
+            .collect_vec(),
+    );
+
+    // inputs is a bool or uint8.
+    let assigned_uint = if bits == 1 || limb_bytes == 8 {
+        ProperUint::new(bytes)
+    } else {
+        let byte_base = (0..limb_bytes)
+            .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+            .collect_vec();
+        let limbs = bytes
+            .chunks(limb_bytes)
+            .map(|chunk| gate.inner_product(ctx, chunk.to_vec(), byte_base[..chunk.len()].to_vec()))
+            .collect::<Vec<_>>();
+        ProperUint::new(limbs)
+    };
+
+    assigned_uint.into_crt(ctx, gate, value, limb_bases, S::LIMB_BITS)
+}
+
+pub fn decode_into_field_be<S: Spec, F: Field, I: IntoIterator<Item = AssignedValue<F>>>(
+    bytes: I,
+    limb_bases: &[F],
+    gate: &impl GateInstructions<F>,
+    ctx: &mut Context<F>,
+) -> ProperCrtUint<F>
+where
+    I::IntoIter: DoubleEndedIterator,
+{
+    let bytes = bytes.into_iter().rev().collect_vec();
+    decode_into_field::<S, F>(bytes, limb_bases, gate, ctx)
+}
+
+pub fn decode_into_field_modp<'a, S: Spec, F: Field, FP: ScalarField>(
+    bytes: impl IntoIterator<Item = AssignedValue<F>>,
+    fp_chip: &FpChip<'a, F, FP>,
+    gate: &impl GateInstructions<F>,
+    ctx: &mut Context<F>,
+) -> ProperCrtUint<F> {
+    let overflow = decode_into_field::<S, F>(bytes, &fp_chip.limb_bases, gate, ctx);
+    fp_chip.carry_mod(ctx, overflow.into())
+}
+
+pub fn bigint_to_le_bytes<F: Field>(
+    limbs: impl IntoIterator<Item = F>,
+    limb_bits: usize,
+    total_bytes: usize,
+) -> Vec<u8> {
+    let limb_bytes = limb_bits / 8;
+    limbs
+        .into_iter()
+        .flat_map(|x| x.to_bytes_le()[..limb_bytes].to_vec())
+        .take(total_bytes)
+        .collect()
 }

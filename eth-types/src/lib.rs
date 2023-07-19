@@ -1,6 +1,9 @@
 mod spec;
 pub use spec::{Mainnet, Spec, Test};
 
+mod curve;
+pub use curve::{AppCurveExt, HashCurveExt};
+
 use core::hash::Hash;
 use halo2_proofs::{
     arithmetic::{Field as Halo2Field, FieldExt},
@@ -12,7 +15,9 @@ use halo2_proofs::{
 
 /// Trait used to reduce verbosity with the declaration of the [`PrimeField`]
 /// trait and its repr.
-pub trait Field: FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Ord {
+pub trait Field:
+    FieldExt + Halo2Field + PrimeField<Repr = [u8; 32]> + Hash + Ord + halo2_ecc::fields::PrimeField
+{
     // FIXME: uncomment after upgrading to halo2 v2023_04_02
     // /// Gets the lower 128 bits of this field element when expressed
     // /// canonically.

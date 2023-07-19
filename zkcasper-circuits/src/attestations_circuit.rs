@@ -1,10 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, vec};
 
 use crate::{
-    gadget::crypto::{CachedSha256Chip, Sha256Chip},
+    gadget::crypto::{CachedHashChip, HashChip, Sha256Chip},
     sha256_circuit::Sha256CircuitConfig,
     util::{Challenges, IntoWitness, SubCircuit, SubCircuitConfig},
-    witness::{self, HashInput, HashInputChunk},
+    witness::{self, Attestation, HashInput, HashInputChunk},
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
@@ -60,10 +60,14 @@ impl<F: Field> SubCircuitConfig<F> for AttestationsCircuitConfig<F> {
     fn annotate_columns_in_region(&self, _region: &mut Region<'_, F>) {}
 }
 
+#[allow(type_alias_bounds)]
 #[derive(Debug)]
-pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize> {
+pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
+where
+    [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+{
     builder: RefCell<GateThreadBuilder<F>>,
-    attestations: &'a [IndexedAttestation<COMMITTEE_MAX_SIZE>],
+    attestations: &'a [Attestation<S>],
     range: &'a RangeChip<F>,
     fp_chip: FpChip<'a, F>,
     zero_hashes: RefCell<HashMap<usize, HashInputChunk<QuantumCell<F>>>>,
@@ -72,10 +76,12 @@ pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field, const COMMITTEE_MAX
 
 impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
     AttestationsCircuitBuilder<'a, S, F, COMMITTEE_MAX_SIZE>
+where
+    [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     pub fn new(
         builder: GateThreadBuilder<F>,
-        attestations: &'a [IndexedAttestation<COMMITTEE_MAX_SIZE>],
+        attestations: &'a [Attestation<S>],
         range: &'a RangeChip<F>,
     ) -> Self {
         let fp_chip = FpChip::new(range, S::LIMB_BITS, S::NUM_LIMBS);
@@ -110,7 +116,7 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
             .expect("load range lookup table");
         let mut first_pass = halo2_base::SKIP_FIRST_PASS;
 
-        let hasher = CachedSha256Chip::new(Sha256Chip::new(
+        let hasher = CachedHashChip::new(Sha256Chip::new(
             &config.sha256_config,
             self.range(),
             64,
@@ -180,7 +186,7 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
                         );
                     }
 
-                    let extra_assignments = hasher.inner.take_extra_assignments();
+                    let extra_assignments = hasher.take_extra_assignments();
 
                     let _ = builder.assign_all(
                         &config.range.gate,
@@ -203,7 +209,7 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
         ctx: &mut Context<F>,
     ) -> EcPoint<F, FqPoint<F>> {
         // FIXME: remove next line after switching to BLS12-381
-        let bytes_compressed = &bytes_compressed[..S::G2_BYTES_COMPRESSED];
+        let bytes_compressed = &bytes_compressed[..S::FQ2_BYTES];
         let sig_affine = G2Affine::from_bytes(
             &bytes_compressed
                 .try_into()
@@ -217,7 +223,7 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
     fn merkleize_chunks<I: IntoIterator<Item = HashInputChunk<QuantumCell<F>>>>(
         &self,
         chunks: I,
-        hasher: &CachedSha256Chip<F>,
+        hasher: &CachedHashChip<F, Sha256Chip<'a, F>>,
         ctx: &mut Context<F>,
         region: &mut Region<'_, F>,
     ) -> Result<Vec<AssignedValue<F>>, Error>
@@ -282,6 +288,8 @@ impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
 
 impl<'a, S: Spec, F: Field, const MAX_VALIDATORS_PER_COMMITTEE: usize> SubCircuit<F>
     for AttestationsCircuitBuilder<'a, S, F, MAX_VALIDATORS_PER_COMMITTEE>
+where
+    [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     type Config = AttestationsCircuitConfig<F>;
 
@@ -330,11 +338,17 @@ mod tests {
     };
 
     #[derive(Debug)]
-    struct TestCircuit<'a, S: Spec, F: Field, const CMS: usize> {
+    struct TestCircuit<'a, S: Spec, F: Field, const CMS: usize>
+    where
+        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+    {
         inner: AttestationsCircuitBuilder<'a, S, F, CMS>,
     }
 
-    impl<'a, S: Spec, F: Field, const CMS: usize> TestCircuit<'a, S, F, CMS> {
+    impl<'a, S: Spec, F: Field, const CMS: usize> TestCircuit<'a, S, F, CMS>
+    where
+        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+    {
         const NUM_ADVICE: &[usize] = &[10];
         const NUM_FIXED: usize = 1;
         const NUM_LOOKUP_ADVICE: usize = 1;
@@ -342,7 +356,10 @@ mod tests {
         const K: usize = 11;
     }
 
-    impl<'a, S: Spec, F: Field, const CMS: usize> Circuit<F> for TestCircuit<'a, S, F, CMS> {
+    impl<'a, S: Spec, F: Field, const CMS: usize> Circuit<F> for TestCircuit<'a, S, F, CMS>
+    where
+        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+    {
         type Config = (AttestationsCircuitConfig<F>, Challenges<F>);
         type FloorPlanner = SimpleFloorPlanner;
 

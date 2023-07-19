@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { bn254 } from '@noble/curves/bn254';
-import { bls12_381 } from '@noble/curves/bls12-381';
+import { bls12_381 } from '@noble/curves/bls12-381'
 import {
     ContainerType,
     ListCompositeType,
@@ -55,7 +55,7 @@ let bn256PubKeys = [
     Uint8Array.from([121, 120, 209, 158, 108, 187, 60, 235, 177, 236, 91, 119, 41, 91, 169, 248, 81, 14, 103, 225, 193, 253, 84, 100, 35, 74, 153, 84, 192, 99, 209, 164]),
     Uint8Array.from([52, 219, 202, 145, 120, 83, 129, 10, 43, 214, 40, 152, 52, 137, 13, 111, 29, 53, 100, 179, 118, 189, 3, 68, 151, 17, 118, 216, 241, 40, 62, 164]),
     Uint8Array.from([3, 108, 186, 33, 251, 235, 204, 9, 215, 241, 212, 103, 5, 127, 9, 119, 207, 230, 42, 192, 21, 66, 41, 224, 255, 53, 248, 103, 1, 247, 171, 138]),
-]
+];
 
 for (let i = 0; i < N; i++) {
     // let privKey = bls12_381.utils.randomPrivateKey();

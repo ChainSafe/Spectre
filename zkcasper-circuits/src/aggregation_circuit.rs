@@ -1,6 +1,6 @@
 use crate::{
     table::{LookupTable, ValidatorsTable},
-    util::{Challenges, SubCircuit, SubCircuitConfig},
+    util::{decode_into_field, Challenges, SubCircuit, SubCircuitConfig},
     witness::{self, Committee, Validator},
 };
 use eth_types::{Spec, *};
@@ -89,8 +89,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
             .iter()
             .map(|v| {
                 let g1_affine =
-                    G1Affine::from_bytes(&v.pubkey[..S::G1_BYTES_COMPRESSED].try_into().unwrap())
-                        .unwrap();
+                    G1Affine::from_bytes(&v.pubkey[..S::FQ_BYTES].try_into().unwrap()).unwrap();
                 g1_affine.y
             })
             .collect();
@@ -141,7 +140,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
                     let pubkey_rlcs = pubkeys_compressed
                         .into_iter()
                         .map(|compressed| {
-                            self.get_rlc(&compressed[..S::G1_BYTES_COMPRESSED], &randomness, ctx)
+                            self.get_rlc(&compressed[..S::FQ_BYTES], &randomness, ctx)
                         })
                         .collect_vec();
 
@@ -207,6 +206,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         pubkeys_compressed: &mut Vec<Vec<AssignedValue<F>>>,
     ) -> Vec<EcPoint<F, FpPoint<F>>> {
         let range = self.range();
+        let gate = range.gate();
 
         let fp_chip = self.fp_chip();
         let g1_chip = self.g1_chip();
@@ -223,32 +223,31 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
             let mut in_committee_pubkeys = vec![];
 
             for (validator, y_coord) in validators {
-                let pk_compressed = validator.pubkey[..S::G1_BYTES_COMPRESSED].to_vec();
+                let pk_compressed = validator.pubkey[..S::FQ_BYTES].to_vec();
 
                 let assigned_x_compressed_bytes: Vec<AssignedValue<F>> =
                     ctx.assign_witnesses(pk_compressed.iter().map(|&b| F::from(b as u64)));
 
                 // assertion check for assigned_uncompressed vector to be equal to S::G1_BYTES_UNCOMPRESSED from specification
-                assert_eq!(assigned_x_compressed_bytes.len(), S::G1_BYTES_COMPRESSED);
-
-                // Clear the sign bit from the last byte of the compressed representation to construct the x coordinate in Fq
-                let mut pk_compressed_cleared = pk_compressed;
-                pk_compressed_cleared[S::G1_BYTES_COMPRESSED - 1] &= 0b0011_1111;
-                let x_coord =
-                    Fq::from_bytes(&pk_compressed_cleared.as_slice().try_into().unwrap()).unwrap();
+                assert_eq!(assigned_x_compressed_bytes.len(), S::FQ_BYTES);
 
                 // masked byte from compressed representation
-                let masked_byte = &assigned_x_compressed_bytes[S::G1_BYTES_COMPRESSED - 1];
+                let masked_byte = &assigned_x_compressed_bytes[S::FQ_BYTES - 1];
                 // clear the sign bit from masked byte
                 let cleared_byte = self.clear_ysign_mask(masked_byte, ctx);
                 // Use the cleared byte to construct the x coordinate
                 let assigned_x_bytes_cleared = [
-                    &assigned_x_compressed_bytes.as_slice()[..S::G1_BYTES_COMPRESSED - 1],
+                    &assigned_x_compressed_bytes.as_slice()[..S::FQ_BYTES - 1],
                     &[cleared_byte],
                 ]
                 .concat();
 
-                let x_crt = self.decode_fq(&assigned_x_bytes_cleared, &x_coord, ctx);
+                let x_crt = decode_into_field::<S, F>(
+                    assigned_x_bytes_cleared,
+                    &fp_chip.limb_bases,
+                    gate,
+                    ctx,
+                );
 
                 // Load private witness y coordinate
                 let y_crt = fp_chip.load_private(ctx, *y_coord);
@@ -286,7 +285,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
     ) -> [AssignedValue<F>; 2] {
         let gate = self.range().gate();
         // assertion check for assigned_bytes to be equal to S::G1_FQ_BYTES from specification
-        assert_eq!(assigned_bytes.len(), S::G1_BYTES_COMPRESSED);
+        assert_eq!(assigned_bytes.len(), S::FQ_BYTES);
 
         // TODO: remove next 2 lines after switching to bls12-381
         let mut assigned_bytes = assigned_bytes.to_vec();
@@ -318,50 +317,6 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
         // Composing back to the original number but zeroing the first bit (MSB)
         // c = b_shift_msb / 2 + bit * 128 = b_shift_msb / 2 (since bit := 0)
         range.div_mod(ctx, b_shift_msb, BigUint::from(2u64), 8).0
-    }
-
-    /// Converts Fq bytes to Fq point.
-    pub fn decode_fq(
-        &self,
-        assigned_bytes: &[AssignedValue<F>],
-        fq: &Fq,
-        ctx: &mut Context<F>,
-    ) -> ProperCrtUint<F> {
-        let range = self.range();
-        let gate = range.gate();
-        let fp_chip = self.fp_chip();
-
-        let two = F::from(2);
-        let f256 = ctx.load_constant(two.pow_const(8));
-
-        // TODO: try optimized solution if LIMB_BITS i a multiple of 8:
-        // https://github.com/axiom-crypto/axiom-eth/blob/6d2a4acf559a8716b867a715f3acfab745fbad3f/src/util/mod.rs#L419
-        let bytes_per_limb = S::G1_BYTES_COMPRESSED / S::NUM_LIMBS + 1;
-        let field_limbs = &assigned_bytes
-            .chunks(S::G1_BYTES_COMPRESSED)
-            .map(|fq_bytes| {
-                fq_bytes
-                    .chunks(bytes_per_limb)
-                    .map(|chunk| {
-                        chunk.iter().rev().fold(ctx.load_zero(), |acc, &byte| {
-                            gate.mul_add(ctx, acc, f256, byte)
-                        })
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
-
-        let x = {
-            let assigned_uint = ProperUint::new(field_limbs[0].to_vec());
-            let value = BigUint::from_bytes_le(fq.to_repr().as_ref());
-            assigned_uint.into_crt(ctx, gate, value, &fp_chip.limb_bases, S::LIMB_BITS)
-        };
-
-        // assertion check for field_limbs vector to be equal to S::NUM_LIMBS from specification
-        for fl in field_limbs.iter() {
-            assert_eq!(fl.len(), S::NUM_LIMBS);
-        }
-        x
     }
 
     fn g1_chip(&'a self) -> EccChip<'a, F, FpChip<'a, F>> {

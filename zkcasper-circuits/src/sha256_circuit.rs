@@ -1199,7 +1199,7 @@ mod tests {
     #[test]
     fn test_sha256_single() {
         let k = 11;
-        let inputs = vec![vec![0u8; 32].into(); 1];
+        let inputs = vec![vec![0u8; 64].into(); 1];
         let circuit = TestSha256 {
             inner: Sha256Circuit::new(inputs),
         };

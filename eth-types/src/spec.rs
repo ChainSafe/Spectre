@@ -1,8 +1,14 @@
 use core::fmt::Debug;
+use std::iter;
 
-use halo2curves::{bls12_381, bn256, CurveExt};
+use halo2curves::bls12_381;
 
-pub trait Spec: 'static + Default + Debug {
+use crate::{
+    curve::{AppCurveExt, HashCurveExt},
+    Field,
+};
+
+pub trait Spec: 'static + Sized + Copy + Default + Debug {
     const VALIDATOR_REGISTRY_LIMIT: usize;
     const MAX_VALIDATORS_PER_COMMITTEE: usize;
     const MAX_COMMITTEES_PER_SLOT: usize;
@@ -13,17 +19,28 @@ pub trait Spec: 'static + Default + Debug {
     const STATE_TREE_DEPTH: usize;
     const STATE_TREE_LEVEL_PUBKEYS: usize;
     const STATE_TREE_LEVEL_VALIDATORS: usize;
-    const G1_BYTES_COMPRESSED: usize;
+    const FQ_BYTES: usize;
+    const FQ2_BYTES: usize;
     const G1_BYTES_UNCOMPRESSED: usize;
-    const G2_BYTES_COMPRESSED: usize;
     const LIMB_BITS: usize;
     const NUM_LIMBS: usize;
-    type PubKeysCurve: CurveExt;
-    type SiganturesCurve: CurveExt;
+    const DST: &'static [u8];
+
+    type PubKeysCurve: AppCurveExt;
+    type SiganturesCurve: AppCurveExt + HashCurveExt;
+
+    fn limb_bytes_bases<F: Field>() -> Vec<F> {
+        iter::repeat(8)
+            .enumerate()
+            .map(|(i, x)| i * x)
+            .take_while(|&bits| bits <= Self::LIMB_BITS)
+            .map(|bits| F::from_u128(1u128 << bits))
+            .collect()
+    }
 }
 
 /// Ethereum Foundation specifications.
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Test;
 
 impl Spec for Test {
@@ -37,16 +54,18 @@ impl Spec for Test {
     const STATE_TREE_DEPTH: usize = 10;
     const STATE_TREE_LEVEL_PUBKEYS: usize = 10;
     const STATE_TREE_LEVEL_VALIDATORS: usize = Self::STATE_TREE_LEVEL_PUBKEYS - 1;
-    const G1_BYTES_COMPRESSED: usize = 32; // TODO: 48 for BLS12-381.
-    const G1_BYTES_UNCOMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
-    const G2_BYTES_COMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
+    const FQ_BYTES: usize = 32; // TODO: 48 for BLS12-381.
+    const FQ2_BYTES: usize = Self::FQ_BYTES * 2;
+    const G1_BYTES_UNCOMPRESSED: usize = Self::FQ_BYTES * 2;
     const LIMB_BITS: usize = 88;
     const NUM_LIMBS: usize = 3;
-    type PubKeysCurve = bn256::G1;
-    type SiganturesCurve = bn256::G2;
+    const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
+
+    type PubKeysCurve = bls12_381::G1;
+    type SiganturesCurve = bls12_381::G2;
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Mainnet;
 
 impl Spec for Mainnet {
@@ -61,11 +80,13 @@ impl Spec for Mainnet {
     // TODO: calculate and verify the pubkeys level for mainnet
     const STATE_TREE_LEVEL_PUBKEYS: usize = 49;
     const STATE_TREE_LEVEL_VALIDATORS: usize = Self::STATE_TREE_LEVEL_PUBKEYS - 1;
-    const G1_BYTES_COMPRESSED: usize = 48;
-    const G1_BYTES_UNCOMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
-    const G2_BYTES_COMPRESSED: usize = Self::G1_BYTES_COMPRESSED * 2;
+    const FQ_BYTES: usize = 48;
+    const G1_BYTES_UNCOMPRESSED: usize = Self::FQ_BYTES * 2;
+    const FQ2_BYTES: usize = Self::FQ_BYTES * 2;
     const LIMB_BITS: usize = 112;
-    const NUM_LIMBS: usize = 5;
+    const NUM_LIMBS: usize = 4;
+    const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
+
     type PubKeysCurve = bls12_381::G1;
     type SiganturesCurve = bls12_381::G2;
 }

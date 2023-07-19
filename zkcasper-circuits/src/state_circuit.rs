@@ -250,7 +250,7 @@ mod tests {
             config
                 .0
                 .sha256_table
-                .dev_load(&mut layouter, &hash_inputs, challenge.clone())?;
+                .dev_load(&mut layouter, &hash_inputs, challenge)?;
             self.state_circuit.synthesize_sub(
                 &mut config.0,
                 &config.1.values(&mut layouter),

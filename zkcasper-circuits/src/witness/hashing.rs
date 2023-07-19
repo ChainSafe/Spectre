@@ -102,6 +102,12 @@ impl<IL: Into<HashInputChunk<u8>>, IR: Into<HashInputChunk<u8>>> From<(IL, IR)> 
     }
 }
 
+impl<F: Field, I: Into<HashInputChunk<QuantumCell<F>>>> From<I> for HashInput<QuantumCell<F>> {
+    fn from(input: I) -> Self {
+        HashInput::Single(input.into())
+    }
+}
+
 impl<F: Field, I: Into<HashInputChunk<u8>>> WitnessFrom<I> for HashInput<QuantumCell<F>> {
     fn witness_from(input: I) -> Self {
         let input: HashInputChunk<u8> = input.into();

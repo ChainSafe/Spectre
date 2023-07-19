@@ -1,10 +1,14 @@
 use super::Validator;
+use eth_types::Spec;
 pub use ethereum_consensus::phase0::{AttestationData, IndexedAttestation};
 use halo2curves::{
     bn256::{G1Affine, G2Affine},
     group::{prime::PrimeCurveAffine, Curve, GroupEncoding},
 };
 use ssz_rs::Merkleized;
+
+#[allow(type_alias_bounds)]
+pub type Attestation<S: Spec> = IndexedAttestation<{ S::MAX_VALIDATORS_PER_COMMITTEE }>;
 
 pub fn attestations_dev<const MAX_VALIDATORS_PER_COMMITTEE: usize>(
     validators: Vec<Validator>,
