@@ -1,10 +1,11 @@
+#![allow(incomplete_features)]
 #![feature(int_roundings)]
 #![feature(associated_type_bounds)]
-#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(const_cmp)]
 #![feature(stmt_expr_attributes)]
 #![feature(trait_alias)]
+#![feature(generic_arg_infer)]
 #![allow(unused, clippy::uninlined_format_args, clippy::needless_range_loop)]
 pub(crate) mod gadget;
 pub mod table;

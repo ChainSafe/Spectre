@@ -2,7 +2,7 @@ use super::Validator;
 use eth_types::Spec;
 pub use ethereum_consensus::phase0::{AttestationData, IndexedAttestation};
 use halo2curves::{
-    bn256::{G1Affine, G2Affine},
+    bls12_381::{G1Affine, G2Affine},
     group::{prime::PrimeCurveAffine, Curve, GroupEncoding},
 };
 use ssz_rs::Merkleized;
@@ -29,7 +29,7 @@ pub fn attestations_dev<const MAX_VALIDATORS_PER_COMMITTEE: usize>(
     let _agg_pk = validators
         .into_iter()
         .map(|validator| {
-            let pk_compressed = validator.pubkey[..32].to_vec();
+            let pk_compressed = validator.pubkey.to_vec();
             G1Affine::from_bytes(&pk_compressed.as_slice().try_into().unwrap()).unwrap()
         })
         .fold(G1Affine::identity(), |acc, x| (acc + x).to_affine());

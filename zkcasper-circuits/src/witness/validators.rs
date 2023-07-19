@@ -22,6 +22,7 @@ pub struct Validator {
     pub exit_epoch: u64,
     pub slashed: bool,
     pub pubkey: Vec<u8>,
+    pub pubkey_uncompressed: Vec<u8>,
 }
 
 /// Committee
@@ -89,6 +90,7 @@ impl Validator {
                 exit_epoch,
                 slashed: eth_validator.slashed,
                 pubkey: eth_validator.public_key.as_ref().to_vec(),
+                pubkey_uncompressed: vec![], // FIXME
             };
             banshee_validators.push(banshee_validator);
         }

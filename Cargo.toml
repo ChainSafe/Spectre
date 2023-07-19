@@ -41,3 +41,6 @@ halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "flyingno
 #     "display",
 # ] }
 # halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
+
+# [patch."https://github.com/timoftime/halo2curves"]
+# halo2curves = { path = "../halo2curves" }

@@ -1,28 +1,53 @@
+use std::iter;
+
 use halo2_ecc::fields::PrimeField;
+use halo2_ecc::halo2_base::utils::CurveAffineExt;
 use halo2_proofs::arithmetic::Field as Halo2Field;
 use halo2curves::CurveExt;
 use halo2curves::FieldExt;
 use itertools::Itertools;
 use pasta_curves::arithmetic::SqrtRatio;
+use pasta_curves::group::GroupEncoding;
 
-pub trait AppCurveExt: CurveExt {
+use crate::Field;
+
+pub trait AppCurveExt: CurveExt<AffineExt: CurveAffineExt> {
+    /// Prime field of order $p$ over which the elliptic curves is defined.
     type Fp: PrimeField;
-
-    const BASE_BYTES: usize;
+    /// Prime field of order $q = p^k$ where k is the embedding degree.
+    type Fq: PrimeField + FieldExt + Halo2Field = Self::Fp;
+    /// Affine version of the curve.
+    type Affine: CurveAffineExt<Base = Self::Fq> + GroupEncoding<Repr = Self::CompressedRepr>;
+    /// Compressed representation of the curve.
+    type CompressedRepr: TryFrom<Vec<u8>, Error = std::array::TryFromSliceError>;
+    /// Constant $b$ in the curve equation $y^2 = x^3 + b$.
+    const B: u64;
+    // Bytes needed to encode [`Self::Fq];
+    const BYTES_FQ: usize;
+    // Bytes needed to encode curve in uncompressed form.
     const BYTES_UNCOMPRESSED: usize;
+    /// Number of bits in a single limb.
     const LIMB_BITS: usize;
+    /// Number of limbs in the prime field.
     const NUM_LIMBS: usize;
+
+    fn limb_bytes_bases<F: Field>() -> Vec<F> {
+        iter::repeat(8)
+            .enumerate()
+            .map(|(i, x)| i * x)
+            .take_while(|&bits| bits <= Self::LIMB_BITS)
+            .map(|bits| F::from_u128(1u128 << bits))
+            .collect()
+    }
 }
 
-pub trait HashCurveExt: AppCurveExt {
-    type Fq: FieldExt + Halo2Field + SqrtRatio;
+pub trait HashCurveExt: AppCurveExt<Fq: SqrtRatio> {
     const BLS_X: u64;
 
     const SWU_A: Self::Fq;
     const SWU_B: Self::Fq;
     const SWU_Z: Self::Fq;
-    // First root of unity
-    const SWU_RV1: Self::Fq;
+
     const ISO_XNUM: [Self::Fq; 4];
     const ISO_XDEN: [Self::Fq; 3];
     const ISO_YNUM: [Self::Fq; 4];
@@ -37,27 +62,32 @@ pub trait HashCurveExt: AppCurveExt {
 
 mod bls12_381 {
     use super::*;
-    use halo2curves::bls12_381::{Fq, Fq2, G1, G2};
+    use halo2curves::bls12_381::{Fq, Fq2, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2};
 
     impl AppCurveExt for G1 {
+        type Affine = G1Affine;
         type Fp = Fq;
-        const BASE_BYTES: usize = 48;
-        const BYTES_UNCOMPRESSED: usize = Self::BASE_BYTES * 2;
+        type CompressedRepr = G1Compressed;
+        const BYTES_FQ: usize = 48;
+        const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
         const LIMB_BITS: usize = 112;
         const NUM_LIMBS: usize = 4;
+        const B: u64 = 4;
     }
 
     impl AppCurveExt for G2 {
+        type Affine = G2Affine;
         type Fp = Fq;
-
-        const BASE_BYTES: usize = 96;
-        const BYTES_UNCOMPRESSED: usize = Self::BASE_BYTES * 2;
+        type Fq = Fq2;
+        type CompressedRepr = G2Compressed;
+        const BYTES_FQ: usize = 96;
+        const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
         const LIMB_BITS: usize = 112;
         const NUM_LIMBS: usize = 4;
+        const B: u64 = 4;
     }
 
     impl HashCurveExt for G2 {
-        type Fq = Fq2;
         const BLS_X: u64 = 0xd201000000010000;
 
         const SWU_A: Self::Fq = Self::Fq {
@@ -107,25 +137,6 @@ mod bls12_381 {
                 0xeca8_f331_8332_bb7a,
                 0xef14_8d1e_a0f4_c069,
                 0x040a_b326_3eff_0206,
-            ]),
-        };
-
-        const SWU_RV1: Self::Fq = Self::Fq {
-            c0: Fq::from_raw_unchecked([
-                0x7bcf_a7a2_5aa3_0fda,
-                0xdc17_dec1_2a92_7e7c,
-                0x2f08_8dd8_6b4e_bef1,
-                0xd1ca_2087_da74_d4a7,
-                0x2da2_5966_96ce_bc1d,
-                0x0e2b_7eed_bbfd_87d2,
-            ]),
-            c1: Fq::from_raw_unchecked([
-                0x7bcf_a7a2_5aa3_0fda,
-                0xdc17_dec1_2a92_7e7c,
-                0x2f08_8dd8_6b4e_bef1,
-                0xd1ca_2087_da74_d4a7,
-                0x2da2_5966_96ce_bc1d,
-                0x0e2b_7eed_bbfd_87d2,
             ]),
         };
 
@@ -397,5 +408,21 @@ mod bls12_381 {
                 .unwrap();
             Fq2 { c0, c1 }
         }
+    }
+}
+
+mod bn254 {
+    use super::*;
+    use halo2curves::bn256::{Fq, G1Affine, G1Compressed, G1};
+
+    impl AppCurveExt for G1 {
+        type Affine = G1Affine;
+        type Fp = Fq;
+        type CompressedRepr = G1Compressed;
+        const BYTES_FQ: usize = 32;
+        const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
+        const LIMB_BITS: usize = 88;
+        const NUM_LIMBS: usize = 3;
+        const B: u64 = 3;
     }
 }

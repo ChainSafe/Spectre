@@ -1,28 +1,28 @@
 use std::{cell::RefCell, collections::HashMap, marker::PhantomData, vec};
 
 use crate::{
-    gadget::crypto::{CachedHashChip, HashChip, Sha256Chip},
+    gadget::crypto::{CachedHashChip, Fp2Chip, Fp2Point, G2Chip, HashChip, Sha256Chip},
     sha256_circuit::Sha256CircuitConfig,
     util::{Challenges, IntoWitness, SubCircuit, SubCircuitConfig},
     witness::{self, Attestation, HashInput, HashInputChunk},
 };
-use eth_types::{Field, Spec};
+use eth_types::{AppCurveExt, Field, Spec};
 use halo2_base::{
     gates::{builder::GateThreadBuilder, range::RangeConfig},
     safe_types::RangeChip,
+    utils::CurveAffineExt,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bn254::{Fp2Chip, FpChip, FqPoint},
     ecc::{EcPoint, EccChip},
-    fields::FieldChip,
+    fields::{FieldChip, FieldExtConstructor},
 };
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{ConstraintSystem, Error},
 };
-use halo2curves::{bn256::G2Affine, group::GroupEncoding};
 use itertools::Itertools;
+use pasta_curves::group::GroupEncoding;
 use ssz_rs::Merkleized;
 pub use witness::{AttestationData, IndexedAttestation};
 
@@ -33,6 +33,9 @@ pub const ZERO_HASHES: [[u8; 32]; 2] = [
         32, 217, 240, 232, 234, 152, 49, 169, 39, 89, 251, 75,
     ],
 ];
+
+#[allow(type_alias_bounds)]
+type FpChip<'chip, F, C: AppCurveExt> = halo2_ecc::fields::fp::FpChip<'chip, F, C::Fp>;
 
 #[derive(Clone, Debug)]
 pub struct AttestationsCircuitConfig<F: Field> {
@@ -69,7 +72,7 @@ where
     builder: RefCell<GateThreadBuilder<F>>,
     attestations: &'a [Attestation<S>],
     range: &'a RangeChip<F>,
-    fp_chip: FpChip<'a, F>,
+    fp_chip: FpChip<'a, F, S::SiganturesCurve>,
     zero_hashes: RefCell<HashMap<usize, HashInputChunk<QuantumCell<F>>>>,
     _spec: PhantomData<S>,
 }
@@ -77,6 +80,8 @@ where
 impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
     AttestationsCircuitBuilder<'a, S, F, COMMITTEE_MAX_SIZE>
 where
+    <S::SiganturesCurve as AppCurveExt>::Fq:
+        FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     pub fn new(
@@ -84,7 +89,11 @@ where
         attestations: &'a [Attestation<S>],
         range: &'a RangeChip<F>,
     ) -> Self {
-        let fp_chip = FpChip::new(range, S::LIMB_BITS, S::NUM_LIMBS);
+        let fp_chip = FpChip::<F, S::SiganturesCurve>::new(
+            range,
+            S::SiganturesCurve::LIMB_BITS,
+            S::SiganturesCurve::NUM_LIMBS,
+        );
         Self {
             builder: RefCell::new(builder),
             range,
@@ -205,19 +214,17 @@ where
     fn assign_signature(
         &self,
         bytes_compressed: &[u8],
-        g2_chip: &EccChip<'a, F, Fp2Chip<'a, F>>,
+        g2_chip: &G2Chip<F, S::SiganturesCurve>,
         ctx: &mut Context<F>,
-    ) -> EcPoint<F, FqPoint<F>> {
-        // FIXME: remove next line after switching to BLS12-381
-        let bytes_compressed = &bytes_compressed[..S::FQ2_BYTES];
-        let sig_affine = G2Affine::from_bytes(
-            &bytes_compressed
-                .try_into()
-                .expect("signature bytes length not match"),
+    ) -> EcPoint<F, Fp2Point<F>> {
+        let sig_affine = <S::SiganturesCurve as AppCurveExt>::Affine::from_bytes(
+            &bytes_compressed.to_vec().try_into().unwrap(),
         )
         .unwrap();
 
-        g2_chip.load_private_unchecked(ctx, (sig_affine.x, sig_affine.y))
+        let (x, y) = sig_affine.into_coordinates();
+
+        g2_chip.load_private_unchecked(ctx, (x, y))
     }
 
     fn merkleize_chunks<I: IntoIterator<Item = HashInputChunk<QuantumCell<F>>>>(
@@ -273,11 +280,11 @@ where
         Ok(root.bytes)
     }
 
-    fn fp2_chip(&self) -> Fp2Chip<'_, F> {
-        Fp2Chip::new(self.fp_chip())
+    fn fp2_chip(&self) -> Fp2Chip<'_, F, S::SiganturesCurve> {
+        Fp2Chip::<F, S::SiganturesCurve>::new(self.fp_chip())
     }
 
-    fn fp_chip(&self) -> &FpChip<'_, F> {
+    fn fp_chip(&self) -> &FpChip<'_, F, S::SiganturesCurve> {
         &self.fp_chip
     }
 
@@ -289,6 +296,8 @@ where
 impl<'a, S: Spec, F: Field, const MAX_VALIDATORS_PER_COMMITTEE: usize> SubCircuit<F>
     for AttestationsCircuitBuilder<'a, S, F, MAX_VALIDATORS_PER_COMMITTEE>
 where
+    <S::SiganturesCurve as AppCurveExt>::Fq:
+        FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     type Config = AttestationsCircuitConfig<F>;
@@ -358,6 +367,8 @@ mod tests {
 
     impl<'a, S: Spec, F: Field, const CMS: usize> Circuit<F> for TestCircuit<'a, S, F, CMS>
     where
+        <S::SiganturesCurve as AppCurveExt>::Fq:
+            FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
         [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
     {
         type Config = (AttestationsCircuitConfig<F>, Challenges<F>);

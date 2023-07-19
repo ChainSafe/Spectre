@@ -1,3 +1,7 @@
+#![allow(incomplete_features)]
+#![feature(associated_type_bounds)]
+#![feature(associated_type_defaults)]
+#![feature(generic_const_exprs)]
 mod spec;
 pub use spec::{Mainnet, Spec, Test};
 

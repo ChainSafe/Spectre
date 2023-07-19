@@ -16,6 +16,7 @@ use halo2_base::{
 };
 use halo2_ecc::{
     bigint::{CRTInteger, ProperUint},
+    ecc::EccChip,
     fields::{
         fp::FpChip, vector::FieldVector, FieldChip, FieldExtConstructor, PrimeField, Selectable,
     },
@@ -27,7 +28,11 @@ use lazy_static::{__Deref, lazy_static};
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
-use super::{sha256::HashChip, Fp2Chip, G1Point, G2Point, EccChip, Fp2Point, util::{i2osp, strxor, fp2_sgn0}};
+use super::{
+    sha256::HashChip,
+    util::{fp2_sgn0, i2osp, strxor},
+    Fp2Chip, Fp2Point, G1Point, G2Point,
+};
 
 const G2_EXT_DEGREE: usize = 2;
 
@@ -104,7 +109,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
         )?;
 
         let limb_bases = cache.binary_bases.get_or_insert_with(|| {
-            S::limb_bytes_bases()
+            C::limb_bytes_bases()
                 .into_iter()
                 .map(|base| ctx.load_constant(base))
                 .collect()
@@ -112,6 +117,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
 
         // 2^256
         let two_pow_256 = fp_chip.load_constant_uint(ctx, BigUint::from(2u8).pow(256));
+        let fq_bytes = C::BYTES_FQ / 2;
 
         let mut fst = true;
         let u = extended_msg
@@ -122,10 +128,10 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
                 FieldVector(
                     elm_chunk
                         .map(|tv| {
-                            let mut buf = vec![zero; S::FQ_BYTES];
-                            let rem = S::FQ_BYTES - 32;
+                            let mut buf = vec![zero; fq_bytes];
+                            let rem = fq_bytes - 32;
                             buf[rem..].copy_from_slice(&tv[..32]);
-                            let lo = decode_into_field_be::<S, F, _>(
+                            let lo = decode_into_field_be::<F, C, _>(
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
@@ -133,15 +139,14 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
                             );
 
                             buf[rem..].copy_from_slice(&tv[32..]);
-                            let hi = decode_into_field_be::<S, F, _>(
+                            let hi = decode_into_field_be::<F, C, _>(
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
                                 ctx,
                             );
 
-                            let lo_2_256 =
-                                fp_chip.mul_no_carry(ctx, lo, two_pow_256.clone());
+                            let lo_2_256 = fp_chip.mul_no_carry(ctx, lo, two_pow_256.clone());
                             let lo_2_356_hi = fp_chip.add_no_carry(ctx, lo_2_256, hi);
                             fp_chip.carry_mod(ctx, lo_2_356_hi)
                         })
@@ -166,7 +171,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
         C::Fq: FieldExtConstructor<C::Fp, 2>,
     {
         let fp2_chip = Fp2Chip::<_, C>::new(fp_chip);
-        let ecc_chip = EccChip::<F, C>::new(&fp2_chip);
+        let ecc_chip = EccChip::<F, Fp2Chip<F, C>>::new(&fp2_chip);
 
         let [u0, u1] = u;
 
@@ -238,8 +243,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
             0,
             hash_chip
                 .digest(
-                    b_0
-                        .into_iter()
+                    b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
                         .into(),
@@ -433,7 +437,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
     /// - https://github.com/paulmillr/noble-curves/blob/bf70ba9/src/bls12-381.ts#L1111
     fn clear_cofactor<C: HashCurveExt>(
         p: G2Point<F>,
-        ecc_chip: &EccChip<F, C>,
+        ecc_chip: &EccChip<F, Fp2Chip<F, C>>,
         ctx: &mut Context<F>,
         cache: &mut HashToCurveCache<F>,
     ) -> G2Point<F>
@@ -510,7 +514,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
 
     pub fn mul_by_bls_x<C: HashCurveExt>(
         p: G2Point<F>,
-        ecc_chip: &EccChip<F, C>,
+        ecc_chip: &EccChip<F, Fp2Chip<F, C>>,
         ctx: &mut Context<F>,
         cache: &mut HashToCurveCache<F>,
     ) -> G2Point<F>
@@ -584,7 +588,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
             bigint_to_le_bytes(
                 c.limbs().iter().map(|e| *e.value()),
                 C::LIMB_BITS,
-                C::BASE_BYTES / 2,
+                C::BYTES_FQ / 2,
             )
         }))
     }
@@ -606,22 +610,6 @@ pub struct HashToCurveCache<F: Field> {
     bsl_x_bits: Option<Vec<AssignedValue<F>>>,
 }
 
-fn print_fq2_dev<C: AppCurveExt, F: Field>(fq2: &Fp2Point<F>, label: &str) {
-    let c0_bytes = bigint_to_le_bytes(
-        fq2.0[0].limbs().iter().map(|e| *e.value()),
-        C::LIMB_BITS,
-        C::BASE_BYTES / 2,
-    );
-    let c1_bytes = bigint_to_le_bytes(
-        fq2.0[1].limbs().iter().map(|e| *e.value()),
-        C::LIMB_BITS,
-        C::BASE_BYTES / 2,
-    );
-    let c0 = BigUint::from_bytes_le(&c0_bytes);
-    let c1 = BigUint::from_bytes_le(&c1_bytes);
-    println!("{label}: ({}, {})", c0, c1);
-}
-
 #[cfg(test)]
 mod test {
     use std::vec;
@@ -630,7 +618,7 @@ mod test {
     use crate::gadget::crypto::Sha256Chip;
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::SHA256Table;
-    use crate::util::{Challenges, IntoWitness, SubCircuitConfig};
+    use crate::util::{print_fq2_dev, Challenges, IntoWitness, SubCircuitConfig};
 
     use super::*;
     use eth_types::Mainnet;
@@ -647,7 +635,6 @@ mod test {
         },
     };
     use halo2_ecc::bigint::CRTInteger;
-    use halo2curves::bls12_381;
     use sha2::{Digest, Sha256};
 
     #[derive(Debug, Clone)]
@@ -665,7 +652,11 @@ mod test {
         _spec: PhantomData<S>,
     }
 
-    impl<S: Spec, F: Field> Circuit<F> for TestCircuit<S, F> {
+    impl<S: Spec, F: Field> Circuit<F> for TestCircuit<S, F>
+    where
+        <S::SiganturesCurve as AppCurveExt>::Fq:
+            FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
+    {
         type Config = TestConfig<F>;
         type FloorPlanner = SimpleFloorPlanner;
 
@@ -711,11 +702,12 @@ mod test {
             );
 
             let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(sha256);
-            let fp_chip = halo2_ecc::fields::fp::FpChip::<F, bls12_381::Fq>::new(
-                &self.range,
-                S::LIMB_BITS,
-                S::NUM_LIMBS,
-            );
+            let fp_chip =
+                halo2_ecc::fields::fp::FpChip::<F, <S::SiganturesCurve as AppCurveExt>::Fp>::new(
+                    &self.range,
+                    S::SiganturesCurve::LIMB_BITS,
+                    S::SiganturesCurve::NUM_LIMBS,
+                );
 
             layouter.assign_region(
                 || "hash to curve test",
@@ -730,7 +722,7 @@ mod test {
                     let ctx = builder.main(0);
 
                     let mut cache = HashToCurveCache::<F>::default();
-                    let hp = h2c_chip.hash_to_curve::<bls12_381::G2>(
+                    let hp = h2c_chip.hash_to_curve::<S::SiganturesCurve>(
                         self.test_input.clone(),
                         &fp_chip,
                         ctx,
@@ -738,8 +730,8 @@ mod test {
                         &mut cache,
                     )?;
 
-                    print_fq2_dev::<bls12_381::G2, F>(hp.x(), "res_p.x");
-                    print_fq2_dev::<bls12_381::G2, F>(hp.y(), "res_p.y");
+                    print_fq2_dev::<S::SiganturesCurve, F>(hp.x(), "res_p.x");
+                    print_fq2_dev::<S::SiganturesCurve, F>(hp.y(), "res_p.y");
 
                     let extra_assignments = h2c_chip.hash_chip.take_extra_assignments();
 

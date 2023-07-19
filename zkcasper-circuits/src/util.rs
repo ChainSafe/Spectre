@@ -20,7 +20,11 @@ use halo2_ecc::{
 use itertools::Itertools;
 use num_bigint::BigUint;
 
-use crate::{sha256_circuit::Sha256CircuitConfig, witness};
+use crate::{
+    gadget::crypto::{Fp2Point, FpPoint},
+    sha256_circuit::Sha256CircuitConfig,
+    witness,
+};
 use eth_types::*;
 pub use gadgets::util::{and, not, or, rlc, select, sum, xor, Expr};
 use halo2_proofs::{
@@ -230,15 +234,15 @@ pub fn log2_ceil(n: usize) -> u32 {
 
 /// Converts assigned bytes into biginterger
 /// Warning: method does not perfrom any checks on input `bytes`.
-pub fn decode_into_field<S: Spec, F: Field>(
+pub fn decode_into_field<F: Field, C: AppCurveExt>(
     bytes: impl IntoIterator<Item = AssignedValue<F>>,
     limb_bases: &[F],
     gate: &impl GateInstructions<F>,
     ctx: &mut Context<F>,
 ) -> ProperCrtUint<F> {
     let bytes = bytes.into_iter().collect_vec();
-    let limb_bytes = S::LIMB_BITS / 8;
-    let bits = S::NUM_LIMBS * S::LIMB_BITS;
+    let limb_bytes = C::LIMB_BITS / 8;
+    let bits = C::NUM_LIMBS * C::LIMB_BITS;
 
     let value = BigUint::from_bytes_le(
         &bytes
@@ -261,10 +265,10 @@ pub fn decode_into_field<S: Spec, F: Field>(
         ProperUint::new(limbs)
     };
 
-    assigned_uint.into_crt(ctx, gate, value, limb_bases, S::LIMB_BITS)
+    assigned_uint.into_crt(ctx, gate, value, limb_bases, C::LIMB_BITS)
 }
 
-pub fn decode_into_field_be<S: Spec, F: Field, I: IntoIterator<Item = AssignedValue<F>>>(
+pub fn decode_into_field_be<F: Field, C: AppCurveExt, I: IntoIterator<Item = AssignedValue<F>>>(
     bytes: I,
     limb_bases: &[F],
     gate: &impl GateInstructions<F>,
@@ -274,17 +278,7 @@ where
     I::IntoIter: DoubleEndedIterator,
 {
     let bytes = bytes.into_iter().rev().collect_vec();
-    decode_into_field::<S, F>(bytes, limb_bases, gate, ctx)
-}
-
-pub fn decode_into_field_modp<'a, S: Spec, F: Field, FP: ScalarField>(
-    bytes: impl IntoIterator<Item = AssignedValue<F>>,
-    fp_chip: &FpChip<'a, F, FP>,
-    gate: &impl GateInstructions<F>,
-    ctx: &mut Context<F>,
-) -> ProperCrtUint<F> {
-    let overflow = decode_into_field::<S, F>(bytes, &fp_chip.limb_bases, gate, ctx);
-    fp_chip.carry_mod(ctx, overflow.into())
+    decode_into_field::<F, C>(bytes, limb_bases, gate, ctx)
 }
 
 pub fn bigint_to_le_bytes<F: Field>(
@@ -298,4 +292,30 @@ pub fn bigint_to_le_bytes<F: Field>(
         .flat_map(|x| x.to_bytes_le()[..limb_bytes].to_vec())
         .take(total_bytes)
         .collect()
+}
+
+pub fn print_fq_dev<C: AppCurveExt, F: Field>(x: &FpPoint<F>, label: &str) {
+    let bytes = bigint_to_le_bytes(
+        x.limbs().iter().map(|e| *e.value()),
+        C::LIMB_BITS,
+        C::BYTES_FQ,
+    );
+    let bn = BigUint::from_bytes_le(&bytes);
+    println!("{label}: {}", bn);
+}
+
+pub fn print_fq2_dev<C: AppCurveExt, F: Field>(u: &Fp2Point<F>, label: &str) {
+    let c0_bytes = bigint_to_le_bytes(
+        u.0[0].limbs().iter().map(|e| *e.value()),
+        C::LIMB_BITS,
+        C::BYTES_FQ / 2,
+    );
+    let c1_bytes = bigint_to_le_bytes(
+        u.0[1].limbs().iter().map(|e| *e.value()),
+        C::LIMB_BITS,
+        C::BYTES_FQ / 2,
+    );
+    let c0 = BigUint::from_bytes_le(&c0_bytes);
+    let c1 = BigUint::from_bytes_le(&c1_bytes);
+    println!("{label}: ({}, {})", c0, c1);
 }
