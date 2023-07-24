@@ -104,6 +104,9 @@ pub trait SubCircuit<F: Field> {
     /// Configuration of the SubCircuit.
     type Config: SubCircuitConfig<F>;
 
+    /// Arguments for [`synthesize_sub`].
+    type SynthesisArgs;
+
     /// Returns number of unusable rows of the SubCircuit, which should be
     /// `meta.blinding_factors() + 1`.
     fn unusable_rows() -> usize;
@@ -124,6 +127,7 @@ pub trait SubCircuit<F: Field> {
         config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
+        args: Self::SynthesisArgs,
     ) -> Result<(), Error>;
 
     /// Return the minimum number of rows required to prove the block.

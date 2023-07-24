@@ -369,6 +369,7 @@ impl<F: Field> ValidatorsCircuit<F> {
 
 impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
     type Config = ValidatorsCircuitConfig<F>;
+    type SynthesisArgs = ();
 
     fn new_from_block(block: &witness::Block<F>) -> Self {
         Self::new(
@@ -392,6 +393,7 @@ impl<F: Field> SubCircuit<F> for ValidatorsCircuit<F> {
         config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
+        _: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         layouter.assign_region(
             || "validators circuit",
@@ -478,6 +480,7 @@ mod tests {
                 &mut config.0,
                 &config.1.values(&mut layouter),
                 &mut layouter,
+                (),
             )?;
             Ok(())
         }

@@ -31,6 +31,8 @@ pub trait AppCurveExt: CurveExt<AffineExt: CurveAffineExt> {
     /// Number of limbs in the prime field.
     const NUM_LIMBS: usize;
 
+    fn generator_affine() -> <Self as AppCurveExt>::Affine;
+
     fn limb_bytes_bases<F: Field>() -> Vec<F> {
         iter::repeat(8)
             .enumerate()
@@ -73,6 +75,10 @@ mod bls12_381 {
         const LIMB_BITS: usize = 112;
         const NUM_LIMBS: usize = 4;
         const B: u64 = 4;
+
+        fn generator_affine() -> G1Affine {
+            G1Affine::generator()
+        }
     }
 
     impl AppCurveExt for G2 {
@@ -85,6 +91,10 @@ mod bls12_381 {
         const LIMB_BITS: usize = 112;
         const NUM_LIMBS: usize = 4;
         const B: u64 = 4;
+
+        fn generator_affine() -> G2Affine {
+            G2Affine::generator()
+        }
     }
 
     impl HashCurveExt for G2 {
@@ -424,5 +434,9 @@ mod bn254 {
         const LIMB_BITS: usize = 88;
         const NUM_LIMBS: usize = 3;
         const B: u64 = 3;
+
+        fn generator_affine() -> G1Affine {
+            G1Affine::generator()
+        }
     }
 }

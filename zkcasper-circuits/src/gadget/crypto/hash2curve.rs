@@ -40,14 +40,14 @@ const G2_EXT_DEGREE: usize = 2;
 const L: usize = 64;
 
 #[derive(Debug)]
-pub struct HashToCurveChip<S: Spec, F: Field, HC: HashChip<F>> {
-    hash_chip: HC,
+pub struct HashToCurveChip<'a, S: Spec, F: Field, HC: HashChip<F>> {
+    hash_chip: &'a HC,
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
-    pub fn new(hash_chip: HC) -> Self {
+impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> {
+    pub fn new(hash_chip: &'a HC) -> Self {
         Self {
             hash_chip,
             _f: PhantomData,
@@ -79,7 +79,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
     /// - https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve/blob/6ce20a1/poc/hash_to_field.py#L49
     /// - https://github.com/paulmillr/noble-curves/blob/bf70ba9/src/abstract/hash-to-curve.ts#L128
     /// - https://github.com/succinctlabs/telepathy-circuits/blob/d5c7771/circuits/hash_to_field.circom#L11
-    pub fn hash_to_field<C: HashCurveExt>(
+    fn hash_to_field<C: HashCurveExt>(
         &self,
         msg: HashInput<QuantumCell<F>>,
         fp_chip: &FpChip<F, C::Fp>,
@@ -102,7 +102,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
         let extended_msg = Self::expand_message_xmd(
             assigned_msg,
             len_in_bytes,
-            &self.hash_chip,
+            self.hash_chip,
             ctx,
             region,
             cache,
@@ -205,6 +205,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
         let gate = range.gate();
 
         // constants
+        const MAX_INPUT_SIZE: usize = 160;
         let zero = ctx.load_zero();
         let one = ctx.load_constant(F::one());
 
@@ -236,13 +237,13 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
             .chain(dst_prime.clone());
 
         let b_0 = hash_chip
-            .digest(msg_prime.into(), ctx, region)?
+            .digest::<MAX_INPUT_SIZE>(msg_prime.into(), ctx, region)?
             .output_bytes;
 
         b_vals.insert(
             0,
             hash_chip
-                .digest(
+                .digest::<MAX_INPUT_SIZE>(
                     b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
@@ -257,7 +258,7 @@ impl<S: Spec, F: Field, HC: HashChip<F>> HashToCurveChip<S, F, HC> {
             b_vals.insert(
                 i,
                 hash_chip
-                    .digest(
+                    .digest::<MAX_INPUT_SIZE>(
                         strxor(b_0, b_vals[i - 1], gate, ctx)
                             .into_iter()
                             .chain(iter::once(ctx.load_constant(F::from(i as u64 + 1))))
@@ -695,13 +696,12 @@ mod test {
             let sha256 = Sha256Chip::new(
                 &config.sha256_config,
                 &self.range,
-                config.max_byte_size,
                 config.challenges.sha256_input(),
                 None,
                 0,
             );
 
-            let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(sha256);
+            let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(&sha256);
             let fp_chip =
                 halo2_ecc::fields::fp::FpChip::<F, <S::SiganturesCurve as AppCurveExt>::Fp>::new(
                     &self.range,

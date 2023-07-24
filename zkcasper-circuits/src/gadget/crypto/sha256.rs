@@ -4,8 +4,8 @@ use halo2_base::gates::builder::KeygenAssignments;
 use halo2_proofs::circuit::Value;
 use halo2curves::group::ff::PrimeField;
 use itertools::Itertools;
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::{cell::RefCell, char::MAX};
 
 use crate::{
     sha256_circuit::{util::Sha256AssignedRows, Sha256CircuitConfig},
@@ -29,7 +29,7 @@ pub trait HashChip<F: Field> {
     const BLOCK_SIZE: usize;
     const DIGEST_SIZE: usize;
 
-    fn digest(
+    fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
         input: HashInput<QuantumCell<F>>,
         ctx: &mut Context<F>,
@@ -37,8 +37,6 @@ pub trait HashChip<F: Field> {
     ) -> Result<AssignedHashResult<F>, Error>;
 
     fn take_extra_assignments(&self) -> KeygenAssignments<F>;
-
-    fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>);
 
     fn range(&self) -> &RangeChip<F>;
 }
@@ -53,7 +51,6 @@ pub struct AssignedHashResult<F: Field> {
 #[derive(Debug)]
 pub struct Sha256Chip<'a, F: Field> {
     config: &'a Sha256CircuitConfig<F>,
-    pub max_input_size: usize,
     range: &'a RangeChip<F>,
     randomness: F,
     extra_assignments: RefCell<KeygenAssignments<F>>,
@@ -64,7 +61,7 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
     const BLOCK_SIZE: usize = 64;
     const DIGEST_SIZE: usize = 32;
 
-    fn digest(
+    fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
         input: HashInput<QuantumCell<F>>,
         ctx: &mut Context<F>,
@@ -78,12 +75,12 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         let mut assigned_input_bytes = assigned_input.to_vec();
         let rnd = QuantumCell::Constant(self.randomness);
         let input_byte_size = assigned_input_bytes.len();
-        let max_byte_size = self.max_input_size;
+        let max_byte_size = MAX_INPUT_SIZE;
         assert!(input_byte_size <= max_byte_size);
         let range = &self.range;
         let gate = &range.gate;
 
-        assert!(assigned_input_bytes.len() <= self.max_input_size);
+        assert!(assigned_input_bytes.len() <= MAX_INPUT_SIZE);
         let mut circuit_offset = self.sha256_circuit_offset.borrow_mut();
         let mut assigned_rows = Sha256AssignedRows::new(*circuit_offset);
         let assigned_hash_bytes =
@@ -210,10 +207,6 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         self.extra_assignments.take()
     }
 
-    fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>) {
-        self.extra_assignments = RefCell::new(extra_assignments);
-    }
-
     fn range(&self) -> &RangeChip<F> {
         self.range
     }
@@ -223,19 +216,21 @@ impl<'a, F: Field> Sha256Chip<'a, F> {
     pub fn new(
         config: &'a Sha256CircuitConfig<F>,
         range: &'a RangeChip<F>,
-        max_input_size: usize,
         randomness: Value<F>,
         extra_assignments: Option<KeygenAssignments<F>>,
         sha256_circui_offset: usize,
     ) -> Self {
         Self {
             config,
-            max_input_size,
             range,
             randomness: value_to_option(randomness).expect("randomness is not assigned"),
             extra_assignments: RefCell::new(extra_assignments.unwrap_or_default()),
             sha256_circuit_offset: RefCell::new(sha256_circui_offset),
         }
+    }
+
+    fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>) {
+        self.extra_assignments = RefCell::new(extra_assignments);
     }
 
     fn assigned_cell2value(
@@ -322,7 +317,10 @@ mod test {
         _f: PhantomData<F>,
     }
 
-    impl<F: Field> Circuit<F> for TestCircuit<F> {
+    impl<F: Field> Circuit<F> for TestCircuit<F>
+    where
+        [(); Self::MAX_BYTE_SIZE]:,
+    {
         type Config = TestConfig<F>;
         type FloorPlanner = SimpleFloorPlanner;
 
@@ -361,7 +359,6 @@ mod test {
             let sha256 = Sha256Chip::new(
                 &config.sha256_config,
                 &self.range,
-                config.max_byte_size,
                 config.challenges.sha256_input(),
                 None,
                 0,
@@ -379,7 +376,11 @@ mod test {
                     let builder = &mut self.builder.borrow_mut();
                     let ctx = builder.main(0);
 
-                    let result = sha256.digest(self.test_input.clone(), ctx, &mut region)?;
+                    let result = sha256.digest::<{ TestCircuit::<F>::MAX_BYTE_SIZE }>(
+                        self.test_input.clone(),
+                        ctx,
+                        &mut region,
+                    )?;
                     let assigned_hash = result.output_bytes;
                     println!(
                         "assigned hash: {:?}",

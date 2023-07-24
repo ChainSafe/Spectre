@@ -688,7 +688,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
             cb.gate(q_condition)
         });
 
-        println!("sha256 circuit degree: {}", meta.degree());
+        debug!("sha256 circuit degree: {}", meta.degree());
         debug!("minimum rows: {}", meta.minimum_rows());
 
         Sha256CircuitConfig {
@@ -1091,6 +1091,7 @@ pub struct Sha256Circuit<F: Field> {
 
 impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
     type Config = Sha256CircuitConfig<F>;
+    type SynthesisArgs = ();
 
     fn unusable_rows() -> usize {
         todo!()
@@ -1127,6 +1128,7 @@ impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
         config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
+        _: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         let witness = self.generate_witness(*challenges);
         let _ = config.assign(layouter, witness.as_slice());
@@ -1192,6 +1194,7 @@ mod tests {
                 &mut config.0,
                 &config.1.values(&mut layouter),
                 &mut layouter,
+                (),
             )
         }
     }

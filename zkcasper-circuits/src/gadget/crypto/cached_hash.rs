@@ -9,17 +9,17 @@ use crate::witness::HashInput;
 use super::sha256::{AssignedHashResult, HashChip, Sha256Chip};
 
 #[derive(Debug)]
-pub struct CachedHashChip<F: Field, HC: HashChip<F>> {
-    inner: HC,
+pub struct CachedHashChip<'a, F: Field, HC: HashChip<F> + 'a> {
+    pub inner: &'a HC,
     cache: RefCell<HashMap<HashInput<u8>, AssignedHashResult<F>>>,
 }
 
-impl<F: Field, HC: HashChip<F>> HashChip<F> for CachedHashChip<F, HC> {
+impl<'a, F: Field, HC: HashChip<F>> HashChip<F> for CachedHashChip<'a, F, HC> {
     const BLOCK_SIZE: usize = HC::BLOCK_SIZE;
 
     const DIGEST_SIZE: usize = HC::DIGEST_SIZE;
 
-    fn digest(
+    fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
         input: HashInput<QuantumCell<F>>,
         ctx: &mut Context<F>,
@@ -31,7 +31,7 @@ impl<F: Field, HC: HashChip<F>> HashChip<F> for CachedHashChip<F, HC> {
             return Ok(result.clone());
         }
 
-        let result = self.inner.digest(input, ctx, region)?;
+        let result = self.inner.digest::<MAX_INPUT_SIZE>(input, ctx, region)?;
         cache.insert(bytes, result.clone());
         Ok(result)
     }
@@ -40,20 +40,13 @@ impl<F: Field, HC: HashChip<F>> HashChip<F> for CachedHashChip<F, HC> {
         self.inner.take_extra_assignments()
     }
 
-    fn set_extra_assignments(
-        &mut self,
-        extra_assignments: halo2_base::gates::builder::KeygenAssignments<F>,
-    ) {
-        self.inner.set_extra_assignments(extra_assignments)
-    }
-
     fn range(&self) -> &RangeChip<F> {
         self.inner.range()
     }
 }
 
-impl<F: Field, HC: HashChip<F>> CachedHashChip<F, HC> {
-    pub fn new(chip: HC) -> Self {
+impl<'a, F: Field, HC: HashChip<F>> CachedHashChip<'a, F, HC> {
+    pub fn new(chip: &'a HC) -> Self {
         Self {
             inner: chip,
             cache: Default::default(),

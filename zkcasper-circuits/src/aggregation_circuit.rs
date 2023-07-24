@@ -227,7 +227,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
                 // Masked byte from compressed representation
                 let masked_byte = &assigned_x_compressed_bytes[pubkey_compressed_len - 1];
                 // Clear the sign bit from masked byte
-                let cleared_byte = self.clear_flags_mask(masked_byte, ctx);
+                let cleared_byte = self.clear_flag_bits(masked_byte, ctx);
                 // Use the cleared byte to construct the x coordinate
                 let assigned_x_bytes_cleared = [
                     &assigned_x_compressed_bytes.as_slice()[..pubkey_compressed_len - 1],
@@ -294,19 +294,19 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
             .unwrap()
     }
 
-    /// Clears the flags mask bits of a last byte of compressed pubkey.
-    /// This function emulates bitwise and on 01111111 (decimal=127): `b & 127` = c
-    fn clear_flags_mask(&self, b: &AssignedValue<F>, ctx: &mut Context<F>) -> AssignedValue<F> {
+    /// Clears the 3 first least significat bits used for flags from a last byte of compressed pubkey.
+    /// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
+    fn clear_flag_bits(&self, b: &AssignedValue<F>, ctx: &mut Context<F>) -> AssignedValue<F> {
         let range = self.range();
         let gate = range.gate();
 
-        // Decomposing only the first bit (MSB): b_shift_msb = b * 2 mod 256 which is equivalent to b <<= 1
-        let b_shift_msb = gate.mul(ctx, *b, QuantumCell::Constant(F::from(2)));
-        let b_shift_msb = range.div_mod(ctx, b_shift_msb, BigUint::from(256u64), 8).1;
+        // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
+        let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
+        // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
+        let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
 
-        // Composing back to the original number but zeroing the first bit (MSB)
-        // c = b_shift_msb / 2 + bit * 128 = b_shift_msb / 2 (since bit := 0)
-        range.div_mod(ctx, b_shift_msb, BigUint::from(2u64), 8).0
+        // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
+        range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
     }
 
     fn g1_chip(&'a self) -> G1Chip<F, S::PubKeysCurve> {
@@ -324,6 +324,7 @@ impl<'a, F: Field, S: Spec> AggregationCircuitBuilder<'a, F, S> {
 
 impl<'a, F: Field, S: Spec> SubCircuit<F> for AggregationCircuitBuilder<'a, F, S> {
     type Config = AggregationCircuitConfig<F>;
+    type SynthesisArgs = ();
 
     fn new_from_block(_block: &witness::Block<F>) -> Self {
         todo!()
@@ -342,6 +343,7 @@ impl<'a, F: Field, S: Spec> SubCircuit<F> for AggregationCircuitBuilder<'a, F, S
         config: &mut Self::Config,
         challenges: &Challenges<F, Value<F>>,
         layouter: &mut impl Layouter<F>,
+        _: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         self.synthesize(config, challenges, layouter);
 
@@ -424,6 +426,7 @@ mod tests {
                 &mut config.0,
                 &config.1.values(&mut layouter),
                 &mut layouter,
+                (),
             )?;
             Ok(())
         }
