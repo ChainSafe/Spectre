@@ -17,6 +17,7 @@ use halo2_ecc::{
     bigint::{ProperCrtUint, ProperUint},
     fields::{fp::FpChip, FieldChip},
 };
+
 use itertools::Itertools;
 use num_bigint::BigUint;
 
@@ -268,6 +269,7 @@ pub fn decode_into_field<F: Field, C: AppCurveExt>(
             .collect::<Vec<_>>();
         ProperUint::new(limbs)
     };
+
 
     assigned_uint.into_crt(ctx, gate, value, limb_bases, C::LIMB_BITS)
 }
