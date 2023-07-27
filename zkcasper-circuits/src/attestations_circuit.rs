@@ -412,10 +412,7 @@ mod bls12_381 {
 mod tests {
     use std::fs;
 
-    use crate::{
-        table::SHA256Table,
-        witness::{Committee, Validator},
-    };
+    use crate::{table::SHA256Table, witness::Validator};
 
     use super::*;
     use eth_types::Test;
@@ -520,15 +517,13 @@ mod tests {
         let attestations: Vec<Attestation<Test>> =
             serde_json::from_slice(&fs::read("../test_data/attestations.json").unwrap()).unwrap();
 
-        let committees: Vec<Committee> =
-            serde_json::from_slice(&fs::read("../test_data/committees.json").unwrap()).unwrap();
+        let bytes_pubkeys: Vec<Vec<u8>> =
+            serde_json::from_slice(&fs::read("../test_data/aggregated_pubkeys.json").unwrap())
+                .unwrap();
 
-        let agg_pubkeys = committees
+        let agg_pubkeys = bytes_pubkeys
             .iter()
-            .map(|c| {
-                G1Affine::from_uncompressed(&c.aggregated_pubkey.as_slice().try_into().unwrap())
-                    .unwrap()
-            })
+            .map(|b| G1Affine::from_uncompressed(&b.as_slice().try_into().unwrap()).unwrap())
             .collect_vec();
 
         let circuit = TestCircuit::<'_, Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }> {

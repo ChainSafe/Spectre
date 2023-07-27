@@ -84,13 +84,3 @@ impl Field for Fr {}
 // Impl custom `Field` trait for BN256 Frq to be used and consistent with the
 // rest of the workspace.
 impl Field for Fq {}
-
-// pub trait G1Curve: CurveExt + UncompressedEncoding {}
-
-// impl G1Curve for G1 {}
-
-/// Trait used to define types that can be converted to a 256 bit scalar value.
-pub trait ToScalar<F> {
-    /// Convert the type to a scalar value.
-    fn to_scalar(&self) -> Option<F>;
-}

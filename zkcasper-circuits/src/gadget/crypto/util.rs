@@ -82,7 +82,6 @@ pub fn bitwise_xor<F: Field, const BITS: usize>(
     ctx: &mut Context<F>,
 ) -> AssignedValue<F> {
     let one = ctx.load_constant(F::one());
-    let two = ctx.load_constant(F::from(2u64));
     let mut a_bits = gate.num_to_bits(ctx, a, BITS);
     let mut b_bits = gate.num_to_bits(ctx, b, BITS);
 
@@ -92,8 +91,20 @@ pub fn bitwise_xor<F: Field, const BITS: usize>(
         .map(|(a, b)| gate.xor(ctx, a, b))
         .collect_vec();
 
-    xor_bits
-        .into_iter()
-        .rev()
-        .fold(ctx.load_zero(), |acc, bit| gate.mul_add(ctx, acc, two, bit))
+    bits_to_num(gate, ctx, xor_bits)
+}
+
+pub fn bits_to_num<F: Field, I: IntoIterator<Item = AssignedValue<F>>>(
+    gate: &impl GateInstructions<F>,
+    ctx: &mut Context<F>,
+    bits: I,
+) -> AssignedValue<F>
+where
+    I::IntoIter: DoubleEndedIterator + ExactSizeIterator,
+{
+    let bits_iter = bits.into_iter();
+    assert!(bits_iter.len() <= F::NUM_BITS as usize);
+    bits_iter.rev().fold(ctx.load_zero(), |acc, bit| {
+        gate.mul_add(ctx, acc, QuantumCell::Constant(F::from(2u64)), bit)
+    })
 }

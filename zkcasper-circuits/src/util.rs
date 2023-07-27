@@ -270,7 +270,6 @@ pub fn decode_into_field<F: Field, C: AppCurveExt>(
         ProperUint::new(limbs)
     };
 
-
     assigned_uint.into_crt(ctx, gate, value, limb_bases, C::LIMB_BITS)
 }
 

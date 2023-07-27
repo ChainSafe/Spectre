@@ -1,6 +1,6 @@
 use crate::sha256_circuit::Sha256CircuitConfig;
 
-use super::{Committee, MerkleTrace, Validator};
+use super::{MerkleTrace, Validator};
 use eth_types::Field;
 use ethereum_consensus::bellatrix::mainnet;
 use ethereum_consensus::bellatrix::BeaconState;
@@ -17,8 +17,6 @@ pub struct Block<F: Field> {
     pub target_epoch: u64,
 
     pub validators: Vec<Validator>,
-
-    pub committees: Vec<Committee>,
 
     pub merkle_trace: MerkleTrace,
 }
@@ -61,7 +59,6 @@ impl<F: Field> Block<F> {
             // to be *convertible* into a u64. Is that what we want?
             target_epoch: beacon_state.current_justified_checkpoint.epoch,
             validators: Validator::build_from_validators(beacon_state.validators.iter()),
-            committees: vec![],
             merkle_trace: MerkleTrace::empty(),
         };
         block

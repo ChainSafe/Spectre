@@ -1,10 +1,5 @@
 [workspace]
-members = [
-    "zkcasper-circuits",
-    "preprocessor",
-    "eth-types",
-    "gadgets",
-]
+members = ["zkcasper-circuits", "preprocessor", "eth-types", "gadgets"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
