@@ -260,7 +260,7 @@ pub mod rlc {
         ctx: &mut Context<F>,
     ) -> AssignedValue<F> {
         if !values.is_empty() {
-            let mut values = values.iter().rev();
+            let mut values = values.iter();
             let init = values.next().expect("values should not be empty");
 
             values.fold(*init, |acc, value| {
@@ -278,7 +278,8 @@ pub mod rlc {
         V: Clone + Add<R, Output = V> + Add<Output = V> + Mul<R, Output = V>,
         R: Clone,
     {
-        let mut values = values.into_iter().rev();
+        // we don't reverse bytes because https://github.com/ChainSafe/banshee-zk/issues/72
+        let mut values = values.into_iter();
         let init = values.next().expect("values should not be empty");
 
         values.fold(init, |acc, value| acc * randomness.clone() + value)

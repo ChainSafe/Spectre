@@ -618,7 +618,7 @@ mod test {
 
     use crate::gadget::crypto::Sha256Chip;
     use crate::sha256_circuit::Sha256CircuitConfig;
-    use crate::table::SHA256Table;
+    use crate::table::Sha256Table;
     use crate::util::{print_fq2_dev, Challenges, IntoWitness, SubCircuitConfig};
 
     use super::*;
@@ -636,6 +636,7 @@ mod test {
         },
     };
     use halo2_ecc::bigint::CRTInteger;
+    use halo2_proofs::circuit::Value;
     use sha2::{Digest, Sha256};
 
     #[derive(Debug, Clone)]
@@ -643,7 +644,7 @@ mod test {
         sha256_config: Sha256CircuitConfig<F>,
         pub max_byte_size: usize,
         range: RangeConfig<F>,
-        challenges: Challenges<F>,
+        challenges: Challenges<Value<F>>,
     }
 
     struct TestCircuit<S: Spec, F: Field> {
@@ -666,7 +667,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha_table = SHA256Table::construct(meta);
+            let sha_table = Sha256Table::construct(meta);
             let sha256_configs = Sha256CircuitConfig::<F>::new::<Mainnet>(meta, sha_table);
             let range = RangeConfig::configure(
                 meta,
@@ -682,7 +683,7 @@ mod test {
                 sha256_config: sha256_configs,
                 max_byte_size: Self::MAX_BYTE_SIZE,
                 range,
-                challenges,
+                challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
             }
         }
 

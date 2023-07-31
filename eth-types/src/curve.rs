@@ -1,3 +1,4 @@
+use std::array::TryFromSliceError;
 use std::iter;
 
 use halo2_ecc::fields::PrimeField;
@@ -8,6 +9,7 @@ use halo2curves::FieldExt;
 use itertools::Itertools;
 use pasta_curves::arithmetic::SqrtRatio;
 use pasta_curves::group::GroupEncoding;
+use pasta_curves::group::UncompressedEncoding;
 
 use crate::Field;
 
@@ -17,9 +19,13 @@ pub trait AppCurveExt: CurveExt<AffineExt: CurveAffineExt> {
     /// Prime field of order $q = p^k$ where k is the embedding degree.
     type Fq: PrimeField + FieldExt + Halo2Field = Self::Fp;
     /// Affine version of the curve.
-    type Affine: CurveAffineExt<Base = Self::Fq> + GroupEncoding<Repr = Self::CompressedRepr>;
+    type Affine: CurveAffineExt<Base = Self::Fq>
+        + GroupEncoding<Repr = Self::CompressedRepr>
+        + UncompressedEncoding<Uncompressed = Self::UnompressedRepr>;
     /// Compressed representation of the curve.
-    type CompressedRepr: TryFrom<Vec<u8>, Error = std::array::TryFromSliceError>;
+    type CompressedRepr: TryFrom<Vec<u8>, Error = TryFromSliceError>;
+    /// Compressed representation of the curve.
+    type UnompressedRepr: TryFrom<Vec<u8>, Error = TryFromSliceError>;
     /// Constant $b$ in the curve equation $y^2 = x^3 + b$.
     const B: u64;
     // Bytes needed to encode [`Self::Fq];
@@ -64,12 +70,16 @@ pub trait HashCurveExt: AppCurveExt<Fq: SqrtRatio> {
 
 mod bls12_381 {
     use super::*;
-    use halo2curves::bls12_381::{Fq, Fq2, G1Affine, G1Compressed, G2Affine, G2Compressed, G1, G2};
+    use halo2curves::bls12_381::{
+        Fq, Fq2, G1Affine, G1Compressed, G1Uncompressed, G2Affine, G2Compressed, G2Uncompressed,
+        G1, G2,
+    };
 
     impl AppCurveExt for G1 {
         type Affine = G1Affine;
         type Fp = Fq;
         type CompressedRepr = G1Compressed;
+        type UnompressedRepr = G1Uncompressed;
         const BYTES_FQ: usize = 48;
         const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
         const LIMB_BITS: usize = 112;
@@ -86,6 +96,7 @@ mod bls12_381 {
         type Fp = Fq;
         type Fq = Fq2;
         type CompressedRepr = G2Compressed;
+        type UnompressedRepr = G2Uncompressed;
         const BYTES_FQ: usize = 96;
         const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
         const LIMB_BITS: usize = 112;
@@ -423,12 +434,13 @@ mod bls12_381 {
 
 mod bn254 {
     use super::*;
-    use halo2curves::bn256::{Fq, G1Affine, G1Compressed, G1};
+    use halo2curves::bn256::{Fq, G1Affine, G1Compressed, G1Uncompressed, G1};
 
     impl AppCurveExt for G1 {
         type Affine = G1Affine;
         type Fp = Fq;
         type CompressedRepr = G1Compressed;
+        type UnompressedRepr = G1Uncompressed;
         const BYTES_FQ: usize = 32;
         const BYTES_UNCOMPRESSED: usize = Self::BYTES_FQ * 2;
         const LIMB_BITS: usize = 88;

@@ -9,12 +9,12 @@ pub mod util;
 use std::marker::PhantomData;
 
 use crate::{
-    table::{LookupTable, SHA256Table},
+    table::{LookupTable, Sha256Table},
     util::{not, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
-use gadgets::util::{and, select, sum, xor};
+use gadgets::util::{and, rlc, select, sum, xor};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
@@ -60,13 +60,13 @@ pub struct Sha256CircuitConfig<F> {
     is_right_value: Column<Advice>,
 
     /// The columns for bytes of hash results
-    pub hash_table: SHA256Table,
+    pub hash_table: Sha256Table,
     pub final_hash_bytes: [Column<Advice>; NUM_BYTES_FINAL_HASH],
     _marker: PhantomData<F>,
 }
 
 impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
-    type ConfigArgs = SHA256Table;
+    type ConfigArgs = Sha256Table;
 
     fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         // consts
@@ -656,7 +656,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
                 .iter()
                 .flat_map(|part| to_le_bytes::expr(part))
                 .collect::<Vec<_>>();
-            let rlc = compose_rlc::expr(&hash_bytes, r);
+            let rlc = rlc::expr(&hash_bytes, Expression::Constant(r));
             cb.condition(start_new_hash(meta), |cb| {
                 cb.require_equal(
                     "hash rlc check",
@@ -677,7 +677,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
                         .expr()
                 })
                 .collect::<Vec<Expression<F>>>();
-            let rlc = compose_rlc::expr(&final_word_exprs, r);
+            let rlc = rlc::expr(&final_word_exprs, Expression::Constant(r));
             cb.condition(q_condition.clone(), |cb| {
                 cb.require_equal(
                     "final hash rlc check",
@@ -1082,51 +1082,30 @@ impl<F: Field> Sha256CircuitConfig<F> {
     }
 }
 
-/// KeccakCircuit
-#[derive(Default, Clone, Debug)]
-pub struct Sha256Circuit<F: Field> {
-    inputs: Vec<HashInput<u8>>,
+#[derive(Clone, Debug)]
+pub struct Sha256Circuit<'a, S: Spec, F: Field> {
+    pub inputs: &'a [HashInput<u8>],
     _marker: PhantomData<F>,
+    _spec: PhantomData<S>,
 }
 
-impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
+impl<'a, S: Spec, F: Field> SubCircuit<'a, S, F> for Sha256Circuit<'a, S, F>
+where
+    [(); { S::MAX_VALIDATORS_PER_COMMITTEE }]:,
+{
     type Config = Sha256CircuitConfig<F>;
     type SynthesisArgs = ();
+    type Output = ();
 
-    fn unusable_rows() -> usize {
-        todo!()
-    }
-
-    /// The `block.circuits_params.keccak_padding` parmeter, when enabled, sets
-    /// up the circuit to support a fixed number of permutations/keccak_f's,
-    /// independently of the permutations required by `inputs`.
-    fn new_from_block(_block: &witness::Block<F>) -> Self {
-        // Self::new(
-        //     block.circuits_params.max_keccak_rows,
-        //     block.keccak_inputs.clone(),
-        // )
-        todo!()
-    }
-
-    /// Return the minimum number of rows required to prove the block
-    fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
-        // let rows_per_chunk = (NUM_ROUNDS + 1) * get_num_rows_per_round();
-        // (
-        //     block
-        //         .keccak_inputs
-        //         .iter()
-        //         .map(|bytes| (bytes.len() as f64 / 136.0).ceil() as usize * rows_per_chunk)
-        //         .sum(),
-        //     block.circuits_params.max_keccak_rows,
-        // )
-        todo!()
+    fn new_from_state(state: &'a witness::State<S, F>) -> Self {
+        Self::new(&state.sha256_inputs)
     }
 
     /// Make the assignments to the KeccakCircuit
     fn synthesize_sub(
         &self,
-        config: &mut Self::Config,
-        challenges: &Challenges<F, Value<F>>,
+        config: &Self::Config,
+        challenges: &Challenges<Value<F>>,
         layouter: &mut impl Layouter<F>,
         _: Self::SynthesisArgs,
     ) -> Result<(), Error> {
@@ -1134,20 +1113,30 @@ impl<F: Field> SubCircuit<F> for Sha256Circuit<F> {
         let _ = config.assign(layouter, witness.as_slice());
         Ok(())
     }
+
+    fn unusable_rows() -> usize {
+        todo!()
+    }
+
+    /// Return the minimum number of rows required to prove the block
+    fn min_num_rows_state(_block: &witness::State<S, F>) -> (usize, usize) {
+        todo!()
+    }
 }
 
-impl<F: Field> Sha256Circuit<F> {
+impl<'a, S: Spec, F: Field> Sha256Circuit<'a, S, F> {
     /// Creates a new circuit instance
-    pub fn new(inputs: Vec<HashInput<u8>>) -> Self {
+    pub fn new(inputs: &'a Vec<HashInput<u8>>) -> Self {
         Sha256Circuit {
             inputs,
             _marker: PhantomData,
+            _spec: PhantomData::<S>,
         }
     }
 
     /// Sets the witness using the data to be hashed
-    pub(crate) fn generate_witness(&self, _challenges: Challenges<F, Value<F>>) -> Vec<ShaRow<F>> {
-        multi_sha256(&self.inputs, Sha256CircuitConfig::fixed_challenge())
+    pub(crate) fn generate_witness(&self, _challenges: Challenges<Value<F>>) -> Vec<ShaRow<F>> {
+        multi_sha256(self.inputs, Sha256CircuitConfig::fixed_challenge())
     }
 }
 
@@ -1164,13 +1153,16 @@ mod tests {
 
     use eth_types::Test as S;
 
-    #[derive(Default, Debug, Clone)]
-    struct TestSha256<F: Field> {
-        inner: Sha256Circuit<F>,
+    #[derive(Debug, Clone)]
+    struct TestSha256<'a, S: Spec, F: Field> {
+        inner: Sha256Circuit<'a, S, F>,
     }
 
-    impl<F: Field> Circuit<F> for TestSha256<F> {
-        type Config = (Sha256CircuitConfig<F>, Challenges<F>);
+    impl<'a, S: Spec, F: Field> Circuit<F> for TestSha256<'a, S, F>
+    where
+        [(); { S::MAX_VALIDATORS_PER_COMMITTEE }]:,
+    {
+        type Config = (Sha256CircuitConfig<F>, Challenges<Value<F>>);
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -1178,10 +1170,10 @@ mod tests {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let hash_table = SHA256Table::construct(meta);
+            let hash_table = Sha256Table::construct(meta);
             (
                 Sha256CircuitConfig::new::<S>(meta, hash_table),
-                Challenges::construct(meta),
+                Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
             )
         }
 
@@ -1190,12 +1182,8 @@ mod tests {
             mut config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
-            self.inner.synthesize_sub(
-                &mut config.0,
-                &config.1.values(&mut layouter),
-                &mut layouter,
-                (),
-            )
+            self.inner
+                .synthesize_sub(&config.0, &config.1, &mut layouter, ())
         }
     }
 
@@ -1203,8 +1191,8 @@ mod tests {
     fn test_sha256_single() {
         let k = 11;
         let inputs = vec![vec![0u8; 64].into(); 1];
-        let circuit = TestSha256 {
-            inner: Sha256Circuit::new(inputs),
+        let circuit = TestSha256::<S, Fr> {
+            inner: Sha256Circuit::new(&inputs),
         };
 
         let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
@@ -1214,9 +1202,9 @@ mod tests {
     #[test]
     fn test_sha256_two2one_simple() {
         let k = 11;
-        let inputs = vec![(vec![0u8; 32], vec![0u8; 32],).into(); 10];
-        let circuit = TestSha256 {
-            inner: Sha256Circuit::new(inputs),
+        let inputs = vec![(vec![0u8; 32], vec![0u8; 32],).into(); 1];
+        let circuit = TestSha256::<S, Fr> {
+            inner: Sha256Circuit::new(&inputs),
         };
 
         let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
@@ -1227,8 +1215,8 @@ mod tests {
     fn test_sha256_two2one_val_and_rlc() {
         let k = 10;
         let inputs = vec![(vec![vec![2u8; 4], vec![0u8; 28]].concat(), vec![3u8; 4],).into(); 1];
-        let circuit = TestSha256 {
-            inner: Sha256Circuit::new(inputs),
+        let circuit = TestSha256::<S, Fr> {
+            inner: Sha256Circuit::new(&inputs),
         };
 
         let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
@@ -1241,9 +1229,8 @@ mod tests {
         let merkle_trace: MerkleTrace =
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
         let inputs = merkle_trace.sha256_inputs();
-        println!("inputs: {:?}", inputs.len());
-        let circuit = TestSha256 {
-            inner: Sha256Circuit::new(inputs),
+        let circuit = TestSha256::<S, Fr> {
+            inner: Sha256Circuit::new(&inputs),
         };
 
         let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();

@@ -218,14 +218,14 @@ impl<'a, F: Field> Sha256Chip<'a, F> {
         range: &'a RangeChip<F>,
         randomness: Value<F>,
         extra_assignments: Option<KeygenAssignments<F>>,
-        sha256_circui_offset: usize,
+        sha256_circuit_offset: usize,
     ) -> Self {
         Self {
             config,
             range,
             randomness: value_to_option(randomness).expect("randomness is not assigned"),
             extra_assignments: RefCell::new(extra_assignments.unwrap_or_default()),
-            sha256_circuit_offset: RefCell::new(sha256_circui_offset),
+            sha256_circuit_offset: RefCell::new(sha256_circuit_offset),
         }
     }
 
@@ -283,7 +283,7 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::table::SHA256Table;
+    use crate::table::Sha256Table;
     use crate::util::{Challenges, IntoWitness, SubCircuitConfig};
 
     use super::*;
@@ -306,7 +306,7 @@ mod test {
         sha256_config: Sha256CircuitConfig<F>,
         pub max_byte_size: usize,
         range: RangeConfig<F>,
-        challenges: Challenges<F>,
+        challenges: Challenges<Value<F>>,
     }
 
     struct TestCircuit<F: Field> {
@@ -329,7 +329,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha_table = SHA256Table::construct(meta);
+            let sha_table = Sha256Table::construct(meta);
             let sha256_configs = Sha256CircuitConfig::<F>::new::<Test>(meta, sha_table);
             let range = RangeConfig::configure(
                 meta,
@@ -340,12 +340,11 @@ mod test {
                 Self::LOOKUP_BITS,
                 Self::K,
             );
-            let challenges = Challenges::construct(meta);
             Self::Config {
                 sha256_config: sha256_configs,
                 max_byte_size: Self::MAX_BYTE_SIZE,
                 range,
-                challenges,
+                challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
             }
         }
 

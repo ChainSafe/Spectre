@@ -6,7 +6,7 @@ use sha2::Digest;
 
 /// Keccak Table, used to verify keccak hashing from RLC'ed input.
 #[derive(Clone, Debug)]
-pub struct SHA256Table {
+pub struct Sha256Table {
     /// True when the row is enabled
     pub is_enabled: Column<Advice>,
     /// Byte array input parts as `RLC(input[i])`
@@ -19,7 +19,7 @@ pub struct SHA256Table {
     pub hash_rlc: Column<Advice>,
 }
 
-impl<F: Field> LookupTable<F> for SHA256Table {
+impl<F: Field> LookupTable<F> for Sha256Table {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
             self.is_enabled.into(),
@@ -43,7 +43,7 @@ impl<F: Field> LookupTable<F> for SHA256Table {
     }
 }
 
-impl SHA256Table {
+impl Sha256Table {
     /// Construct a new KeccakTable
     pub fn construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
         Self {
@@ -65,7 +65,7 @@ impl SHA256Table {
         offset: usize,
         values: [Value<F>; 6],
     ) -> Result<[AssignedCell<F, F>; 6], Error> {
-        <SHA256Table as LookupTable<F>>::advice_columns(self)
+        <Sha256Table as LookupTable<F>>::advice_columns(self)
             .iter()
             .zip(values.iter())
             .map(|(&column, value)| {
@@ -115,7 +115,7 @@ impl SHA256Table {
             |mut region| {
                 self.annotate_columns_in_region(&mut region);
 
-                let sha256_table_columns = <SHA256Table as LookupTable<F>>::advice_columns(self);
+                let sha256_table_columns = <Sha256Table as LookupTable<F>>::advice_columns(self);
                 for (offset, input) in inputs.clone().into_iter().enumerate() {
                     let row = Self::assignments_dev(input, challenge);
 

@@ -98,6 +98,8 @@ pub struct Queries<S: Spec, F: Field> {
     pub q_attest_digits: Vec<Expression<F>>,
     pub q_committee_first: Expression<F>,
     pub target_epoch: Expression<F>,
+    pub target_epoch_prev: Expression<F>,
+    pub target_epoch_pub: Expression<F>,
     pub table: ValidatorTableQueries<S, F>,
 }
 
@@ -124,6 +126,14 @@ impl<S: Spec, F: Field> Queries<S, F> {
 
     pub fn target_epoch(&self) -> Expression<F> {
         self.target_epoch.clone()
+    }
+
+    pub fn target_epoch_prev(&self) -> Expression<F> {
+        self.target_epoch_prev.clone()
+    }
+
+    pub fn target_epoch_pub(&self) -> Expression<F> {
+        self.target_epoch_pub.clone()
     }
 
     pub fn next_epoch(&self) -> Expression<F> {

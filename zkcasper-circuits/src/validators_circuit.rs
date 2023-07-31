@@ -17,11 +17,14 @@ use eth_types::*;
 
 use gadgets::util::{and, not, select, Expr};
 use halo2_proofs::{
-    circuit::{Layouter, Region, Value},
-    plonk::{Advice, Any, Column, ConstraintSystem, Error, FirstPhase, Fixed, VirtualCells},
+    circuit::{Cell, Layouter, Region, Value},
+    plonk::{
+        Advice, Any, Column, ConstraintSystem, Error, FirstPhase, Fixed, Instance, VirtualCells,
+    },
     poly::Rotation,
 };
 use itertools::Itertools;
+use log::debug;
 use std::{iter, marker::PhantomData};
 
 pub(crate) const N_BYTE_LOOKUPS: usize = 16; // 8 per lt gadget (target_gte_activation, target_lt_exit)
@@ -35,15 +38,19 @@ pub struct ValidatorsCircuitConfig<F: Field> {
     q_last: Column<Fixed>,
     q_committee_first: Column<Fixed>,
     q_attest_digits: Vec<Column<Fixed>>,
-    state_tables: StateTables,
-    pub validators_table: ValidatorsTable,
+
     storage_phase1: [Column<Advice>; 2], // one per `LtGadget`
     byte_lookup: [Column<Advice>; N_BYTE_LOOKUPS],
     target_epoch: Column<Advice>, // TODO: should be an instance or assigned from instance
     cell_manager: CellManager<F>,
+    // lookup tables
+    pub validators_table: ValidatorsTable,
+    state_tables: StateTables,
     // Lazy initialized
     target_gte_activation: Option<LtGadget<F, N_BYTES_U64>>,
     target_lt_exit: Option<LtGadget<F, N_BYTES_U64>>,
+    // Instance
+    pub target_epoch_pub: Column<Instance>,
 }
 
 pub struct ValidatorsCircuitArgs {
@@ -77,6 +84,8 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
 
         let cell_manager = CellManager::new(meta, S::VALIDATOR_REGISTRY_LIMIT, &cm_advices);
 
+        let target_epoch_public = meta.instance_column();
+
         let mut config = Self {
             max_rows: S::MAX_VALIDATORS_PER_COMMITTEE
                 * S::MAX_COMMITTEES_PER_SLOT
@@ -94,9 +103,12 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
             target_gte_activation: None,
             target_lt_exit: None,
             cell_manager,
+            target_epoch_pub: target_epoch_public,
         };
 
         // Annotate circuit
+
+        config.state_tables.annotate_columns(meta);
         config.validators_table.annotate_columns(meta);
         config.annotations().iter().for_each(|(col, ann)| {
             meta.annotate_lookup_any_column(*col, || ann);
@@ -222,10 +234,12 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
             meta.lookup_any(name, |_| lookup);
         }
 
-        meta.create_gate("balance accumulation: first row", |meta| {
+        meta.create_gate("first row", |meta| {
             let q = queries::<S, F>(meta, &config);
             let mut cb = ConstraintBuilder::new(&mut config.cell_manager, MAX_DEGREE);
             cb.require_equal("init balance_acc", q.table.balance(), q.table.balance_acc());
+            cb.require_equal("init target epoch", q.target_epoch(), q.target_epoch_pub());
+            // TODO: state_tables[BeaconFields].lookup(target_epoch - 1, current_justified_checkpoint_gindex, node/sibling)
             cb.gate(q.q_first())
         });
 
@@ -241,6 +255,11 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
                 "balance_acc = balance_acc_prev + balance",
                 q.table.balance_acc(),
                 new_balance_acc,
+            );
+            cb.require_equal(
+                "target epoch consistancy",
+                q.target_epoch_prev(),
+                q.target_epoch(),
             );
             cb.gate(and::expr(vec![q.q_enabled(), not::expr(q.q_first())]))
         });
@@ -279,7 +298,7 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
             ]))
         });
 
-        println!("validators circuit degree={}", meta.degree());
+        debug!("validators circuit degree={}", meta.degree());
 
         config
     }
@@ -294,27 +313,14 @@ impl<F: Field> SubCircuitConfig<F> for ValidatorsCircuitConfig<F> {
 }
 
 impl<F: Field> ValidatorsCircuitConfig<F> {
-    fn assign<S: Spec>(
-        &mut self,
-        layouter: &mut impl Layouter<F>,
-        validators: &[Validator],
-        target_epoch: u64,
-        challange: Value<F>,
-    ) -> Result<(), Error> {
-        layouter.assign_region(
-            || "validators circuit",
-            |mut region| {
-                self.assign_with_region::<S>(&mut region, validators, target_epoch, challange)
-            },
-        )
-    }
-
     fn assign_with_region<S: Spec>(
-        &mut self,
+        &self,
         region: &mut Region<'_, F>,
         validators: &[Validator],
         target_epoch: u64,
         randomness: Value<F>,
+        pubkey_cells: &mut Vec<[Cell; 2]>,
+        attest_digits_cells: &mut Vec<Vec<Cell>>,
     ) -> Result<(), Error> {
         let padded_validators = pad_to_max_per_committee::<S>(validators.iter());
         let num_committees = padded_validators.len() / S::MAX_VALIDATORS_PER_COMMITTEE;
@@ -364,14 +370,16 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                 || Value::known(F::one()),
             )?;
 
-            if let Some(&validator) = padded_validators.get(i) {
-                region.assign_advice(
-                    || "assign target epoch",
-                    self.target_epoch,
-                    offset,
-                    || Value::known(F::from(target_epoch)),
-                )?; // TODO: assign from instance instead
+            // We avoid using `region.assign_advice_from_instance` as it causes a lot of permutation cells.
+            // Instead we use a simple `target_epoch@prev = target_epoch` gate.
+            region.assign_advice(
+                || "assign target epoch",
+                self.target_epoch,
+                offset,
+                || Value::known(F::from(target_epoch)),
+            )?;
 
+            if let Some(&validator) = padded_validators.get(i) {
                 target_gte_activation.assign(
                     region,
                     offset,
@@ -391,8 +399,13 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                     &mut committees_balances,
                 );
                 for (i, row) in validator_rows.into_iter().enumerate() {
-                    self.validators_table
-                        .assign_with_region::<S, F>(region, offset + i, &row)?;
+                    self.validators_table.assign_with_region::<S, F>(
+                        region,
+                        offset + i,
+                        &row,
+                        pubkey_cells,
+                        attest_digits_cells,
+                    )?;
                 }
 
                 offset += 1;
@@ -443,15 +456,20 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValidatorsCircuit<S: Spec, F> {
-    pub(crate) validators: Vec<Validator>,
+pub struct ValidatorsCircuit<'a, S: Spec, F> {
+    validators: &'a Vec<Validator>,
     target_epoch: u64,
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> ValidatorsCircuit<S, F> {
-    pub fn new(validators: Vec<Validator>, target_epoch: u64) -> Self {
+pub struct ValidatorsCircuitOutput {
+    pub pubkey_cells: Vec<[Cell; 2]>,
+    pub attest_digits_cells: Vec<Vec<Cell>>,
+}
+
+impl<'a, S: Spec, F: Field> ValidatorsCircuit<'a, S, F> {
+    pub fn new(validators: &'a Vec<Validator>, target_epoch: u64) -> Self {
         Self {
             validators,
             target_epoch,
@@ -461,46 +479,59 @@ impl<S: Spec, F: Field> ValidatorsCircuit<S, F> {
     }
 }
 
-impl<S: Spec, F: Field> SubCircuit<F> for ValidatorsCircuit<S, F> {
+impl<'a, S: Spec, F: Field> SubCircuit<'a, S, F> for ValidatorsCircuit<'a, S, F>
+where
+    [(); { S::MAX_VALIDATORS_PER_COMMITTEE }]:,
+{
     type Config = ValidatorsCircuitConfig<F>;
     type SynthesisArgs = ();
+    type Output = ValidatorsCircuitOutput;
 
-    fn new_from_block(block: &witness::Block<F>) -> Self {
-        Self::new(block.validators.clone(), block.target_epoch)
+    fn new_from_state(state: &'a witness::State<S, F>) -> Self {
+        Self::new(&state.validators, state.target_epoch)
+    }
+
+    /// Make the assignments to the ValidatorsCircuit
+    fn synthesize_sub(
+        &self,
+        config: &Self::Config,
+        challenges: &Challenges<Value<F>>,
+        layouter: &mut impl Layouter<F>,
+        _: Self::SynthesisArgs,
+    ) -> Result<Self::Output, Error> {
+        layouter.assign_region(
+            || "validators circuit",
+            |mut region| {
+                let mut pubkey_cells = vec![];
+                let mut attest_digits_cells = vec![];
+
+                config.assign_with_region::<S>(
+                    &mut region,
+                    self.validators,
+                    self.target_epoch,
+                    challenges.sha256_input(),
+                    &mut pubkey_cells,
+                    &mut attest_digits_cells,
+                )?;
+
+                Ok(ValidatorsCircuitOutput {
+                    pubkey_cells,
+                    attest_digits_cells,
+                })
+            },
+        )
+    }
+
+    fn instance(&self) -> Vec<Vec<F>> {
+        vec![vec![F::from(self.target_epoch)]]
     }
 
     fn unusable_rows() -> usize {
         todo!()
     }
 
-    fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
+    fn min_num_rows_state(_block: &witness::State<S, F>) -> (usize, usize) {
         todo!()
-    }
-
-    /// Make the assignments to the ValidatorsCircuit
-    fn synthesize_sub(
-        &self,
-        config: &mut Self::Config,
-        challenges: &Challenges<F, Value<F>>,
-        layouter: &mut impl Layouter<F>,
-        _: Self::SynthesisArgs,
-    ) -> Result<(), Error> {
-        layouter.assign_region(
-            || "validators circuit",
-            |mut region| {
-                config.assign_with_region::<S>(
-                    &mut region,
-                    &self.validators,
-                    self.target_epoch,
-                    challenges.sha256_input(),
-                )?;
-                Ok(())
-            },
-        )
-    }
-
-    fn instance(&self) -> Vec<Vec<F>> {
-        vec![]
     }
 }
 
@@ -519,6 +550,8 @@ fn queries<S: Spec, F: Field>(
             .map(|col| meta.query_fixed(*col, Rotation::cur()))
             .collect_vec(),
         target_epoch: meta.query_advice(config.target_epoch, Rotation::cur()),
+        target_epoch_prev: meta.query_advice(config.target_epoch, Rotation::prev()),
+        target_epoch_pub: meta.query_instance(config.target_epoch_pub, Rotation::cur()),
         table: config.validators_table.queries(meta),
     }
 }
@@ -527,7 +560,9 @@ fn queries<S: Spec, F: Field>(
 
 mod tests {
     use super::*;
-    use crate::{table::state_table::StateTables, witness::MerkleTrace};
+    use crate::{
+        sha256_circuit::Sha256CircuitConfig, table::state_table::StateTables, witness::MerkleTrace,
+    };
     use halo2_proofs::{
         circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
     };
@@ -537,14 +572,17 @@ mod tests {
     use eth_types::Test as S;
 
     #[derive(Debug, Clone)]
-    struct TestValidators<S: Spec, F: Field> {
-        inner: ValidatorsCircuit<S, F>,
+    struct TestValidators<'a, S: Spec, F: Field> {
+        inner: ValidatorsCircuit<'a, S, F>,
         state_tree_trace: MerkleTrace,
         _f: PhantomData<F>,
     }
 
-    impl<S: Spec, F: Field> Circuit<F> for TestValidators<S, F> {
-        type Config = (ValidatorsCircuitConfig<F>, Challenges<F>);
+    impl<'a, S: Spec, F: Field> Circuit<F> for TestValidators<'a, S, F>
+    where
+        [(); { S::MAX_VALIDATORS_PER_COMMITTEE }]:,
+    {
+        type Config = (ValidatorsCircuitConfig<F>, Challenges<Value<F>>);
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -558,7 +596,7 @@ mod tests {
 
             (
                 ValidatorsCircuitConfig::new::<S>(meta, args),
-                Challenges::construct(meta),
+                Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
             )
         }
 
@@ -573,31 +611,28 @@ mod tests {
                 &self.state_tree_trace,
                 challenge,
             )?;
-            self.inner.synthesize_sub(
-                &mut config.0,
-                &config.1.values(&mut layouter),
-                &mut layouter,
-                (),
-            )?;
+            self.inner
+                .synthesize_sub(&config.0, &config.1, &mut layouter, ())?;
             Ok(())
         }
     }
 
     #[test]
     fn test_validators_circuit() {
-        let k = 10;
+        let k = 11;
         let validators: Vec<Validator> =
             serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
         let state_tree_trace: MerkleTrace =
             serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
 
         let circuit = TestValidators::<Test, Fr> {
-            inner: ValidatorsCircuit::new(validators, 25),
+            inner: ValidatorsCircuit::new(&validators, 25),
             state_tree_trace,
             _f: PhantomData,
         };
 
-        let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
+        let instance = circuit.inner.instance();
+        let prover = MockProver::<Fr>::run(k, &circuit, instance).unwrap();
         prover.assert_satisfied();
     }
 }

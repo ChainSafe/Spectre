@@ -1,12 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, marker::PhantomData, ops::Neg, vec};
+use std::{cell::RefCell, collections::HashMap, marker::PhantomData, ops::Neg, rc::Rc, vec};
 
 use crate::{
     gadget::crypto::{
         CachedHashChip, Fp2Chip, Fp2Point, FpPoint, G1Point, G2Chip, G2Point, HashChip,
         HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
-    sha256_circuit::Sha256CircuitConfig,
-    util::{print_fq2_dev, Challenges, IntoWitness, SubCircuit, SubCircuitConfig},
+    sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
+    util::{
+        print_fq2_dev, Challenges, IntoWitness, SubCircuit, SubCircuitBuilder, SubCircuitConfig,
+    },
     witness::{self, Attestation, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
@@ -80,21 +82,188 @@ impl<F: Field> SubCircuitConfig<F> for AttestationsCircuitConfig<F> {
 }
 
 #[allow(type_alias_bounds)]
-#[derive(Debug)]
-pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
+#[derive(Clone, Debug)]
+pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field>
 where
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
-    builder: RefCell<GateThreadBuilder<F>>,
+    builder: Rc<RefCell<GateThreadBuilder<F>>>,
     attestations: &'a [Attestation<S>],
-    range: &'a RangeChip<F>,
-    fp_chip: FpChip<'a, F, S::SiganturesCurve>,
     zero_hashes: RefCell<HashMap<usize, HashInputChunk<QuantumCell<F>>>>,
+    sha256_offset: usize,
     _spec: PhantomData<S>,
 }
 
-impl<'a, S: Spec, F: Field, const COMMITTEE_MAX_SIZE: usize>
-    AttestationsCircuitBuilder<'a, S, F, COMMITTEE_MAX_SIZE>
+impl<'a, S: Spec, F: Field> SubCircuitBuilder<'a, S, F> for AttestationsCircuitBuilder<'a, S, F>
+where
+    S::SiganturesCurve: BlsCurveExt,
+    <S::SiganturesCurve as AppCurveExt>::Fq:
+        FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
+    [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+{
+    type Config = AttestationsCircuitConfig<F>;
+    type SynthesisArgs = Vec<G1Point<F>>;
+    type Output = ();
+
+    fn new_from_state(
+        builder: Rc<RefCell<GateThreadBuilder<F>>>,
+        state: &'a witness::State<S, F>,
+    ) -> Self {
+        Self::new(
+            builder,
+            &state.attestations,
+            state.sha256_inputs.len() * 144,
+        )
+    }
+
+    /// Assumptions:
+    /// - partial attestations are aggregated into full attestations
+    /// - number of attestations is less than MAX_COMMITTEES_PER_SLOT * SLOTS_PER_EPOCH
+    /// - all attestation have same source and target epoch
+    fn synthesize_sub(
+        &self,
+        config: &Self::Config,
+        challenges: &Challenges<Value<F>>,
+        layouter: &mut impl Layouter<F>,
+        aggregated_pubkeys: Self::SynthesisArgs,
+    ) -> Result<(), Error> {
+        assert!(!self.attestations.is_empty(), "no attestations supplied");
+        assert!(
+            self.attestations.len() <= S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH,
+            "too many attestations supplied",
+        );
+        let mut first_pass = halo2_base::SKIP_FIRST_PASS;
+
+        let range = RangeChip::default(config.range.lookup_bits());
+        let fp_chip = FpChip::<F, S::SiganturesCurve>::new(
+            &range,
+            S::SiganturesCurve::LIMB_BITS,
+            S::SiganturesCurve::NUM_LIMBS,
+        );
+        let fp2_chip = Fp2Chip::<F, S::SiganturesCurve>::new(&fp_chip);
+        let g1_chip = EccChip::new(fp2_chip.fp_chip());
+        let g2_chip = EccChip::new(&fp2_chip);
+        let fp12_chip = Fp12Chip::<F, S::SiganturesCurve>::new(fp2_chip.fp_chip());
+        let bls_chip = S::SiganturesCurve::new_signature_chip(fp2_chip.fp_chip());
+        let sha256_chip = Sha256Chip::new(
+            &config.sha256_config,
+            &range,
+            challenges.sha256_input(),
+            None,
+            self.sha256_offset,
+        );
+        let hasher = CachedHashChip::new(&sha256_chip);
+        let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
+
+        layouter.assign_region(
+            || "AggregationCircuitBuilder generated circuit",
+            |mut region| {
+                config.annotate_columns_in_region(&mut region);
+                if first_pass {
+                    first_pass = false;
+                    return Ok(());
+                }
+
+                let mut region = region;
+
+                let builder = &mut self.builder.borrow_mut();
+                let ctx = builder.main(0);
+
+                let [source_root, target_root] = [
+                    self.attestations[0].data.source.clone(),
+                    self.attestations[0].data.target.clone(),
+                ]
+                .map(|cp| {
+                    hasher
+                        .digest::<64>(
+                            (cp.epoch, cp.root.as_ref()).into_witness(),
+                            ctx,
+                            &mut region,
+                        )
+                        .unwrap()
+                });
+
+                let fp12_one = {
+                    use ff::Field;
+                    fp12_chip.load_constant(ctx, <S::SiganturesCurve as BlsCurveExt>::Fq12::one())
+                };
+                let mut h2c_cache = HashToCurveCache::default();
+                let g1_neg = g1_chip.load_private_unchecked(
+                    ctx,
+                    S::PubKeysCurve::generator_affine().neg().into_coordinates(),
+                );
+
+                for Attestation::<S> {
+                    data, signature, ..
+                } in self.attestations.iter()
+                {
+                    assert!(!signature.is_infinity());
+
+                    let pubkey = aggregated_pubkeys
+                        .get(data.index)
+                        .expect("pubkey not found")
+                        .clone();
+
+                    let signature = Self::assign_signature(signature, &g2_chip, ctx);
+
+                    let chunks = [
+                        data.slot.into_witness(),
+                        data.index.into_witness(),
+                        data.beacon_block_root.as_ref().into_witness(),
+                        source_root.output_bytes.into(),
+                        target_root.output_bytes.into(),
+                    ];
+
+                    let signing_root = self.merkleize_chunks(chunks, &hasher, ctx, &mut region)?;
+
+                    assert_eq!(
+                        data.clone().hash_tree_root().unwrap().as_ref().to_vec(),
+                        signing_root
+                            .iter()
+                            .map(|e| e.value().get_lower_32() as u8)
+                            .collect_vec(),
+                        "invalid signing root"
+                    );
+
+                    let msghash = h2c_chip.hash_to_curve::<S::SiganturesCurve>(
+                        signing_root.into(),
+                        &fp_chip,
+                        ctx,
+                        &mut region,
+                        &mut h2c_cache,
+                    )?;
+
+                    let res =
+                        bls_chip.verify_pairing(signature, msghash, pubkey, g1_neg.clone(), ctx);
+                    fp12_chip.assert_equal(ctx, res, fp12_one.clone());
+                }
+
+                let extra_assignments = hasher.take_extra_assignments();
+
+                let _ = builder.assign_all(
+                    &config.range.gate,
+                    &config.range.lookup_advice,
+                    &config.range.q_lookup,
+                    &mut region,
+                    extra_assignments,
+                );
+
+                // TODO: constaint source_root, target_root with instances: `layouter.constrain_instance`
+                Ok(())
+            },
+        )
+    }
+
+    fn unusable_rows() -> usize {
+        todo!()
+    }
+
+    fn min_num_rows_state(_block: &witness::State<S, F>) -> (usize, usize) {
+        todo!()
+    }
+}
+
+impl<'a, S: Spec, F: Field> AttestationsCircuitBuilder<'a, S, F>
 where
     S::SiganturesCurve: BlsCurveExt,
     <S::SiganturesCurve as AppCurveExt>::Fq:
@@ -102,169 +271,18 @@ where
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     pub fn new(
-        builder: GateThreadBuilder<F>,
+        builder: Rc<RefCell<GateThreadBuilder<F>>>,
         attestations: &'a [Attestation<S>],
-        range: &'a RangeChip<F>,
+        sha256_offset: usize,
     ) -> Self {
-        let fp_chip = FpChip::<F, S::SiganturesCurve>::new(
-            range,
-            S::SiganturesCurve::LIMB_BITS,
-            S::SiganturesCurve::NUM_LIMBS,
-        );
+        assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
         Self {
-            builder: RefCell::new(builder),
-            range,
+            builder,
             attestations,
-            fp_chip,
             zero_hashes: Default::default(),
+            sha256_offset,
             _spec: PhantomData,
         }
-    }
-
-    /// assumptions:
-    /// - partial attestations are aggregated into full attestations
-    /// - number of attestations is less than MAX_COMMITTEES_PER_SLOT * SLOTS_PER_EPOCH
-    /// - all attestation have same source and target epoch
-    pub fn synthesize(
-        &self,
-        aggregated_pubkeys: Vec<G1Point<F>>,
-        config: &AttestationsCircuitConfig<F>,
-        challenges: &Challenges<F, Value<F>>,
-        layouter: &mut impl Layouter<F>,
-    ) {
-        assert!(!self.attestations.is_empty(), "no attestations supplied");
-        assert!(
-            self.attestations.len() <= S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH,
-            "too many attestations supplied",
-        );
-        config
-            .range
-            .load_lookup_table(layouter)
-            .expect("load range lookup table");
-        let mut first_pass = halo2_base::SKIP_FIRST_PASS;
-
-        let sha256_chip = Sha256Chip::new(
-            &config.sha256_config,
-            self.range(),
-            challenges.sha256_input(),
-            None,
-            0,
-        );
-
-        let hasher = CachedHashChip::new(&sha256_chip);
-        let fp2_chip = Fp2Chip::<F, S::SiganturesCurve>::new(self.fp_chip());
-        let g1_chip = EccChip::new(fp2_chip.fp_chip());
-        let g2_chip = EccChip::new(&fp2_chip);
-        let fp12_chip = Fp12Chip::<F, S::SiganturesCurve>::new(fp2_chip.fp_chip());
-        let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
-        let bls_chip = S::SiganturesCurve::new_signature_chip(fp2_chip.fp_chip());
-
-        layouter
-            .assign_region(
-                || "AggregationCircuitBuilder generated circuit",
-                |mut region| {
-                    config.annotate_columns_in_region(&mut region);
-                    if first_pass {
-                        first_pass = false;
-                        return Ok(());
-                    }
-
-                    let mut region = region;
-
-                    let builder = &mut self.builder.borrow_mut();
-                    let ctx = builder.main(0);
-
-                    let [source_root, target_root] = [
-                        self.attestations[0].data.source.clone(),
-                        self.attestations[0].data.target.clone(),
-                    ]
-                    .map(|cp| {
-                        hasher
-                            .digest::<64>(
-                                (cp.epoch, cp.root.as_ref()).into_witness(),
-                                ctx,
-                                &mut region,
-                            )
-                            .unwrap()
-                    });
-
-                    let fp12_one = {
-                        use ff::Field;
-                        fp12_chip
-                            .load_constant(ctx, <S::SiganturesCurve as BlsCurveExt>::Fq12::one())
-                    };
-                    let mut h2c_cache = HashToCurveCache::default();
-                    let g1_neg = g1_chip.load_private_unchecked(
-                        ctx,
-                        S::PubKeysCurve::generator_affine().neg().into_coordinates(),
-                    );
-
-                    for Attestation::<S> {
-                        data, signature, ..
-                    } in self.attestations.iter()
-                    {
-                        assert!(!signature.is_infinity());
-
-                        let pubkey = aggregated_pubkeys
-                            .get(data.index)
-                            .expect("pubkey not found")
-                            .clone();
-
-                        let signature = Self::assign_signature(signature, &g2_chip, ctx);
-
-                        let chunks = [
-                            data.slot.into_witness(),
-                            data.index.into_witness(),
-                            data.beacon_block_root.as_ref().into_witness(),
-                            source_root.output_bytes.into(),
-                            target_root.output_bytes.into(),
-                        ];
-
-                        let signing_root =
-                            self.merkleize_chunks(chunks, &hasher, ctx, &mut region)?;
-
-                        assert_eq!(
-                            data.clone().hash_tree_root().unwrap().as_ref().to_vec(),
-                            signing_root
-                                .iter()
-                                .map(|e| e.value().get_lower_32() as u8)
-                                .collect_vec(),
-                            "invalid signing root"
-                        );
-
-                        let msghash = h2c_chip.hash_to_curve::<S::SiganturesCurve>(
-                            signing_root.into(),
-                            self.fp_chip(),
-                            ctx,
-                            &mut region,
-                            &mut h2c_cache,
-                        )?;
-
-                        let res = bls_chip.verify_pairing(
-                            signature,
-                            msghash,
-                            pubkey,
-                            g1_neg.clone(),
-                            ctx,
-                        );
-
-                        fp12_chip.assert_equal(ctx, res, fp12_one.clone());
-                    }
-
-                    let extra_assignments = hasher.take_extra_assignments();
-
-                    let _ = builder.assign_all(
-                        &config.range.gate,
-                        &config.range.lookup_advice,
-                        &config.range.q_lookup,
-                        &mut region,
-                        extra_assignments,
-                    );
-
-                    Ok(())
-                },
-            )
-            .unwrap();
     }
 
     fn assign_signature(
@@ -332,54 +350,6 @@ where
 
         Ok(root.bytes)
     }
-
-    fn fp_chip(&self) -> &FpChip<'_, F, S::SiganturesCurve> {
-        &self.fp_chip
-    }
-
-    fn range(&self) -> &RangeChip<F> {
-        self.range
-    }
-}
-
-impl<'a, S: Spec, F: Field, const MAX_VALIDATORS_PER_COMMITTEE: usize> SubCircuit<F>
-    for AttestationsCircuitBuilder<'a, S, F, MAX_VALIDATORS_PER_COMMITTEE>
-where
-    S::SiganturesCurve: BlsCurveExt,
-    <S::SiganturesCurve as AppCurveExt>::Fq:
-        FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
-    [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
-{
-    type Config = AttestationsCircuitConfig<F>;
-    type SynthesisArgs = Vec<G1Point<F>>;
-
-    fn new_from_block(_block: &witness::Block<F>) -> Self {
-        todo!()
-    }
-
-    fn unusable_rows() -> usize {
-        todo!()
-    }
-
-    fn min_num_rows_block(_block: &witness::Block<F>) -> (usize, usize) {
-        todo!()
-    }
-
-    fn synthesize_sub(
-        &self,
-        config: &mut Self::Config,
-        challenges: &Challenges<F, Value<F>>,
-        layouter: &mut impl Layouter<F>,
-        pubkeys: Self::SynthesisArgs,
-    ) -> Result<(), Error> {
-        self.synthesize(pubkeys, config, challenges, layouter);
-
-        Ok(())
-    }
-
-    fn instance(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
 }
 
 mod bls12_381 {
@@ -412,7 +382,7 @@ mod bls12_381 {
 mod tests {
     use std::fs;
 
-    use crate::{table::SHA256Table, witness::Validator};
+    use crate::{table::Sha256Table, witness::Validator};
 
     use super::*;
     use eth_types::Test;
@@ -425,15 +395,15 @@ mod tests {
     use pasta_curves::group::UncompressedEncoding;
 
     #[derive(Debug)]
-    struct TestCircuit<'a, S: Spec, F: Field, const CMS: usize>
+    struct TestCircuit<'a, S: Spec, F: Field>
     where
         [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
     {
-        inner: AttestationsCircuitBuilder<'a, S, F, CMS>,
+        inner: AttestationsCircuitBuilder<'a, S, F>,
         agg_pubkeys: Vec<<S::PubKeysCurve as AppCurveExt>::Affine>,
     }
 
-    impl<'a, S: Spec, F: Field, const CMS: usize> TestCircuit<'a, S, F, CMS>
+    impl<'a, S: Spec, F: Field> TestCircuit<'a, S, F>
     where
         [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
     {
@@ -444,14 +414,14 @@ mod tests {
         const K: usize = 17;
     }
 
-    impl<'a, S: Spec, F: Field, const CMS: usize> Circuit<F> for TestCircuit<'a, S, F, CMS>
+    impl<'a, S: Spec, F: Field> Circuit<F> for TestCircuit<'a, S, F>
     where
         S::SiganturesCurve: BlsCurveExt,
         <S::SiganturesCurve as AppCurveExt>::Fq:
             FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
         [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
     {
-        type Config = (AttestationsCircuitConfig<F>, Challenges<F>);
+        type Config = (AttestationsCircuitConfig<F>, Challenges<Value<F>>);
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -468,7 +438,7 @@ mod tests {
                 Self::LOOKUP_BITS,
                 Self::K,
             );
-            let hash_table = SHA256Table::construct(meta);
+            let hash_table = Sha256Table::construct(meta);
             let sha256_config = Sha256CircuitConfig::new::<Test>(meta, hash_table);
             let config = AttestationsCircuitConfig::new::<Test>(
                 meta,
@@ -478,7 +448,10 @@ mod tests {
                 },
             );
 
-            (config, Challenges::construct(meta))
+            (
+                config,
+                Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
+            )
         }
 
         fn synthesize(
@@ -486,7 +459,18 @@ mod tests {
             mut config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
-            let g1_chip = EccChip::new(self.inner.fp_chip());
+            let range = RangeChip::default(config.0.range.lookup_bits());
+            config
+                .0
+                .range
+                .load_lookup_table(&mut layouter)
+                .expect("load range lookup table");
+            let fp_chip = FpChip::<F, S::SiganturesCurve>::new(
+                &range,
+                S::SiganturesCurve::LIMB_BITS,
+                S::SiganturesCurve::NUM_LIMBS,
+            );
+            let g1_chip = EccChip::new(&fp_chip);
             let mut builder = self.inner.builder.borrow_mut();
             let ctx = builder.main(0);
             let agg_pubkeys = self
@@ -495,23 +479,16 @@ mod tests {
                 .map(|apk| g1_chip.load_private_unchecked(ctx, apk.into_coordinates()))
                 .collect_vec();
             drop(builder);
-            self.inner.synthesize_sub(
-                &mut config.0,
-                &config.1.values(&mut layouter),
-                &mut layouter,
-                agg_pubkeys,
-            )?;
+            self.inner
+                .synthesize_sub(&config.0, &config.1, &mut layouter, agg_pubkeys)?;
             Ok(())
         }
     }
 
     #[test]
     fn test_attestations_circuit() {
-        let k = TestCircuit::<Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }>::K;
+        let k = TestCircuit::<Test, Fr>::K;
 
-        let range = RangeChip::default(
-            TestCircuit::<Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }>::LOOKUP_BITS,
-        );
         let builder = GateThreadBuilder::new(false);
         builder.config(k, None);
         let attestations: Vec<Attestation<Test>> =
@@ -526,8 +503,9 @@ mod tests {
             .map(|b| G1Affine::from_uncompressed(&b.as_slice().try_into().unwrap()).unwrap())
             .collect_vec();
 
-        let circuit = TestCircuit::<'_, Test, Fr, { Test::MAX_VALIDATORS_PER_COMMITTEE }> {
-            inner: AttestationsCircuitBuilder::new(builder, &attestations, &range),
+        let builder = Rc::from(RefCell::from(builder));
+        let circuit = TestCircuit::<'_, Test, Fr> {
+            inner: AttestationsCircuitBuilder::new(builder, &attestations, 0),
             agg_pubkeys,
         };
 

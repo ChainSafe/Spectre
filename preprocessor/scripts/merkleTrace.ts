@@ -81,22 +81,25 @@ export function createNodeFromMultiProofWithTrace(
         throw new Error(`Sibling not found: ${siblingBitstring}`);
       }
 
+    let index = isLeft ? nodeGindex : siblingGindex;
+    let siblingIndex = isLeft ? siblingGindex : nodeGindex;
+
       // store the parent node
       const parentNode = isLeft ? new BranchNode(node, siblingNode) : new BranchNode(siblingNode, node);
       trace.push({
-        node: node.root,
-        index: nodeGindex,
-        sibling: siblingNode.root,
-        siblingIndex: siblingGindex,
+        node: isLeft ? node.root : siblingNode.root,
+        index:  index,
+        sibling: isLeft ? siblingNode.root : node.root,
+        siblingIndex:  siblingIndex,
         intoLeft: parentBitstring[parentBitstring.length - 1] === "0",
-        isLeft: gindices.includes(isLeft ? nodeGindex : siblingGindex),
-        isRight: gindices.includes(isLeft ? siblingGindex : nodeGindex),
+        isLeft: gindices.includes(index),
+        isRight: gindices.includes(siblingIndex),
         parent: parentNode.root,
         parentIndex: parentGindex,
         depth: i,
         isRLC: [
-          !nonRlcGindices.includes(nodeGindex),
-          !nonRlcGindices.includes(siblingGindex),
+          !nonRlcGindices.includes(index),
+          !nonRlcGindices.includes(siblingIndex),
         ]
       });
 

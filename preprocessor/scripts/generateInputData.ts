@@ -14,33 +14,18 @@ import { g1PointToLeBytes as g1PointToBytesLE, g2PointToLeBytes, serialize } fro
 import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 import { hexToBytes, bytesToHex } from "@noble/curves/abstract/utils";
 import { ProjPointType } from "@noble/curves/abstract/weierstrass";
+import { createNodeFromCompactMultiProof } from "@chainsafe/persistent-merkle-tree/lib/proof/compactMulti";
+import { ValidatorsSsz, Validator, BeaconStateSsz } from "./types";
 
 const DST = "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
-const ValidatorContainer = new ContainerType(
-    {
-        pubkey: ssz.Bytes48,
-        withdrawalCredentials: ssz.Bytes32,
-        effectiveBalance: ssz.UintNum64,
-        slashed: ssz.Boolean,
-        activationEligibilityEpoch: ssz.EpochInf,
-        activationEpoch: ssz.EpochInf,
-        exitEpoch: ssz.EpochInf,
-        withdrawableEpoch: ssz.EpochInf,
-    },
-    { typeName: "Validator", jsonCase: "eth2" }
-);
-
-type Validator = ValueOf<typeof ValidatorContainer>;
-
-export const ValidatorsSsz = new ListCompositeType(ValidatorContainer, 10);
+console.log("VALIDATOR_0_GINDEX:", BeaconStateSsz.getPathInfo(['validators', 0]).gindex);
 
 const N = 5;
-let validators: Validator[] = [];
 let gindices: bigint[] = [];
 let validatorBaseGindices: bigint[] = [];
 
-let nonRlcGindices = [];
+let nonRlcGindices: bigint[] = [];
 
 let privKeyHexes = [
     "5644920314564b11404384380c1d677871ada2ec9470d5f43f03aa931ecef54b",
@@ -52,7 +37,12 @@ let privKeyHexes = [
 
 const target_epoch = 25;
 
-//----------------- State tree -----------------//
+//----------------- Beacon state -----------------//
+
+let beaconState = ssz.capella.BeaconState.deserialize(new Uint8Array(fs.readFileSync("../test_data/beacon_state_2915750")));
+beaconState.validators = [];
+
+//----------------- Validators -----------------//
 
 let pubKeyPoints: ProjPointType<bigint>[] = [];
 
@@ -62,7 +52,7 @@ for (let i = 0; i < N; i++) {
     let p = bls12_381.G1.ProjectivePoint.fromPrivateKey(privKey);
     let pubkey = g1PointToBytesLE(p, true);
 
-    validators.push({
+    beaconState.validators.push({
         pubkey: pubkey,
         withdrawalCredentials: Uint8Array.from(Array(32).fill(0)),
         effectiveBalance: 32000000,
@@ -74,23 +64,23 @@ for (let i = 0; i < N; i++) {
     });
     privKeyHexes[i] = bytesToHex(privKey);
     pubKeyPoints.push(p);
-    validatorBaseGindices.push(ValidatorsSsz.getPathInfo([i]).gindex);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'pubkey']).gindex * 2n + 1n);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'slashed']).gindex);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex);
-    gindices.push(ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex);
+    validatorBaseGindices.push(BeaconStateSsz.getPathInfo(['validators', i]).gindex);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'pubkey']).gindex * 2n);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'pubkey']).gindex * 2n + 1n);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'effectiveBalance']).gindex);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'slashed']).gindex);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'activationEpoch']).gindex);
+    gindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'exitEpoch']).gindex);
 
-    nonRlcGindices.push(ValidatorsSsz.getPathInfo([i, 'effectiveBalance']).gindex);
-    nonRlcGindices.push(ValidatorsSsz.getPathInfo([i, 'slashed']).gindex);
-    nonRlcGindices.push(ValidatorsSsz.getPathInfo([i, 'activationEpoch']).gindex);
-    nonRlcGindices.push(ValidatorsSsz.getPathInfo([i, 'exitEpoch']).gindex);
+    nonRlcGindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'effectiveBalance']).gindex);
+    nonRlcGindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'slashed']).gindex);
+    nonRlcGindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'activationEpoch']).gindex);
+    nonRlcGindices.push(BeaconStateSsz.getPathInfo(['validators', i, 'exitEpoch']).gindex);
 }
 
 fs.writeFileSync(
     `../test_data/validators.json`,
-    serialize(Array.from(validators.entries()).map(([i, validator]) => ({
+    serialize(Array.from(beaconState.validators.entries()).map(([i, validator]) => ({
         id: i,
         shufflePos: i,
         committee: 0,
@@ -173,16 +163,15 @@ fs.writeFileSync(
 
 
 //----------------- State tree -----------------//
-let view = ValidatorsSsz.toView(validators);
+
+let view = BeaconStateSsz.toView(beaconState);
+
 
 let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
 
-const areEqual = (first: Uint8Array, second: Uint8Array) =>
-    first.length === second.length && first.every((value, index) => value === second[index]);
-
 let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, nonRlcGindices);
-
 // printTrace(partial_tree, trace);
+console.log("state_root:", bytesToHex(view.hashTreeRoot()));
 
 fs.writeFileSync(
     `../test_data/merkle_trace.json`,

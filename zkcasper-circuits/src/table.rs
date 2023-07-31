@@ -10,7 +10,7 @@ pub(crate) mod sha256_table;
 pub(crate) mod state_table;
 pub(crate) mod validators_table;
 
-pub(crate) use sha256_table::SHA256Table;
+pub(crate) use sha256_table::Sha256Table;
 pub(crate) use validators_table::ValidatorsTable;
 
 /// Trait used to define lookup tables
@@ -41,11 +41,11 @@ pub trait LookupTable<F: Field> {
 
     /// Annotates a lookup table by passing annotations for each of it's
     /// columns.
-    fn annotate_columns(&self, cs: &mut ConstraintSystem<F>) {
+    fn annotate_columns(&self, meta: &mut ConstraintSystem<F>) {
         self.columns()
             .iter()
             .zip(self.annotations().iter())
-            .for_each(|(&col, ann)| cs.annotate_lookup_any_column(col, || ann))
+            .for_each(|(&col, ann)| meta.annotate_lookup_any_column(col, || ann))
     }
 
     /// Annotates columns of a table embedded within a circuit region.

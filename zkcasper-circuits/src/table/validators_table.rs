@@ -3,7 +3,10 @@ use std::marker::PhantomData;
 use gadgets::util::{not, Expr};
 use halo2_proofs::circuit::Cell;
 
-use crate::witness::{pad_to_max_per_committee, Validator, ValidatorRow};
+use crate::{
+    validators_circuit::ValidatorsCircuitOutput,
+    witness::{pad_to_max_per_committee, Validator, ValidatorRow},
+};
 
 use super::*;
 use eth_types::Spec;
@@ -31,9 +34,6 @@ pub struct ValidatorsTable {
     pub attest_digits: Vec<Column<Advice>>,
     /// Accumulated balance for *all* committees.
     pub total_balance_acc: Column<Advice>,
-
-    pub pubkey_cells: Vec<[Cell; 2]>,
-    pub attest_digits_cells: Vec<Vec<Cell>>,
 }
 
 impl<F: Field> LookupTable<F> for ValidatorsTable {
@@ -95,8 +95,6 @@ impl ValidatorsTable {
                 .map(|_| meta.advice_column())
                 .collect(),
             total_balance_acc: meta.advice_column(),
-            pubkey_cells: vec![],
-            attest_digits_cells: vec![],
         };
 
         itertools::chain![&config.pubkey, &config.attest_digits,]
@@ -106,10 +104,12 @@ impl ValidatorsTable {
     }
 
     pub fn assign_with_region<S: Spec, F: Field>(
-        &mut self,
+        &self,
         region: &mut Region<'_, F>,
         offset: usize,
         row: &ValidatorRow<F>,
+        pubkey_cells: &mut Vec<[Cell; 2]>,
+        attest_digits_cells: &mut Vec<Vec<Cell>>,
     ) -> Result<(), Error> {
         let [attest_bit, pubkey_lo, pubkey_hi, ..] = [
             (self.attest_bit, row.is_attested),
@@ -135,7 +135,7 @@ impl ValidatorsTable {
                 .cell()
         });
 
-        let attest_digits_cells = self
+        let attest_digit_cells = self
             .attest_digits
             .iter()
             .zip(row.attest_digits.iter().copied())
@@ -152,9 +152,9 @@ impl ValidatorsTable {
             })
             .collect();
 
-        self.pubkey_cells.push([pubkey_lo, pubkey_hi]);
+        pubkey_cells.push([pubkey_lo, pubkey_hi]);
         if (offset + 1) % S::MAX_VALIDATORS_PER_COMMITTEE == 0 {
-            self.attest_digits_cells.push(attest_digits_cells);
+            attest_digits_cells.push(attest_digit_cells);
         }
 
         Ok(())
@@ -166,7 +166,7 @@ impl ValidatorsTable {
         layouter: &mut impl Layouter<F>,
         validators: &[Validator],
         challenge: Value<F>,
-    ) -> Result<(), Error> {
+    ) -> Result<ValidatorsCircuitOutput, Error> {
         let padded_validators = pad_to_max_per_committee::<S>(validators.iter());
         let num_committees = padded_validators.len() / S::MAX_VALIDATORS_PER_COMMITTEE;
 
@@ -176,6 +176,8 @@ impl ValidatorsTable {
                 self.annotate_columns_in_region(&mut region);
                 let mut committees_balances = vec![0; num_committees];
                 let mut attest_digits = vec![vec![0; S::attest_digits_len::<F>()]; num_committees];
+                let mut pubkey_cells = vec![];
+                let mut attest_digits_cells = vec![];
                 for (offset, row) in padded_validators
                     .iter()
                     .flat_map(|&v| {
@@ -187,10 +189,19 @@ impl ValidatorsTable {
                     })
                     .enumerate()
                 {
-                    self.assign_with_region::<S, F>(&mut region, offset, &row)?;
+                    self.assign_with_region::<S, F>(
+                        &mut region,
+                        offset,
+                        &row,
+                        &mut pubkey_cells,
+                        &mut attest_digits_cells,
+                    )?;
                 }
 
-                Ok(())
+                Ok(ValidatorsCircuitOutput {
+                    pubkey_cells,
+                    attest_digits_cells,
+                })
             },
         )
     }
@@ -259,7 +270,7 @@ impl<S: Spec, F: Field> ValidatorTableQueries<S, F> {
     }
 
     pub fn balance_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id())
+        (S::VALIDATOR_0_GINDEX.expr() + self.id())
             * 2u64.pow(3).expr() // 3 levels deeper
             + 2.expr() // skip pubkeyRoot and withdrawalCredentials
     }
@@ -289,25 +300,24 @@ impl<S: Spec, F: Field> ValidatorTableQueries<S, F> {
     }
 
     pub fn slashed_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 3.expr()
+        (S::VALIDATOR_0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 3.expr()
     }
 
     pub fn activation_epoch_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr()
+        (S::VALIDATOR_0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 5.expr()
         // skip activationEligibilityEpoch
     }
 
     pub fn exit_epoch_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(3).expr() + 6.expr()
+        (S::VALIDATOR_0_GINDEX.expr() + self.id()) * 2u64.pow(3).expr() + 6.expr()
     }
 
     pub fn pubkey_lo_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(4).expr() // 4 levels deeper 0 + 0 * 2^x = 94557999988736n
-                                                                         // d = sqrt(94557999988736n) = 1048576 sqrt(86)
+        (S::VALIDATOR_0_GINDEX.expr() + self.id()) * 2u64.pow(4).expr() // 4 levels deeper
     }
 
     pub fn pubkey_hi_gindex(&self) -> Expression<F> {
-        (S::VALIDATOR_0_G_INDEX.expr() + self.id()) * 2u64.pow(4).expr() + 1.expr()
+        (S::VALIDATOR_0_GINDEX.expr() + self.id()) * 2u64.pow(4).expr() + 1.expr()
     }
 
     pub fn balance_acc(&self) -> Expression<F> {
