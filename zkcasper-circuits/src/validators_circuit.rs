@@ -379,7 +379,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                 || Value::known(F::from(target_epoch)),
             )?;
 
-            if let Some(&validator) = padded_validators.get(i) {
+            if let Some((committee, validator)) = padded_validators.get(i) {
                 target_gte_activation.assign(
                     region,
                     offset,
@@ -394,6 +394,7 @@ impl<F: Field> ValidatorsCircuitConfig<F> {
                 )?;
 
                 let validator_rows = validator.table_assignment::<S, F>(
+                    *committee,
                     randomness,
                     &mut attest_digits,
                     &mut committees_balances,

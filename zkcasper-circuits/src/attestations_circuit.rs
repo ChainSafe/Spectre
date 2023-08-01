@@ -6,9 +6,7 @@ use crate::{
         HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
-    util::{
-        print_fq2_dev, Challenges, IntoWitness, SubCircuit, SubCircuitBuilder, SubCircuitConfig,
-    },
+    util::{Challenges, IntoWitness, SubCircuit, SubCircuitBuilder, SubCircuitConfig},
     witness::{self, Attestation, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
@@ -128,10 +126,6 @@ where
         aggregated_pubkeys: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         assert!(!self.attestations.is_empty(), "no attestations supplied");
-        assert!(
-            self.attestations.len() <= S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH,
-            "too many attestations supplied",
-        );
         let mut first_pass = halo2_base::SKIP_FIRST_PASS;
 
         let range = RangeChip::default(config.range.lookup_bits());
@@ -164,8 +158,6 @@ where
                     return Ok(());
                 }
 
-                let mut region = region;
-
                 let builder = &mut self.builder.borrow_mut();
                 let ctx = builder.main(0);
 
@@ -195,7 +187,10 @@ where
 
                 for Attestation::<S> {
                     data, signature, ..
-                } in self.attestations.iter()
+                } in self
+                    .attestations
+                    .iter()
+                    .take(S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH)
                 {
                     assert!(!signature.is_infinity());
 

@@ -180,8 +180,9 @@ impl ValidatorsTable {
                 let mut attest_digits_cells = vec![];
                 for (offset, row) in padded_validators
                     .iter()
-                    .flat_map(|&v| {
+                    .flat_map(|(committee, v)| {
                         v.table_assignment::<S, F>(
+                            *committee,
                             challenge,
                             &mut attest_digits,
                             &mut committees_balances,

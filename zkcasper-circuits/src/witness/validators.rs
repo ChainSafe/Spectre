@@ -51,10 +51,19 @@ impl Default for Validator {
 }
 
 impl Validator {
+    pub fn dummy(id: usize, committee: usize) -> Self {
+        Validator {
+            id,
+            committee,
+            ..Validator::default()
+        }
+    }
+
     /// Get validaotor table record.
     /// `attest_digits` - digits composed from attestation bits of validator's committee.
     pub(crate) fn table_assignment<S: Spec, F: Field>(
         &self,
+        committee: usize,
         randomness: Value<F>,
         attest_digits: &mut [Vec<u64>],
         committees_balances: &mut [u64],
@@ -68,11 +77,11 @@ impl Validator {
         let attest_digit_len = S::attest_digits_len::<F>();
         let current_digit = committee_pos / F::NUM_BITS as usize;
         // accumulate bits into current digit
-        let committee_attest_digits = &mut attest_digits[self.committee];
+        let committee_attest_digits = &mut attest_digits[committee];
         let digit = committee_attest_digits.get_mut(current_digit).unwrap();
         *digit = *digit * 2 + self.is_attested as u64;
         // accumulate balance of the current committee
-        committees_balances[self.committee] += self.effective_balance * self.is_active as u64;
+        committees_balances[committee] += self.effective_balance * self.is_active as u64;
 
         vec![ValidatorRow {
             id: Value::known(F::from(self.id as u64)),
@@ -91,7 +100,7 @@ impl Validator {
                 .take(attest_digit_len)
                 .map(|b| Value::known(F::from(*b)))
                 .collect(),
-            total_balance_acc: Value::known(F::from(committees_balances[self.committee])),
+            total_balance_acc: Value::known(F::from(committees_balances.iter().sum::<u64>())),
         }]
     }
 
@@ -142,15 +151,25 @@ impl Validator {
     }
 }
 
+/// Orders validators by committees and pads to S::MAX_VALIDATORS_PER_COMMITTEE.
+/// Returns a vector of (committee, validator) pairs.
+/// Note: use returned `committee` instead `validator.committee`
+///  as `DUMMY_VALIDATOR` may contain wrong committee index.
 pub fn pad_to_max_per_committee<'a, S: Spec>(
     validators: impl Iterator<Item = &'a Validator>,
-) -> Vec<&'a Validator> {
+) -> Vec<(usize, &'a Validator)> {
     validators
         .into_iter()
         .group_by(|v| v.committee)
         .into_iter()
         .sorted_by_key(|(committee, _)| *committee)
-        .flat_map(|(_, vs)| vs.pad_using(S::MAX_VALIDATORS_PER_COMMITTEE, |_| &DUMMY_VALIDATOR))
+        .take(S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH)
+        .flat_map(|(committee, vs)| {
+            vs.map(move |v| (committee, v))
+                .pad_using(S::MAX_VALIDATORS_PER_COMMITTEE, move |_| {
+                    (committee, &DUMMY_VALIDATOR)
+                })
+        })
         .collect()
 }
 
