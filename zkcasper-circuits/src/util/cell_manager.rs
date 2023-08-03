@@ -2,7 +2,7 @@ use crate::util::Expr;
 use eth_types::*;
 use halo2_proofs::{
     circuit::{AssignedCell, Region, Value},
-    plonk::{Advice, Column, Error, Expression, VirtualCells},
+    plonk::{Advice, Assigned, Column, Error, Expression, VirtualCells},
     poly::Rotation,
 };
 
@@ -104,5 +104,21 @@ impl CellType {
     /// Return the storage cell of the advice column
     pub(crate) fn storage_for_column<F: Field>(col: &Column<Advice>) -> CellType {
         Self::storage_for_phase(col.column_type().phase())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AssignedValueCell<F: Field> {
+    pub cell: halo2_proofs::circuit::Cell,
+    pub value: F,
+}
+
+impl<F: Field> AssignedValueCell<F> {
+    pub fn cell(&self) -> halo2_proofs::circuit::Cell {
+        self.cell
+    }
+
+    pub fn value(&self) -> F {
+        self.value
     }
 }

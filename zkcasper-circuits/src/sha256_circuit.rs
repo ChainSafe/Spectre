@@ -10,11 +10,15 @@ use std::marker::PhantomData;
 
 use crate::{
     table::{LookupTable, Sha256Table},
-    util::{not, BaseConstraintBuilder, Challenges, Expr, SubCircuit, SubCircuitConfig},
+    util::{
+        not, AssignedValueCell, BaseConstraintBuilder, Challenges, Expr, SubCircuit,
+        SubCircuitConfig,
+    },
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
 use gadgets::util::{and, rlc, select, sum, xor};
+use halo2_base::{AssignedValue, ContextCell};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
@@ -739,7 +743,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         input: HashInput<u8>,
-    ) -> Result<[AssignedCell<F, F>; NUM_BYTES_FINAL_HASH], Error> {
+    ) -> Result<[AssignedValueCell<F>; NUM_BYTES_FINAL_HASH], Error> {
         let witness = multi_sha256(&[input], Sha256CircuitConfig::fixed_challenge());
         let mut hashes = self.assign(layouter, &witness)?;
         assert_eq!(hashes.len(), 1);
@@ -751,7 +755,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         region: &mut Region<'_, F>,
         input: HashInput<u8>,
         assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<[AssignedCell<F, F>; NUM_BYTES_FINAL_HASH], Error> {
+    ) -> Result<[AssignedValueCell<F>; NUM_BYTES_FINAL_HASH], Error> {
         let witness = multi_sha256(&[input], Sha256CircuitConfig::fixed_challenge());
         let mut hashes = self.assign_with_region(region, &witness, assigned_rows)?;
         assert_eq!(hashes.len(), 1);
@@ -762,7 +766,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         witness: &[ShaRow<F>],
-    ) -> Result<Vec<Vec<AssignedCell<F, F>>>, Error> {
+    ) -> Result<Vec<Vec<AssignedValueCell<F>>>, Error> {
         layouter.assign_region(
             || "assign sha256 data",
             |mut region| {
@@ -777,16 +781,16 @@ impl<F: Field> Sha256CircuitConfig<F> {
         region: &mut Region<'_, F>,
         witness: &[ShaRow<F>],
         assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<Vec<Vec<AssignedCell<F, F>>>, Error> {
+    ) -> Result<Vec<Vec<AssignedValueCell<F>>>, Error> {
         self.annotate_columns_in_region(region);
         let vec_vecs = witness
             .iter()
             .map(|sha256_row| self.set_row(region, sha256_row, assigned_rows))
-            .collect::<Result<Vec<Vec<AssignedCell<F, F>>>, Error>>()?;
+            .collect::<Result<Vec<Vec<_>>, Error>>()?;
         let filtered = vec_vecs
             .into_iter()
             .filter(|vec| !vec.is_empty())
-            .collect::<Vec<Vec<AssignedCell<F, F>>>>();
+            .collect_vec();
         Ok(filtered)
     }
 
@@ -795,7 +799,7 @@ impl<F: Field> Sha256CircuitConfig<F> {
         region: &mut Region<'_, F>,
         row: &ShaRow<F>,
         assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+    ) -> Result<Vec<AssignedValueCell<F>>, Error> {
         let offset = assigned_rows.offset;
         assigned_rows.offset += 1;
         let round = offset % (NUM_ROUNDS + 8);
@@ -893,12 +897,17 @@ impl<F: Field> Sha256CircuitConfig<F> {
             .zip(row.is_paddings.iter())
             .enumerate()
             .map(|(idx, (&col, &val))| {
-                region.assign_advice(
+                let cell = region.assign_advice(
                     || format!("assign {} {} {}", "padding selector", idx, offset),
                     col,
                     offset,
                     || Value::known(F::from(val)),
-                )
+                );
+
+                cell.map(|cell| AssignedValueCell {
+                    cell: cell.cell(),
+                    value: F::from(val),
+                })
             })
             .collect::<Result<Vec<_>, _>>()?
             .try_into()
@@ -1018,7 +1027,10 @@ impl<F: Field> Sha256CircuitConfig<F> {
                     offset,
                     || Value::known(*byte),
                 )?;
-                hash_cells.push(cell);
+                hash_cells.push(AssignedValueCell {
+                    cell: cell.cell(),
+                    value: *byte,
+                });
             }
         }
         Ok(hash_cells)
@@ -1202,7 +1214,7 @@ mod tests {
     #[test]
     fn test_sha256_two2one_simple() {
         let k = 11;
-        let inputs = vec![(vec![0u8; 32], vec![0u8; 32],).into(); 1];
+        let inputs = vec![(vec![1u8; 32], vec![1u8; 32],).into(); 1];
         let circuit = TestSha256::<S, Fr> {
             inner: Sha256Circuit::new(&inputs),
         };

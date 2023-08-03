@@ -1,5 +1,9 @@
 use super::*;
-use crate::{util::rlc, witness::HashInput};
+use crate::{
+    util::{rlc, AssignedValueCell},
+    witness::HashInput,
+};
+use halo2_base::utils::value_to_option;
 use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 use sha2::Digest;
@@ -64,12 +68,21 @@ impl Sha256Table {
         region: &mut Region<F>,
         offset: usize,
         values: [Value<F>; 6],
-    ) -> Result<[AssignedCell<F, F>; 6], Error> {
+    ) -> Result<[AssignedValueCell<F>; 6], Error> {
         <Sha256Table as LookupTable<F>>::advice_columns(self)
             .iter()
             .zip(values.iter())
             .map(|(&column, value)| {
-                region.assign_advice(|| format!("assign {}", offset), column, offset, || *value)
+                let cell = region.assign_advice(
+                    || format!("assign {}", offset),
+                    column,
+                    offset,
+                    || *value,
+                );
+                cell.map(|cell| AssignedValueCell {
+                    cell: cell.cell(),
+                    value: value_to_option(*value).unwrap(),
+                })
             })
             .collect::<Result<Vec<_>, _>>()
             .map(|res| res.try_into().unwrap())
