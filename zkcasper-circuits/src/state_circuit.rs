@@ -234,7 +234,7 @@ where
         Ok(())
     }
 
-    fn instance(&self) -> Vec<Vec<F>> {
+    fn instances(&self) -> Vec<Vec<F>> {
         self.trace.root().map(|b| vec![F::from(b as u64)]).to_vec()
     }
 
@@ -321,7 +321,7 @@ mod tests {
             _f: PhantomData,
         };
 
-        let instance = circuit.inner.instance();
+        let instance = circuit.inner.instances();
         let prover = MockProver::<Fr>::run(k, &circuit, instance).unwrap();
         prover.assert_satisfied();
     }

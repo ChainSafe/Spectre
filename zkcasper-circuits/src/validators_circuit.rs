@@ -523,7 +523,7 @@ where
         )
     }
 
-    fn instance(&self) -> Vec<Vec<F>> {
+    fn instances(&self) -> Vec<Vec<F>> {
         vec![vec![F::from(self.target_epoch)]]
     }
 
@@ -632,7 +632,7 @@ mod tests {
             _f: PhantomData,
         };
 
-        let instance = circuit.inner.instance();
+        let instance = circuit.inner.instances();
         let prover = MockProver::<Fr>::run(k, &circuit, instance).unwrap();
         prover.assert_satisfied();
     }

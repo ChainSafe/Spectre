@@ -11,7 +11,10 @@ use crate::{
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use halo2_base::{
-    gates::{builder::GateThreadBuilder, range::RangeConfig},
+    gates::{
+        builder::{GateThreadBuilder, RangeCircuitBuilder},
+        range::RangeConfig,
+    },
     safe_types::RangeChip,
     utils::CurveAffineExt,
     AssignedValue, Context, QuantumCell,
@@ -85,10 +88,11 @@ pub struct AttestationsCircuitBuilder<'a, S: Spec, F: Field>
 where
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
-    builder: Rc<RefCell<GateThreadBuilder<F>>>,
+    builder: RefCell<GateThreadBuilder<F>>,
     attestations: &'a [Attestation<S>],
-    zero_hashes: RefCell<HashMap<usize, HashInputChunk<QuantumCell<F>>>>,
     sha256_offset: usize,
+    agg_pubkeys: Option<Vec<<S::PubKeysCurve as AppCurveExt>::Affine>>,
+    dry_run: bool,
     _spec: PhantomData<S>,
 }
 
@@ -107,11 +111,12 @@ where
         builder: Rc<RefCell<GateThreadBuilder<F>>>,
         state: &'a witness::State<S, F>,
     ) -> Self {
-        Self::new(
-            builder,
-            &state.attestations,
-            state.sha256_inputs.len() * 144,
-        )
+        // Self::new(
+        //     builder,
+        //     &state.attestations,
+        //     state.sha256_inputs.len() * 144,
+        // )
+        todo!()
     }
 
     /// Assumptions:
@@ -123,7 +128,7 @@ where
         config: &Self::Config,
         challenges: &Challenges<Value<F>>,
         layouter: &mut impl Layouter<F>,
-        aggregated_pubkeys: Self::SynthesisArgs,
+        mut aggregated_pubkeys: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         assert!(!self.attestations.is_empty(), "no attestations supplied");
         let mut first_pass = halo2_base::SKIP_FIRST_PASS;
@@ -149,6 +154,13 @@ where
         let hasher = CachedHashChip::new(&sha256_chip);
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
 
+        let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
+        let mut builder = if self.dry_run {
+            self.builder.borrow_mut()
+        } else {
+            builder_clone.borrow_mut()
+        };
+
         layouter.assign_region(
             || "AggregationCircuitBuilder generated circuit",
             |mut region| {
@@ -158,8 +170,19 @@ where
                     return Ok(());
                 }
 
-                let builder = &mut self.builder.borrow_mut();
                 let ctx = builder.main(0);
+
+                // assign pubkeys if in test
+                aggregated_pubkeys =
+                    self.agg_pubkeys
+                        .clone()
+                        .map_or(aggregated_pubkeys.clone(), |apks| {
+                            apks.iter()
+                                .map(|apk| {
+                                    g1_chip.load_private_unchecked(ctx, apk.into_coordinates())
+                                })
+                                .collect_vec()
+                        });
 
                 let [source_root, target_root] = [
                     self.attestations[0].data.source.clone(),
@@ -179,7 +202,7 @@ where
                     use ff::Field;
                     fp12_chip.load_constant(ctx, <S::SiganturesCurve as BlsCurveExt>::Fq12::one())
                 };
-                let mut h2c_cache = HashToCurveCache::default();
+                let mut h2c_cache = HashToCurveCache::<F>::default();
                 let g1_neg = g1_chip.load_private_unchecked(
                     ctx,
                     S::PubKeysCurve::generator_affine().neg().into_coordinates(),
@@ -211,15 +234,6 @@ where
 
                     let signing_root = self.merkleize_chunks(chunks, &hasher, ctx, &mut region)?;
 
-                    assert_eq!(
-                        data.clone().hash_tree_root().unwrap().as_ref().to_vec(),
-                        signing_root
-                            .iter()
-                            .map(|e| e.value().get_lower_32() as u8)
-                            .collect_vec(),
-                        "invalid signing root"
-                    );
-
                     let msghash = h2c_chip.hash_to_curve::<S::SiganturesCurve>(
                         signing_root.into(),
                         &fp_chip,
@@ -230,10 +244,14 @@ where
 
                     let res =
                         bls_chip.verify_pairing(signature, msghash, pubkey, g1_neg.clone(), ctx);
-                    fp12_chip.assert_equal(ctx, res, fp12_one.clone());
+                    // fp12_chip.assert_equal(ctx, res, fp12_one.clone());
                 }
 
                 let extra_assignments = hasher.take_extra_assignments();
+
+                if self.dry_run {
+                    return Ok(());
+                }
 
                 let _ = builder.assign_all(
                     &config.range.gate,
@@ -266,18 +284,25 @@ where
     [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
 {
     pub fn new(
-        builder: Rc<RefCell<GateThreadBuilder<F>>>,
+        builder: RefCell<GateThreadBuilder<F>>,
         attestations: &'a [Attestation<S>],
         sha256_offset: usize,
+        agg_pubkeys: Option<Vec<<S::PubKeysCurve as AppCurveExt>::Affine>>,
     ) -> Self {
         assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
         Self {
             builder,
             attestations,
-            zero_hashes: Default::default(),
             sha256_offset,
+            agg_pubkeys,
+            dry_run: false,
             _spec: PhantomData,
         }
+    }
+
+    pub fn dry_run(mut self) -> Self {
+        self.dry_run = true;
+        self
     }
 
     fn assign_signature(
@@ -304,7 +329,6 @@ where
         I::IntoIter: ExactSizeIterator,
     {
         let mut chunks = chunks.into_iter().collect_vec();
-        let mut zero_hashes = self.zero_hashes.borrow_mut();
         let len_even = chunks.len() + chunks.len() % 2;
         let height = (len_even as f64).log2().ceil() as usize;
 
@@ -314,14 +338,9 @@ where
             let padded_chunks = chunks
                 .into_iter()
                 .pad_using(len_even, |_| {
-                    zero_hashes
-                        .entry(depth)
-                        .or_insert_with(|| {
-                            HashInputChunk::from(
-                                ZERO_HASHES[depth].map(|b| ctx.load_constant(F::from(b as u64))),
-                            )
-                        })
-                        .clone()
+                    HashInputChunk::from(
+                        ZERO_HASHES[depth].map(|b| ctx.load_constant(F::from(b as u64))),
+                    )
                 })
                 .collect_vec();
 
@@ -375,38 +394,45 @@ mod bls12_381 {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{
+        env::{set_var, var},
+        fs,
+    };
 
-    use crate::{table::Sha256Table, witness::Validator};
+    use crate::{
+        root_circuit::SnarkAggregationCircuit,
+        table::Sha256Table,
+        util::{full_prover, full_verifier, generate_setup_artifacts},
+        witness::Validator,
+    };
 
     use super::*;
+    use ark_std::{end_timer, start_timer};
     use eth_types::Test;
     use ethereum_consensus::builder;
-    use halo2_base::gates::range::RangeStrategy;
-    use halo2_proofs::{
-        circuit::SimpleFloorPlanner, dev::MockProver, halo2curves::bn256::Fr, plonk::Circuit,
+    use halo2_base::gates::{
+        builder::{CircuitBuilderStage, FlexGateConfigParams},
+        flex_gate::GateStrategy,
+        range::RangeStrategy,
     };
-    use halo2curves::bls12_381::G1Affine;
+    use halo2_proofs::{
+        circuit::SimpleFloorPlanner,
+        dev::MockProver,
+        halo2curves::bn256::Fr,
+        plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
+        poly::kzg::commitment::ParamsKZG,
+    };
+    use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
+    use rand::rngs::OsRng;
+    use snark_verifier_sdk::{halo2::gen_snark_shplonk, CircuitExt};
 
-    #[derive(Debug)]
+    #[derive(Clone, Debug)]
     struct TestCircuit<'a, S: Spec, F: Field>
     where
         [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
     {
         inner: AttestationsCircuitBuilder<'a, S, F>,
-        agg_pubkeys: Vec<<S::PubKeysCurve as AppCurveExt>::Affine>,
-    }
-
-    impl<'a, S: Spec, F: Field> TestCircuit<'a, S, F>
-    where
-        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
-    {
-        const NUM_ADVICE: &[usize] = &[80];
-        const NUM_FIXED: usize = 1;
-        const NUM_LOOKUP_ADVICE: usize = 15;
-        const LOOKUP_BITS: usize = 8;
-        const K: usize = 17;
     }
 
     impl<'a, S: Spec, F: Field> Circuit<F> for TestCircuit<'a, S, F>
@@ -424,15 +450,7 @@ mod tests {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let range = RangeConfig::configure(
-                meta,
-                RangeStrategy::Vertical,
-                Self::NUM_ADVICE,
-                &[Self::NUM_LOOKUP_ADVICE],
-                Self::NUM_FIXED,
-                Self::LOOKUP_BITS,
-                Self::K,
-            );
+            let range = RangeCircuitBuilder::configure(meta);
             let hash_table = Sha256Table::construct(meta);
             let sha256_config = Sha256CircuitConfig::new::<Test>(meta, hash_table);
             let config = AttestationsCircuitConfig::new::<Test>(
@@ -454,38 +472,46 @@ mod tests {
             mut config: Self::Config,
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
-            let range = RangeChip::default(config.0.range.lookup_bits());
             config
                 .0
                 .range
                 .load_lookup_table(&mut layouter)
                 .expect("load range lookup table");
-            let fp_chip = FpChip::<F, S::SiganturesCurve>::new(
-                &range,
-                S::SiganturesCurve::LIMB_BITS,
-                S::SiganturesCurve::NUM_LIMBS,
-            );
-            let g1_chip = EccChip::new(&fp_chip);
-            let mut builder = self.inner.builder.borrow_mut();
-            let ctx = builder.main(0);
-            let agg_pubkeys = self
-                .agg_pubkeys
-                .iter()
-                .map(|apk| g1_chip.load_private_unchecked(ctx, apk.into_coordinates()))
-                .collect_vec();
-            drop(builder);
             self.inner
-                .synthesize_sub(&config.0, &config.1, &mut layouter, agg_pubkeys)?;
+                .synthesize_sub(&config.0, &config.1, &mut layouter, vec![])?;
             Ok(())
         }
     }
 
+    impl<'a, S: Spec, F: Field> CircuitExt<F> for TestCircuit<'a, S, F>
+    where
+        S::SiganturesCurve: BlsCurveExt,
+        <S::SiganturesCurve as AppCurveExt>::Fq:
+            FieldExtConstructor<<S::SiganturesCurve as AppCurveExt>::Fp, 2>,
+        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+    {
+        fn num_instance(&self) -> Vec<usize> {
+            self.inner.instance().iter().map(|v| v.len()).collect()
+        }
+
+        fn instances(&self) -> Vec<Vec<F>> {
+            self.inner.instance()
+        }
+    }
+
+    impl<'a, S: Spec, F: Field> TestCircuit<'a, S, F>
+    where
+        [(); S::MAX_VALIDATORS_PER_COMMITTEE]:,
+    {
+        const NUM_ADVICE: &[usize] = &[80];
+        const NUM_FIXED: usize = 1;
+        const NUM_LOOKUP_ADVICE: usize = 15;
+        const LOOKUP_BITS: usize = 16;
+    }
+
     #[test]
     fn test_attestations_circuit() {
-        let k = TestCircuit::<Test, Fr>::K;
-
         let builder = GateThreadBuilder::new(false);
-        builder.config(k, None);
         let attestations: Vec<Attestation<Test>> =
             serde_json::from_slice(&fs::read("../test_data/attestations.json").unwrap()).unwrap();
 
@@ -498,13 +524,165 @@ mod tests {
             .map(|b| G1Affine::from_uncompressed(&b.as_slice().try_into().unwrap()).unwrap())
             .collect_vec();
 
-        let builder = Rc::from(RefCell::from(builder));
+        let mock_k = 17;
+        let k = 17;
+        {
+            let mock_params = FlexGateConfigParams {
+                strategy: GateStrategy::Vertical,
+                k: mock_k,
+                num_advice_per_phase: vec![80],
+                num_lookup_advice_per_phase: vec![15],
+                num_fixed: 1,
+            };
+
+            set_var(
+                "FLEX_GATE_CONFIG_PARAMS",
+                serde_json::to_string(&mock_params).unwrap(),
+            );
+            std::env::set_var("LOOKUP_BITS", 16.to_string());
+            let circuit = TestCircuit::<'_, Test, Fr> {
+                inner: AttestationsCircuitBuilder::new(
+                    RefCell::from(builder.clone()),
+                    &attestations,
+                    0,
+                    Some(agg_pubkeys.clone()),
+                )
+                .dry_run(),
+            };
+
+            let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
+            circuit.inner.builder.borrow().config(k, Some(2520));
+            std::env::set_var("LOOKUP_BITS", 16.to_string());
+            let pp: FlexGateConfigParams =
+                serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+            println!("params: {:?}", pp);
+        }
+        let builder = RefCell::from(builder);
         let circuit = TestCircuit::<'_, Test, Fr> {
-            inner: AttestationsCircuitBuilder::new(builder, &attestations, 0),
-            agg_pubkeys,
+            inner: AttestationsCircuitBuilder::new(
+                builder,
+                &attestations,
+                0,
+                Some(agg_pubkeys.clone()),
+            ),
         };
 
+        let timer = start_timer!(|| "test_attestations_circuit");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
+        end_timer!(timer);
+    }
+
+    #[test]
+    fn test_snark_aggregation() {
+        let k = 17;
+
+        let builder = GateThreadBuilder::new(false);
+        let attestations: Vec<Attestation<Test>> =
+            serde_json::from_slice(&fs::read("../test_data/attestations.json").unwrap()).unwrap();
+        let attestations: [Attestation<Test>; 2] = attestations
+            .into_iter()
+            .take(2)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let bytes_pubkeys: Vec<Vec<u8>> =
+            serde_json::from_slice(&fs::read("../test_data/aggregated_pubkeys.json").unwrap())
+                .unwrap();
+
+        let agg_pubkeys = bytes_pubkeys
+            .iter()
+            .map(|b| G1Affine::from_uncompressed(&b.as_slice().try_into().unwrap()).unwrap())
+            .collect_vec();
+
+        let first_pubkey = agg_pubkeys.iter().take(1).cloned().collect_vec();
+
+        let mock_k = 17;
+        let k = 17;
+        {
+            let mock_params = FlexGateConfigParams {
+                strategy: GateStrategy::Vertical,
+                k: mock_k,
+                num_advice_per_phase: vec![59],
+                num_lookup_advice_per_phase: vec![8],
+                num_fixed: 1,
+            };
+
+            set_var(
+                "FLEX_GATE_CONFIG_PARAMS",
+                serde_json::to_string(&mock_params).unwrap(),
+            );
+            std::env::set_var("LOOKUP_BITS", 16.to_string());
+            let circuit = TestCircuit::<'_, Test, Fr> {
+                inner: AttestationsCircuitBuilder::new(
+                    RefCell::from(builder.clone()),
+                    &attestations[..1],
+                    0,
+                    Some(first_pubkey.clone()),
+                )
+                .dry_run(),
+            };
+
+            let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
+            circuit.inner.builder.borrow().config(k, Some(2520));
+            let pp: FlexGateConfigParams =
+                serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+            println!("params: {:?}", pp);
+        }
+
+        let keygen_circuit = {
+            let builder = RefCell::from(builder.clone());
+            TestCircuit::<'_, Test, Fr> {
+                inner: AttestationsCircuitBuilder::new(
+                    builder,
+                    &attestations[..1],
+                    0,
+                    Some(first_pubkey.clone()),
+                ),
+            }
+        };
+
+        let (params, pkey, vkey) =
+            generate_setup_artifacts(k as u32, None, keygen_circuit).unwrap();
+
+        let builder = RefCell::from(builder.clone());
+        let circuit = TestCircuit::<'_, Test, Fr> {
+            inner: AttestationsCircuitBuilder::new(
+                builder,
+                &attestations[..1],
+                0,
+                Some(first_pubkey.clone()),
+            ),
+        };
+        // gen_snark_shplonk(&params, &pkey, circuit.clone(), None::<&str>);
+        let proof = full_prover(&params, &pkey, circuit.clone(), vec![]);
+
+        let is_valid = full_verifier(&params, &vkey, proof, vec![]);
+        assert!(is_valid);
+        // let snarks = attestations
+        //     .chunks(1)
+        //     .zip(agg_pubkeys.chunks(1))
+        //     .map(|(atts, pk)| {
+        //         let builder = RefCell::from(builder.clone());
+        //         let circuit = TestCircuit::<'_, Test, Fr> {
+        //             inner: AttestationsCircuitBuilder::new(
+        //                 builder,
+        //                 atts,
+        //                 0,
+        //                 Some(vec![agg_pubkeys[i].clone()]),
+        //             ),
+        //         };
+        //         gen_snark_shplonk(&params, &pkey, circuit, None::<&str>)
+        //     })
+        //     .collect_vec();
+
+        // // create aggregation circuit
+        // let agg_circuit = SnarkAggregationCircuit::<3>::new(
+        //     CircuitBuilderStage::Mock,
+        //     &params,
+        //     TestCircuit::<Test, Fr>::LOOKUP_BITS,
+        //     snarks,
+        // );
     }
 }

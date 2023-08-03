@@ -10,6 +10,10 @@ pub use constraint_builder::*;
 
 mod conversion;
 pub use conversion::*;
+
+mod circuit;
+pub use circuit::*;
+
 use halo2_base::{
     gates::builder::GateThreadBuilder,
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
@@ -23,6 +27,7 @@ use halo2_ecc::{
 
 use itertools::Itertools;
 use num_bigint::BigUint;
+use snark_verifier_sdk::CircuitExt;
 
 use crate::{
     gadget::crypto::{Fp2Point, FpPoint},
@@ -127,7 +132,7 @@ where
     ) -> Result<Self::Output, Error>;
 
     /// Returns the instance columns required for this circuit.
-    fn instance(&self) -> Vec<Vec<F>> {
+    fn instances(&self) -> Vec<Vec<F>> {
         vec![]
     }
 

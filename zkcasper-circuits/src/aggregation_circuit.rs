@@ -158,7 +158,6 @@ where
                         .map(|&(cell, _)| cell);
 
                     // get the corresponding cached cells from the validators table
-                    println!("i: {}", i);
                     let vs_table_cells =
                         pubkey_cells.get(i).expect("pubkey cells for validator id");
 
@@ -420,7 +419,7 @@ impl<'a, F: Field, S: Spec + Sync> AggregationCircuitBuilder<'a, S, F> {
 mod tests {
     use std::fs;
 
-    use crate::sha256_circuit::Sha256CircuitConfig;
+    use crate::{sha256_circuit::Sha256CircuitConfig, util::generate_setup_artifacts};
 
     use super::*;
     use eth_types::Test as S;
@@ -522,5 +521,33 @@ mod tests {
 
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
+    }
+
+    #[test]
+    fn test_aggregation_circuit_params_gen() {
+        let k = TestCircuit::<Fr, S>::K;
+        let validators: Vec<Validator> =
+            serde_json::from_slice(&fs::read("../test_data/validators.json").unwrap()).unwrap();
+
+        let validators_y = validators
+            .iter()
+            .map(|v| {
+                let g1_affine = G1Affine::from_uncompressed(
+                    &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                )
+                .unwrap();
+
+                g1_affine.y
+            })
+            .collect_vec();
+
+        let builder = GateThreadBuilder::new(false);
+        builder.config(k, None);
+        let builder = Rc::from(RefCell::from(builder));
+        let circuit = TestCircuit::<'_, Fr, S> {
+            inner: AggregationCircuitBuilder::new(builder, &validators, validators_y),
+        };
+        let (params, pkey, vkey) = generate_setup_artifacts(k as u32, None, circuit).unwrap();
+
     }
 }

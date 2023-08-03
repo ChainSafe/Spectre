@@ -200,11 +200,11 @@ where
         Ok(())
     }
 
-    fn instance(&self) -> Vec<Vec<F>> {
+    fn instances(&self) -> Vec<Vec<F>> {
         itertools::chain![
-            self.sha256_circuit.instance(),
-            self.state_circuit.instance(),
-            self.validators_circuit.instance(),
+            self.sha256_circuit.instances(),
+            self.state_circuit.instances(),
+            self.validators_circuit.instances(),
             self.aggregation_circuit.instance(),
             self.attestations_circuit.instance(),
         ]
@@ -278,7 +278,7 @@ mod tests {
         let state = State::<Test, Fr>::new(25, validators, attestations, merkle_trace);
 
         let circuit = SuperCircuit::<Test, Fr>::new_from_state(&state);
-        let instance = circuit.instance();
+        let instance = circuit.instances();
         let prover = MockProver::<Fr>::run(17, &circuit, instance).unwrap();
         prover.assert_satisfied();
     }

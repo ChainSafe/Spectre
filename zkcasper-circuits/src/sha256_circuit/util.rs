@@ -1,6 +1,8 @@
 use eth_types::Field;
 use halo2_proofs::circuit::AssignedCell;
 
+use crate::util::AssignedValueCell;
+
 pub(crate) const NUM_BITS_PER_BYTE: usize = 8;
 pub(crate) const NUM_BYTES_PER_WORD: usize = 4;
 pub(crate) const NUM_BITS_PER_WORD: usize = NUM_BYTES_PER_WORD * NUM_BITS_PER_BYTE;
@@ -39,15 +41,15 @@ pub struct Sha256AssignedRows<F: Field> {
     /// Offset of the row.
     pub offset: usize,
     /// Input length at the row.
-    pub input_len: Vec<AssignedCell<F, F>>,
+    pub input_len: Vec<AssignedValueCell<F>>,
     /// Input words at the row.
-    pub input_rlc: Vec<AssignedCell<F, F>>,
+    pub input_rlc: Vec<AssignedValueCell<F>>,
     /// Whether the output word is enabled at the row.
-    pub is_final: Vec<AssignedCell<F, F>>,
+    pub is_final: Vec<AssignedValueCell<F>>,
     /// Whether the row is padding.
-    pub padding_selectors: Vec<[AssignedCell<F, F>; 4]>,
+    pub padding_selectors: Vec<[AssignedValueCell<F>; 4]>,
     /// Output words at the row.
-    pub output_rlc: Vec<AssignedCell<F, F>>,
+    pub output_rlc: Vec<AssignedValueCell<F>>,
 }
 
 impl<F: Field> Sha256AssignedRows<F> {
