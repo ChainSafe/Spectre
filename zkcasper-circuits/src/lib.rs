@@ -16,6 +16,7 @@ pub mod witness;
 pub mod aggregation_circuit;
 pub mod attestations_circuit;
 pub mod sha256_circuit;
+pub mod shuffling;
 pub mod state_circuit;
 pub mod super_circuit;
 pub mod validators_circuit;

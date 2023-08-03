@@ -3,6 +3,7 @@ use std::hash::Hash;
 use banshee_preprocessor::util::pad_to_ssz_chunk;
 use eth_types::Field;
 use halo2_base::{AssignedValue, Context, QuantumCell};
+use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 
 use crate::util::{ConstantFrom, IntoWitness, WitnessFrom};
