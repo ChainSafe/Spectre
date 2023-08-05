@@ -2,6 +2,7 @@ use std::{fs::File, path::Path};
 
 use ark_std::{end_timer, start_timer};
 use halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
+use halo2_proofs::poly::VerificationStrategy;
 use halo2_proofs::{
     plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
     poly::{
@@ -25,59 +26,47 @@ use snark_verifier_sdk::CircuitExt;
 /// If the provided `k` value is larger than the `k` value of the loaded parameters, an error is returned, as the provided `k` is too large.
 /// Otherwise, if the `k` value is smaller than the `k` value of the loaded parameters, the parameters are downsized to fit the requested `k`.
 #[allow(clippy::type_complexity)]
-pub fn generate_setup_artifacts<C: Circuit<Fr>>(
-    k: u32,
-    params_path: Option<&str>,
+pub fn gen_pkey<C: Circuit<Fr>>(
+    name: impl Fn() -> &'static str,
+    params: &ParamsKZG<Bn256>,
+    dir_path: Option<&str>,
     circuit: C,
-) -> Result<
-    (
-        ParamsKZG<Bn256>,
-        ProvingKey<G1Affine>,
-        VerifyingKey<G1Affine>,
-    ),
-    &'static str,
-> {
-    let mut params: ParamsKZG<Bn256>;
+) -> Result<ProvingKey<G1Affine>, &'static str> {
+    let dir_path = dir_path.map(Path::new);
 
-    match params_path {
-        Some(path) => {
-            let timer = start_timer!(|| "Creating or loading params");
-            if Path::new(&path).exists() {
-                let mut params_fs = File::open(path).expect("couldn't open params file");
-                params = ParamsKZG::<Bn256>::read(&mut params_fs).expect("Failed to read params");
-            } else {
-                params = ParamsKZG::<Bn256>::setup(k, OsRng);
-                let mut params_fs = File::create(path).expect("couldn't create params file");
-                params
-                    .write(&mut params_fs)
-                    .expect("Failed to write params");
-            }
-            end_timer!(timer);
-
-            if params.k() < k {
-                return Err("k is too large for the given params");
-            }
-
-            if params.k() > k {
-                let timer = start_timer!(|| "Downsizing params");
-                params.downsize(k);
-                end_timer!(timer);
+    let (timer, vkey) = if let Some(dir) = dir_path {
+        let vkey_path = dir.join(format!("{}.vkey", name()));
+        match File::open(&vkey_path) {
+            Ok(mut file) => (
+                start_timer!(|| "Loading vkey"),
+                VerifyingKey::<G1Affine>::read::<_, C>(
+                    &mut file,
+                    halo2_proofs::SerdeFormat::RawBytesUnchecked,
+                )
+                .expect("failed to read vkey"),
+            ),
+            Err(_) => {
+                let timer = start_timer!(|| "Creating and writting vkey");
+                let vk = keygen_vk(params, &circuit).expect("vk generation should not fail");
+                let mut file = File::create(vkey_path).expect("couldn't create vkey file");
+                vk.write(&mut file, halo2_proofs::SerdeFormat::RawBytesUnchecked)
+                    .expect("Failed to write vkey");
+                (timer, vk)
             }
         }
-        None => {
-            let timer = start_timer!(|| "Creating params");
-            params = ParamsKZG::<Bn256>::setup(k, OsRng);
-            end_timer!(timer);
-        }
-    }
-    println!("params ready");
+    } else {
+        (
+            start_timer!(|| "Loading vkey"),
+            keygen_vk(params, &circuit).expect("vk generation should not fail"),
+        )
+    };
+    end_timer!(timer);
 
-    let vk = keygen_vk(&params, &circuit).expect("vk generation should not fail");
-    println!("vkey ready");
-    let pk = keygen_pk(&params, vk.clone(), &circuit).expect("pk generation should not fail");
-    println!("pkey ready");
+    let timer = start_timer!(|| "Generating pkey");
+    let pkey = keygen_pk(params, vkey, &circuit).expect("pk generation should not fail");
+    end_timer!(timer);
 
-    Ok((params, pk, vk))
+    Ok(pkey)
 }
 
 /// Generates a proof given the public setup, the proving key, the initiated circuit and its public inputs.

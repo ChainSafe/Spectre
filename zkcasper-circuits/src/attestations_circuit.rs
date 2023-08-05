@@ -208,21 +208,21 @@ where
                     S::PubKeysCurve::generator_affine().neg().into_coordinates(),
                 );
 
-                for Attestation::<S> {
-                    data, signature, ..
-                } in self
+                for (
+                    Attestation::<S> {
+                        data, signature, ..
+                    },
+                    pubkey,
+                ) in self
                     .attestations
                     .iter()
+                    .zip(aggregated_pubkeys.iter().cloned())
                     .take(S::MAX_COMMITTEES_PER_SLOT * S::SLOTS_PER_EPOCH)
                 {
                     assert!(!signature.is_infinity());
 
-                    let pubkey = aggregated_pubkeys
-                        .get(data.index)
-                        .expect("pubkey not found")
-                        .clone();
-
-                    let signature = Self::assign_signature(signature, &g2_chip, ctx);
+                    #[allow(clippy::needless_borrow)]
+                    let signature = Self::assign_signature(&signature, &g2_chip, ctx);
 
                     let chunks = [
                         data.slot.into_witness(),
@@ -244,7 +244,7 @@ where
 
                     let res =
                         bls_chip.verify_pairing(signature, msghash, pubkey, g1_neg.clone(), ctx);
-                    // fp12_chip.assert_equal(ctx, res, fp12_one.clone());
+                    fp12_chip.assert_equal(ctx, res, fp12_one.clone());
                 }
 
                 let extra_assignments = hasher.take_extra_assignments();
@@ -400,9 +400,8 @@ mod tests {
     };
 
     use crate::{
-        root_circuit::SnarkAggregationCircuit,
         table::Sha256Table,
-        util::{full_prover, full_verifier, generate_setup_artifacts},
+        util::{full_prover, full_verifier, gen_pkey},
         witness::Validator,
     };
 
@@ -410,10 +409,13 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use eth_types::Test;
     use ethereum_consensus::builder;
-    use halo2_base::gates::{
-        builder::{CircuitBuilderStage, FlexGateConfigParams},
-        flex_gate::GateStrategy,
-        range::RangeStrategy,
+    use halo2_base::{
+        gates::{
+            builder::{CircuitBuilderStage, FlexGateConfigParams},
+            flex_gate::GateStrategy,
+            range::RangeStrategy,
+        },
+        utils::fs::gen_srs,
     };
     use halo2_proofs::{
         circuit::SimpleFloorPlanner,
@@ -425,7 +427,12 @@ mod tests {
     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
     use rand::rngs::OsRng;
-    use snark_verifier_sdk::{halo2::gen_snark_shplonk, CircuitExt};
+    use rayon::iter::ParallelIterator;
+    use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
+    use snark_verifier_sdk::{
+        halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
+        CircuitExt, SHPLONK,
+    };
 
     #[derive(Clone, Debug)]
     struct TestCircuit<'a, S: Spec, F: Field>
@@ -559,12 +566,7 @@ mod tests {
         }
         let builder = RefCell::from(builder);
         let circuit = TestCircuit::<'_, Test, Fr> {
-            inner: AttestationsCircuitBuilder::new(
-                builder,
-                &attestations,
-                0,
-                Some(agg_pubkeys.clone()),
-            ),
+            inner: AttestationsCircuitBuilder::new(builder, &attestations, 0, Some(agg_pubkeys)),
         };
 
         let timer = start_timer!(|| "test_attestations_circuit");
@@ -575,14 +577,14 @@ mod tests {
 
     #[test]
     fn test_snark_aggregation() {
-        let k = 17;
+        const N: usize = 2;
 
         let builder = GateThreadBuilder::new(false);
         let attestations: Vec<Attestation<Test>> =
             serde_json::from_slice(&fs::read("../test_data/attestations.json").unwrap()).unwrap();
-        let attestations: [Attestation<Test>; 2] = attestations
+        let attestations: [Attestation<Test>; N] = attestations
             .into_iter()
-            .take(2)
+            .take(N)
             .collect_vec()
             .try_into()
             .unwrap();
@@ -591,15 +593,16 @@ mod tests {
             serde_json::from_slice(&fs::read("../test_data/aggregated_pubkeys.json").unwrap())
                 .unwrap();
 
-        let agg_pubkeys = bytes_pubkeys
+        let agg_pubkeys: [G1Affine; N] = bytes_pubkeys
             .iter()
             .map(|b| G1Affine::from_uncompressed(&b.as_slice().try_into().unwrap()).unwrap())
-            .collect_vec();
+            .take(N)
+            .collect_vec()
+            .try_into()
+            .unwrap();
 
-        let first_pubkey = agg_pubkeys.iter().take(1).cloned().collect_vec();
-
-        let mock_k = 17;
-        let k = 17;
+        let mock_k = 19;
+        let k = 20;
         {
             let mock_params = FlexGateConfigParams {
                 strategy: GateStrategy::Vertical,
@@ -613,18 +616,19 @@ mod tests {
                 "FLEX_GATE_CONFIG_PARAMS",
                 serde_json::to_string(&mock_params).unwrap(),
             );
-            std::env::set_var("LOOKUP_BITS", 16.to_string());
+            std::env::set_var("LOOKUP_BITS", (mock_k - 1).to_string());
             let circuit = TestCircuit::<'_, Test, Fr> {
                 inner: AttestationsCircuitBuilder::new(
                     RefCell::from(builder.clone()),
                     &attestations[..1],
                     0,
-                    Some(first_pubkey.clone()),
+                    Some(agg_pubkeys[..1].to_vec()),
                 )
                 .dry_run(),
             };
 
             let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
+            std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
             circuit.inner.builder.borrow().config(k, Some(2520));
             let pp: FlexGateConfigParams =
                 serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
@@ -638,51 +642,61 @@ mod tests {
                     builder,
                     &attestations[..1],
                     0,
-                    Some(first_pubkey.clone()),
+                    Some(agg_pubkeys[..1].to_vec()),
                 ),
             }
         };
 
-        let (params, pkey, vkey) =
-            generate_setup_artifacts(k as u32, None, keygen_circuit).unwrap();
+        let params = gen_srs(k as u32);
 
-        let builder = RefCell::from(builder.clone());
-        let circuit = TestCircuit::<'_, Test, Fr> {
-            inner: AttestationsCircuitBuilder::new(
-                builder,
-                &attestations[..1],
-                0,
-                Some(first_pubkey.clone()),
-            ),
-        };
-        // gen_snark_shplonk(&params, &pkey, circuit.clone(), None::<&str>);
-        let proof = full_prover(&params, &pkey, circuit.clone(), vec![]);
+        let pkey = gen_pkey(|| "attestations", &params, Some("./build"), keygen_circuit).unwrap();
 
-        let is_valid = full_verifier(&params, &vkey, proof, vec![]);
-        assert!(is_valid);
-        // let snarks = attestations
-        //     .chunks(1)
-        //     .zip(agg_pubkeys.chunks(1))
-        //     .map(|(atts, pk)| {
-        //         let builder = RefCell::from(builder.clone());
-        //         let circuit = TestCircuit::<'_, Test, Fr> {
-        //             inner: AttestationsCircuitBuilder::new(
-        //                 builder,
-        //                 atts,
-        //                 0,
-        //                 Some(vec![agg_pubkeys[i].clone()]),
-        //             ),
-        //         };
-        //         gen_snark_shplonk(&params, &pkey, circuit, None::<&str>)
-        //     })
-        //     .collect_vec();
+        let snarks = attestations
+            .chunks(1)
+            .collect_vec()
+            .into_par_iter()
+            .zip(agg_pubkeys.chunks(1).collect_vec().into_par_iter())
+            .map(|(atts, pk)| {
+                let builder = RefCell::from(builder.clone());
+                let circuit = TestCircuit::<'_, Test, Fr> {
+                    inner: AttestationsCircuitBuilder::new(builder, atts, 0, Some(pk.to_vec())),
+                };
+                gen_snark_shplonk(
+                    &params,
+                    &pkey,
+                    circuit,
+                    Some(format!(
+                        "./build/attestation_snark_{}",
+                        atts.iter().map(|a| a.data.index).join("_")
+                    )),
+                )
+            })
+            .collect::<Vec<_>>();
 
-        // // create aggregation circuit
-        // let agg_circuit = SnarkAggregationCircuit::<3>::new(
-        //     CircuitBuilderStage::Mock,
-        //     &params,
-        //     TestCircuit::<Test, Fr>::LOOKUP_BITS,
-        //     snarks,
-        // );
+        drop(params);
+        drop(pkey);
+
+        let k_agg = 20;
+        let agg_params = gen_srs(k_agg);
+
+        // create aggregation circuit
+        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&agg_params, snarks.clone());
+        let pp: FlexGateConfigParams =
+            serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        println!("params: {:?}", pp);
+        let timer = start_timer!(|| "aggregation circuit keygen");
+        let pkey = gen_pkey(
+            || "aggregated",
+            &agg_params,
+            Some("./build"),
+            agg_circuit.clone(),
+        )
+        .unwrap();
+        end_timer!(timer);
+
+        let break_points = agg_circuit.break_points();
+        let agg_circuit = AggregationCircuit::prover::<SHPLONK>(&agg_params, snarks, break_points);
+        let instances = agg_circuit.instances();
+        let _ = gen_proof_shplonk(&agg_params, &pkey, agg_circuit, instances, None);
     }
 }

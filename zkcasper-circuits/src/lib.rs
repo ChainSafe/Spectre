@@ -19,7 +19,6 @@ pub mod sha256_circuit;
 pub mod state_circuit;
 pub mod super_circuit;
 pub mod validators_circuit;
-pub mod root_circuit;
 
 pub(crate) const MAX_N_BYTES_INTEGER: usize = 31;
 

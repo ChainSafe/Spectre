@@ -283,14 +283,14 @@ mod test {
 
     use crate::table::Sha256Table;
     use crate::util::{
-        full_prover, full_verifier, generate_setup_artifacts, Challenges, IntoWitness,
-        SubCircuitConfig,
+        full_prover, full_verifier, gen_pkey, Challenges, IntoWitness, SubCircuitConfig,
     };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Test;
     use halo2_base::gates::range::RangeConfig;
+    use halo2_base::utils::fs::gen_srs;
     use halo2_base::SKIP_FIRST_PASS;
     use halo2_base::{
         gates::{builder::GateThreadBuilder, range::RangeStrategy},
@@ -457,7 +457,8 @@ mod test {
             test_output,
             _f: PhantomData,
         };
-        let (params, pkey, vkey) = generate_setup_artifacts(k, None, circuit).unwrap();
+        let params = gen_srs(k);
+        let pkey = gen_pkey(|| "sha256_chip", &params, None, circuit).unwrap();
     }
 
     #[test]
@@ -484,11 +485,13 @@ mod test {
         prover.verify().unwrap();
         end_timer!(pf_time);
 
-        let (params, pkey, vkey) = generate_setup_artifacts(k, None, circuit.clone()).unwrap();
+        let params = gen_srs(k);
+
+        let pkey = gen_pkey(|| "sha256_chip", &params, None, circuit.clone()).unwrap();
 
         let proof = full_prover(&params, &pkey, circuit, vec![]);
 
-        let is_valid = full_verifier(&params, &vkey, proof, vec![]);
+        let is_valid = full_verifier(&params, pkey.get_vk(), proof, vec![]);
         assert!(is_valid);
     }
 }

@@ -19,4 +19,5 @@ Cargo.lock
 /target
 node_modules
 
-/build
+/zkcasper-circuits/build
+/zkcasper-circuits/params
