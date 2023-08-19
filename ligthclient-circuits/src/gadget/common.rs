@@ -278,7 +278,7 @@ pub mod rlc {
         V: Clone + Add<R, Output = V> + Add<Output = V> + Mul<R, Output = V>,
         R: Clone,
     {
-        // we don't reverse bytes because https://github.com/ChainSafe/banshee-zk/issues/72
+        // we don't reverse bytes because https://github.com/ChainSafe/Banshee/issues/72
         let mut values = values.into_iter();
         let init = values.next().expect("values should not be empty");
 

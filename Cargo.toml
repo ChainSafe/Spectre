@@ -1,5 +1,5 @@
 [workspace]
-members = ["zkaltair-circuits", "eth-types"]
+members = ["ligthclient-circuits", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]

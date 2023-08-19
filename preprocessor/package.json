@@ -1,5 +1,5 @@
 {
-  "name": "banshee-preprocessor",
+  "name": "spectre-preprocessor",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ChainSafe/banshee-zk.git"
+    "url": "git+https://github.com/ChainSafe/Spectre.git"
   },
   "author": "timoftime",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/ChainSafe/banshee-zk/issues"
+    "url": "https://github.com/ChainSafe/Spectre/issues"
   },
-  "homepage": "https://github.com/ChainSafe/banshee-zk#readme",
+  "homepage": "https://github.com/ChainSafe/Spectre#readme",
   "devDependencies": {
     "@types/node": "^20.3.0",
     "typescript": "^5.1.3"
