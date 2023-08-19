@@ -1,0 +1,41 @@
+[workspace]
+members = ["zkaltair-circuits", "eth-types"]
+
+# Definition of benchmarks profile to use.
+[profile.bench]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+rpath = false
+lto = "thin"
+incremental = false
+codegen-units = 1
+
+[profile.release]
+opt-level = 3
+debug = false
+debug-assertions = true
+overflow-checks = true
+rpath = false
+lto = "thin"
+incremental = true
+
+[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
+halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "dev/bls12_381" }
+# halo2curves = { path = "../halo2curves" }
+
+[patch."https://github.com/axiom-crypto/halo2-lib"]
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "dev/bls12_381", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "dev/bls12_381", default-features = false }
+# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+#     "halo2-pse",
+#     "display",
+# ] }
+# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
+
+# [patch."https://github.com/timoftime/halo2curves"]
+# halo2curves = { path = "../halo2curves" }

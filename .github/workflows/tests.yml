@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+env:
+  CI: 1
+  CARGO_INCREMENTAL: 1
+
+jobs:
+
+  test:
+    name: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install latest nightly-2022-10-28
+      uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: nightly-2022-10-28
+          override: true
+          components: rustfmt
+    - name: Check
+      run: cargo check --all
+    - name: Check
+      run: RUST_LOG="preprocessor,eth-types,gadgets,zkcasper-circuits=debug" cargo test --release test_super_circuit

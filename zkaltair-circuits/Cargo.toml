@@ -1,0 +1,59 @@
+[package]
+name = "zkaltair-circuits"
+version = "0.1.0"
+authors = ["timoftime <timofey@chainsafe.io>", "ec2 <eric@chainsafe.io>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# halo2
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
+    "dev-graph",
+] }
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
+halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
+
+# aggregation 
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+    "display",
+    "loader_halo2",
+] }
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+    "display",
+    "loader_halo2",
+] }
+
+# crypto
+num-bigint = { version = "0.4", features = ["rand"] }
+pasta_curves = "0.4.1"
+ff = "0.12"
+group = "0.12"
+sha2 = "0.10.6"
+
+# ethereum
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "46ca171" }
+ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
+
+# local
+eth-types = { path = "../eth-types" }
+
+# misc
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.78"
+array-init = "2.0.0"
+strum = "0.25"
+strum_macros = "0.25"
+rand = "0.8"
+itertools = "0.11.0"
+lazy_static = "1.4"
+log = "0.4"
+hex = "0.4"
+rayon = "1.7.0"
+ark-std = { version = "0.4.0", features = ["print-trace"] }
+
+[features]
+default = []
