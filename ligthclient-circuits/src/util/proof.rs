@@ -1,3 +1,4 @@
+use std::fs;
 use std::{fs::File, path::Path};
 
 use ark_std::{end_timer, start_timer};
@@ -33,6 +34,10 @@ pub fn gen_pkey<C: Circuit<Fr>>(
     circuit: C,
 ) -> Result<ProvingKey<G1Affine>, &'static str> {
     let dir_path = dir_path.map(Path::new);
+
+    if let Some(path) = &dir_path {
+        fs::create_dir_all(path).expect("Failed to create directory");
+    }
 
     let (timer, vkey) = if let Some(dir) = dir_path {
         let vkey_path = dir.join(format!("{}.vkey", name()));

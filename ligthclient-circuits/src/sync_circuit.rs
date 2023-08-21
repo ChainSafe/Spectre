@@ -2,8 +2,8 @@ use std::{cell::RefCell, collections::HashMap, iter, marker::PhantomData, ops::N
 
 use crate::{
     gadget::crypto::{
-        Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
-        HashToCurveChip, Sha256Chip,
+        CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
+        HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     util::{
@@ -13,6 +13,7 @@ use crate::{
     witness::{self, HashInput, HashInputChunk, DUMMY_PUBKEY, DUMMY_VALIDATOR},
 };
 use eth_types::{AppCurveExt, Field, Spec};
+use ethereum_consensus::phase0::BeaconBlockHeader;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
@@ -39,6 +40,14 @@ use lazy_static::__Deref;
 use num_bigint::BigUint;
 use pasta_curves::group::{ff, GroupEncoding};
 use ssz_rs::Merkleized;
+
+pub const ZERO_HASHES: [[u8; 32]; 2] = [
+    [0; 32],
+    [
+        245, 165, 253, 66, 209, 106, 32, 48, 39, 152, 239, 110, 211, 9, 151, 155, 67, 0, 61, 35,
+        32, 217, 240, 232, 234, 152, 49, 169, 39, 89, 251, 75,
+    ],
+];
 
 #[derive(Clone, Debug)]
 pub struct AttestationsCircuitConfig<F: Field> {
@@ -72,7 +81,8 @@ pub struct SyncCircuitBuilder<S: Spec, F: Field> {
     builder: RefCell<GateThreadBuilder<F>>,
     signature: Vec<u8>,
     sha256_offset: usize,
-    attested_header: [u8; 32],
+    domain: [u8; 32],
+    attested_block: BeaconBlockHeader,
     pubkeys_compressed: Vec<Vec<u8>>,
     pariticipation_bits: Vec<bool>,
     pubkeys_y: Vec<Fq>,
@@ -107,8 +117,9 @@ impl<S: Spec, F: Field> SubCircuitBuilder<S, F> for SyncCircuitBuilder<S, F> {
 
         Self {
             builder,
-            attested_header: state.attested_header,
             signature: state.sync_signature.clone(),
+            domain: state.domain,
+            attested_block: state.attested_block.clone(),
             pubkeys_compressed: state
                 .sync_committee
                 .iter()
@@ -177,23 +188,40 @@ impl<S: Spec, F: Field> SubCircuitBuilder<S, F> for SyncCircuitBuilder<S, F> {
 
                 let ctx = builder.main(0);
 
-                let mut participation_digits = vec![];
-
-                let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip, &mut participation_digits);
+                let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip);
 
                 let fp12_one = {
                     use ff::Field;
                     fp12_chip.load_constant(ctx, Fq12::one())
                 };
+                let hasher = CachedHashChip::new(&sha256_chip);
                 let mut h2c_cache = HashToCurveCache::<F>::default();
+
+                // Verify attestted header
+                let chunks = [
+                    self.attested_block.slot.into_witness(),
+                    self.attested_block.proposer_index.into_witness(),
+                    self.attested_block.parent_root.as_ref().into_witness(),
+                    self.attested_block.state_root.as_ref().into_witness(),
+                    self.attested_block.body_root.as_ref().into_witness(),
+                ];
+
+                let attested_header =
+                    self.ssz_merkleize_chunks(chunks, &hasher, ctx, &mut region)?;
+
+                let signing_root = hasher.digest::<64>(
+                    HashInput::TwoToOne(
+                        attested_header.into(),
+                        self.domain.to_vec().into_witness(),
+                    ),
+                    ctx,
+                    &mut region,
+                )?.output_bytes;
+
                 let g1_neg = g1_chip
                     .load_private_unchecked(ctx, G1::generator_affine().neg().into_coordinates());
 
                 let signature = Self::assign_signature(&self.signature, &g2_chip, ctx);
-
-                let signing_root = self
-                    .attested_header
-                    .map(|b| ctx.load_witness(F::from(b as u64)));
 
                 let msghash = h2c_chip.hash_to_curve::<G2>(
                     signing_root.into(),
@@ -257,7 +285,6 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         &self,
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'a, F>,
-        _participation_digits: &mut Vec<AssignedValue<F>>,
     ) -> EcPoint<F, FpPoint<F>> {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
@@ -379,6 +406,53 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, C::B.into());
         field_chip.carry_mod(ctx, plus_b)
     }
+
+    fn ssz_merkleize_chunks<'a, I: IntoIterator<Item = HashInputChunk<QuantumCell<F>>>>(
+        &self,
+        chunks: I,
+        hasher: &'a CachedHashChip<F, Sha256Chip<'a, F>>,
+        ctx: &mut Context<F>,
+        region: &mut Region<'_, F>,
+    ) -> Result<Vec<AssignedValue<F>>, Error>
+    where
+        I::IntoIter: ExactSizeIterator,
+    {
+        let mut chunks = chunks.into_iter().collect_vec();
+        let len_even = chunks.len() + chunks.len() % 2;
+        let height = (len_even as f64).log2().ceil() as usize;
+
+        for depth in 0..height {
+            // Pad to even length using 32 zero bytes assigned as constants.
+            let len_even = chunks.len() + chunks.len() % 2;
+            let padded_chunks = chunks
+                .into_iter()
+                .pad_using(len_even, |_| {
+                    HashInputChunk::from(
+                        ZERO_HASHES[depth].map(|b| ctx.load_constant(F::from(b as u64))),
+                    )
+                })
+                .collect_vec();
+
+            chunks = padded_chunks
+                .into_iter()
+                .tuples()
+                .map(|(left, right)| {
+                    hasher
+                        .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
+                        .map(|res| res.output_bytes.into())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+        }
+
+        assert_eq!(chunks.len(), 1, "merkleize_chunks: expected one chunk");
+
+        let root = chunks.pop().unwrap().map(|cell| match cell {
+            QuantumCell::Existing(av) => av,
+            _ => unreachable!(),
+        });
+
+        Ok(root.bytes)
+    }
 }
 
 #[cfg(test)]
@@ -480,15 +554,15 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_sync_circuit() {
+    fn get_circuit_with_data(k: usize) -> TestCircuit<Test, Fr> {
         let builder = GateThreadBuilder::new(false);
         let state_input: SyncStateInput =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state = state_input.into();
 
         let mock_k = 17;
-        let k = 17;
+        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
+        // we have to perfrom dry run to determine best circuit config.
         {
             let mock_params = FlexGateConfigParams {
                 strategy: GateStrategy::Vertical,
@@ -511,19 +585,41 @@ mod tests {
 
             let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
             circuit.inner.builder.borrow().config(k, Some(2520));
-            std::env::set_var("LOOKUP_BITS", 16.to_string());
+            std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
             let pp: FlexGateConfigParams =
                 serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
             println!("params: {:?}", pp);
         }
+
         let builder = RefCell::from(builder);
-        let circuit = TestCircuit::<Test, Fr> {
+        TestCircuit::<Test, Fr> {
             inner: SyncCircuitBuilder::new_from_state(builder, &state),
-        };
+        }
+    }
+
+    #[test]
+    fn test_sync_circuit() {
+        let k = 17;
+        let circuit = get_circuit_with_data(k);
 
         let timer = start_timer!(|| "test_attestations_circuit");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
         end_timer!(timer);
+    }
+
+    #[test]
+    fn test_sync_circuit_proofgen() {
+        let k = 17;
+        let circuit = get_circuit_with_data(k);
+
+        let params = gen_srs(k as u32);
+
+        let pkey = gen_pkey(|| "sync", &params, None, circuit.clone()).unwrap();
+
+        let public_inputs = circuit.instances();
+        let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
+
+        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "zkaltair-circuits"
+name = "lightclient-circuits"
 version = "0.1.0"
 authors = ["timoftime <timofey@chainsafe.io>", "ec2 <eric@chainsafe.io>"]
 edition = "2021"

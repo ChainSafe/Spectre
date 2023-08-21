@@ -27,6 +27,7 @@ export function serialize(obj: any, replacer: (value: any) => any = (value) => v
     if (value instanceof Uint8Array) {
       return Array.from(value);
     }
+    
     if (typeof value === 'bigint') {
       return Number(value);
     }

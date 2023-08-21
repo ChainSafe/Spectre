@@ -26,6 +26,7 @@
     "@chainsafe/ssz": "^0.11.1",
     "@lodestar/types": "^1.8.0",
     "@lodestar/state-transition": "^1.8.0",
+    "@lodestar/params": "^1.8.0",
     "@noble/curves": "^1.1.0"
   }
 }

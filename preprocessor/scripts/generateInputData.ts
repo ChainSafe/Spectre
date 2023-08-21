@@ -9,6 +9,10 @@ import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 import { hexToBytes, bytesToHex, numberToBytesBE } from "@noble/curves/abstract/utils";
 import { ProjPointType } from "@noble/curves/abstract/weierstrass";
 import { createNodeFromCompactMultiProof } from "@chainsafe/persistent-merkle-tree/lib/proof/compactMulti";
+import { BeaconStateCache, computeSigningRoot } from "@lodestar/state-transition";
+import { createBeaconConfig, BeaconConfig } from "@lodestar/config";
+import { config as chainConfig } from "@lodestar/config/default";
+import { DOMAIN_SYNC_COMMITTEE } from "@lodestar/params";
 
 const DST = "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
@@ -22,6 +26,8 @@ const targetEpoch = 25;
 
 let beaconState = ssz.capella.BeaconState.deserialize(new Uint8Array(fs.readFileSync("../test_data/beacon_state_2915750")));
 beaconState.validators = [];
+const config = createBeaconConfig(chainConfig, beaconState.genesisValidatorsRoot);
+
 
 //----------------- Validators -----------------//
 
@@ -58,11 +64,21 @@ fs.writeFileSync(
 
 const aggregatedPubKey = bls12_381.aggregatePublicKeys(pubKeyPoints);
 
-//--------------------- Update ---------------------//
-const attestedHeader = beaconState.blockRoots[beaconState.blockRoots.length - 1];
+//--------------------- Sync ---------------------//
 
-// TODO: hash with domain
-const dataRoot = attestedHeader;
+const beaconStateRoot = ssz.capella.BeaconState.hashTreeRoot(beaconState);
+
+let attestedBlock = {
+    slot: 32,
+    proposerIndex: 0,
+    parentRoot: Uint8Array.from(Array(32).fill(0)),
+    stateRoot: beaconStateRoot,
+    bodyRoot: beaconState.blockRoots[beaconState.blockRoots.length - 1],
+};
+
+let domain = config.getDomain(32, DOMAIN_SYNC_COMMITTEE, 32)
+
+const dataRoot = computeSigningRoot(ssz.phase0.BeaconBlockHeader, attestedBlock, domain)
 
 let msgPoint = bls12_381.G2.ProjectivePoint.fromAffine(bls12_381.G2.hashToCurve(dataRoot, {
     DST: DST,
@@ -72,12 +88,13 @@ let signatures = privKeyHexes.slice(0, N_validators).map((privKey) => msgPoint.m
 let aggSignature = bls12_381.aggregateSignatures(signatures);
 
 // assert signature is valid
-console.log("sig:", aggSignature.toAffine());
-console.log("msg:", msgPoint.toAffine());
-console.log("pk:", aggregatedPubKey.toAffine());
+// console.log("sig:", aggSignature.toAffine());
+// console.log("msg:", msgPoint.toAffine());
+// console.log("pk:", aggregatedPubKey.toAffine());
 console.assert(bls12_381.verify(aggSignature, msgPoint, aggregatedPubKey));
 
-let syncSigBytes = g2PointToLeBytes(aggSignature, true);
+const syncSigBytes = g2PointToLeBytes(aggSignature, true);
+const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 //----------------- State tree -----------------//
 
@@ -95,6 +112,7 @@ let syncSigBytes = g2PointToLeBytes(aggSignature, true);
 //     serialize(trace)
 // );
 
+
 let input = {
     targetEpoch: targetEpoch,
     syncCommittee: Array.from(beaconState.validators.entries()).map(([i, validator]) => ({
@@ -103,8 +121,9 @@ let input = {
         pubkey: Array.from(validator.pubkey),
         pubkeyUncompressed: Array.from(g1PointToBytesLE(pubKeyPoints[i], false)),
     })),
+    domain: Array.from(domain),
+    attestedBlock: attestedBlockJson,
     syncSignature: syncSigBytes,
-    attestedHeader: attestedHeader,
     merkleTrace: []
 }
 

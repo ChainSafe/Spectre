@@ -7,6 +7,7 @@ use super::{MerkleTrace, Validator};
 use eth_types::{Field, Spec};
 use ethereum_consensus::bellatrix::mainnet;
 use ethereum_consensus::bellatrix::BeaconState;
+use ethereum_consensus::phase0::BeaconBlockHeader;
 use serde::Deserialize;
 use ssz_rs::Merkleized;
 
@@ -22,7 +23,9 @@ pub struct SyncState<S: Spec, F: Field> {
 
     pub sync_signature: Vec<u8>,
 
-    pub attested_header: [u8; 32],
+    pub attested_block: BeaconBlockHeader,
+
+    pub domain: [u8; 32],
 
     pub merkle_trace: MerkleTrace,
 
@@ -39,11 +42,13 @@ pub struct SyncState<S: Spec, F: Field> {
 pub struct SyncStateInput {
     pub target_epoch: u64,
 
+    pub domain: [u8; 32],
+
+    pub attested_block: BeaconBlockHeader,
+
     pub sync_committee: Vec<Validator>,
 
     pub sync_signature: Vec<u8>,
-
-    pub attested_header: [u8; 32],
 
     pub merkle_trace: MerkleTrace,
 }
@@ -52,9 +57,10 @@ impl<S: Spec, F: Field> From<SyncStateInput> for SyncState<S, F> {
     fn from(
         SyncStateInput {
             target_epoch,
+            domain,
+            attested_block,
             sync_committee,
             sync_signature,
-            attested_header,
             merkle_trace,
         }: SyncStateInput,
     ) -> Self {
@@ -63,7 +69,8 @@ impl<S: Spec, F: Field> From<SyncStateInput> for SyncState<S, F> {
             target_epoch,
             sync_committee,
             sync_signature,
-            attested_header,
+            domain,
+            attested_block,
             state_root: [0; 32], //merkle_trace.root(),
             merkle_trace,
             sha256_inputs,

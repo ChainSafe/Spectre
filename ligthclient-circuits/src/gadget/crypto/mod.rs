@@ -1,7 +1,9 @@
+mod cached_hash;
 mod hash2curve;
 mod sha256;
 mod util;
 
+pub use cached_hash::CachedHashChip;
 use eth_types::{AppCurveExt, HashCurveExt};
 use halo2_ecc::{
     bigint::ProperCrtUint,
