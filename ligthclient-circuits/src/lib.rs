@@ -15,3 +15,4 @@ pub mod witness;
 
 pub mod sha256_circuit;
 pub mod sync_circuit;
+pub mod state_circuit;

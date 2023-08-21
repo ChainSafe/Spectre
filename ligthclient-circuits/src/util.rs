@@ -110,8 +110,6 @@ impl<T: Clone> Challenges<T> {
 /// all the inputs required to synthesize this circuit (and the contained
 /// table(s) if any).
 pub trait SubCircuit<'a, S: Spec, F: Field>
-where
-    [(); { S::SYNC_COMMITTEE_SIZE }]:,
 {
     /// Configuration of the SubCircuit.
     type Config;
