@@ -107,7 +107,7 @@ let gindices = Array.from({ length: N_validators }, (_, i) => ssz.altair.SyncCom
 let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
 
 let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, []);
-// printTrace(partial_tree, trace);
+printTrace(partial_tree, trace);
 
 // fs.writeFileSync(
 //     `../test_data/merkle_trace.json`,

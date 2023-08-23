@@ -20,6 +20,22 @@ pub struct Sha256Table {
     pub hash_rlc: Column<Advice>,
 }
 
+#[derive(Clone, Debug)]
+pub struct Sha256TableAssignedRow<F: Field> {
+    /// True when the row is enabled
+    pub is_enabled: AssignedValueCell<F>,
+    /// Byte array input parts as `RLC(input[i])`
+    pub input_chunks: [AssignedValueCell<F>; 2],
+    /// Byte array first input as `RLC(input[i])`
+    pub input_rlc: AssignedValueCell<F>,
+    /// Length of first+second inputs
+    pub input_len: AssignedValueCell<F>,
+    /// RLC of the hash result
+    pub hash_rlc: AssignedValueCell<F>,
+
+    pub hash_bytes: Vec<AssignedValueCell<F>>,
+}
+
 impl<F: Field> LookupTable<F> for Sha256Table {
     fn columns(&self) -> Vec<Column<Any>> {
         vec![
@@ -47,7 +63,7 @@ impl<F: Field> LookupTable<F> for Sha256Table {
 impl Sha256Table {
     /// Construct a new KeccakTable
     pub fn construct<F: Field>(meta: &mut ConstraintSystem<F>) -> Self {
-        Self {
+        let config = Self {
             is_enabled: meta.advice_column(),
             input_chunks: [
                 meta.advice_column_in(SecondPhase),
@@ -56,7 +72,16 @@ impl Sha256Table {
             input_rlc: meta.advice_column_in(SecondPhase),
             input_len: meta.advice_column(),
             hash_rlc: meta.advice_column_in(SecondPhase),
+        };
+
+
+        for column in config.input_chunks {
+            meta.enable_equality(column);
         }
+
+        meta.enable_equality(config.hash_rlc);
+
+        config
     }
 
     /// Assign a table row for keccak table

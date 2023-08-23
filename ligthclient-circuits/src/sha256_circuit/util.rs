@@ -1,7 +1,7 @@
 use eth_types::Field;
 use halo2_proofs::circuit::AssignedCell;
 
-use crate::util::AssignedValueCell;
+use crate::{util::AssignedValueCell, witness::HashInput};
 
 pub(crate) const NUM_BITS_PER_BYTE: usize = 8;
 pub(crate) const NUM_BYTES_PER_WORD: usize = 4;

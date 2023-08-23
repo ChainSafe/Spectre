@@ -109,7 +109,7 @@ impl<T: Clone> Challenges<T> {
 /// other via lookup tables and/or shared public inputs.  This type must contain
 /// all the inputs required to synthesize this circuit (and the contained
 /// table(s) if any).
-pub trait SubCircuit<'a, S: Spec, F: Field>
+pub trait SubCircuit<'a, F: Field>
 {
     /// Configuration of the SubCircuit.
     type Config;
@@ -120,7 +120,7 @@ pub trait SubCircuit<'a, S: Spec, F: Field>
     type Output;
 
     /// Create a new SubCircuit from a witness Block
-    fn new_from_state(state: &'a witness::SyncState<S, F>) -> Self;
+    fn new_from_state(state: &'a witness::SyncState<F>) -> Self;
 
     /// Assign only the columns used by this sub-circuit.  This includes the
     /// columns that belong to the exposed lookup table contained within, if
@@ -145,11 +145,11 @@ pub trait SubCircuit<'a, S: Spec, F: Field>
 
     /// Return the minimum number of rows required to prove the block.
     /// Row numbers without/with padding are both returned.
-    fn min_num_rows_state(block: &witness::SyncState<S, F>) -> (usize, usize);
+    fn min_num_rows_state(block: &witness::SyncState<F>) -> (usize, usize);
 }
 
 /// Analog of [`SubCircuit`] for halo2-lib circuits.
-pub trait SubCircuitBuilder<S: Spec, F: Field> {
+pub trait SubCircuitBuilder<F: Field> {
     /// Configuration of the SubCircuitBuilder.
     type Config;
 
@@ -161,7 +161,7 @@ pub trait SubCircuitBuilder<S: Spec, F: Field> {
     /// Create a new SubCircuitBuilder from a witness Block
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState<S, F>,
+        state: &witness::SyncState<F>,
     ) -> Self;
 
     fn synthesize_sub(
@@ -183,7 +183,7 @@ pub trait SubCircuitBuilder<S: Spec, F: Field> {
 
     /// Return the minimum number of rows required to prove the block.
     /// Row numbers without/with padding are both returned.
-    fn min_num_rows_state(block: &witness::SyncState<S, F>) -> (usize, usize);
+    fn min_num_rows_state(block: &witness::SyncState<F>) -> (usize, usize);
 }
 
 /// SubCircuit configuration

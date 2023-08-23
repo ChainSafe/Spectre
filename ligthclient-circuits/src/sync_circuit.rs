@@ -90,14 +90,14 @@ pub struct SyncCircuitBuilder<S: Spec, F: Field> {
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> SubCircuitBuilder<S, F> for SyncCircuitBuilder<S, F> {
+impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
     type Config = AttestationsCircuitConfig<F>;
     type SynthesisArgs = Vec<AssignedValueCell<F>>;
     type Output = ();
 
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState<S, F>,
+        state: &witness::SyncState<F>,
     ) -> Self {
         let pubkeys_y = state
             .sync_committee
@@ -258,7 +258,7 @@ impl<S: Spec, F: Field> SubCircuitBuilder<S, F> for SyncCircuitBuilder<S, F> {
         todo!()
     }
 
-    fn min_num_rows_state(_block: &witness::SyncState<S, F>) -> (usize, usize) {
+    fn min_num_rows_state(_block: &witness::SyncState<F>) -> (usize, usize) {
         todo!()
     }
 }
@@ -602,14 +602,14 @@ mod tests {
         let k = 17;
         let circuit = get_circuit_with_data(k);
 
-        let timer = start_timer!(|| "test_attestations_circuit");
+        let timer = start_timer!(|| "sync circuit mock prover");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
         end_timer!(timer);
     }
 
     #[test]
-    fn test_sync_circuit_proofgen() {
+    fn test_sync_proofgen() {
         let k = 17;
         let circuit = get_circuit_with_data(k);
 
