@@ -471,7 +471,7 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         gate: &impl GateInstructions<F>,
         pubkeys: Vec<G1Point<F>>,
     ) -> Result<AssignedValue<F>, Error> {
-        const POSEIDON_SIZE: usize = 16;
+        const POSEIDON_SIZE: usize = 4;
         let total_elems = S::SYNC_COMMITTEE_SIZE * G1::NUM_LIMBS;
         let num_poseidons = total_elems / POSEIDON_SIZE;
 
@@ -480,7 +480,7 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
             .flat_map(|pk| pk.x.limbs())
             .copied()
             .collect_vec();
-        let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, 15>::new(ctx, 8, 57)
+        let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, 8, 57)
             .expect("Failed to construct Poseidon circuit");
         let mut current_poseidon_hash = None;
 
