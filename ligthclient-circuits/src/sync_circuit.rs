@@ -191,7 +191,8 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
 
                 let mut committee_pubkeys = vec![];
                 let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip, &mut committee_pubkeys);
-                let poseidon_commit = Self::sync_committee_poseidon(ctx, range.gate(), committee_pubkeys)?;
+                let poseidon_commit =
+                    Self::sync_committee_poseidon(ctx, range.gate(), committee_pubkeys)?;
 
                 let fp12_one = {
                     use ff::Field;
@@ -290,7 +291,7 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         &self,
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'a, F>,
-        committee_pubkeys: &mut Vec<G1Point<F>>
+        committee_pubkeys: &mut Vec<G1Point<F>>,
     ) -> EcPoint<F, FpPoint<F>> {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
@@ -471,31 +472,29 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         pubkeys: Vec<G1Point<F>>,
     ) -> Result<AssignedValue<F>, Error> {
         const POSEIDON_SIZE: usize = 16;
-        let total_elems = S::SYNC_COMMITTEE_SIZE * G1::NUM_LIMBS * 2;
+        let total_elems = S::SYNC_COMMITTEE_SIZE * G1::NUM_LIMBS;
         let num_poseidons = total_elems / POSEIDON_SIZE;
 
         let pubkeys_limbs = pubkeys
             .iter()
-            .flat_map(|pk| pk.x.limbs().iter().chain(pk.y.limbs()))
+            .flat_map(|pk| pk.x.limbs())
             .copied()
             .collect_vec();
-
-        let mut poseidons = iter::repeat_with(|| {
-            PoseidonChip::<F, POSEIDON_SIZE, 15>::new(ctx, 8, 57)
-                .expect("Failed to construct Poseidon circuit")
-        })
-        .take(num_poseidons)
-        .collect_vec();
+        let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, 15>::new(ctx, 8, 57)
+            .expect("Failed to construct Poseidon circuit");
         let mut current_poseidon_hash = None;
 
         for i in 0..num_poseidons {
             if i == 0 {
-                poseidons[i].update(&pubkeys_limbs[i..i * 15]);
+                poseidon.update(&pubkeys_limbs[i..i * (POSEIDON_SIZE - 1)]);
             } else {
-                poseidons[i].update(&pubkeys_limbs[i * 15..i * 15 + 15]);
-                poseidons[i].update(&[current_poseidon_hash.unwrap()]);
+                poseidon.update(
+                    &pubkeys_limbs
+                        [i * (POSEIDON_SIZE - 1)..i * (POSEIDON_SIZE - 1) + (POSEIDON_SIZE - 1)],
+                );
+                poseidon.update(&[current_poseidon_hash.unwrap()]);
             }
-            current_poseidon_hash.insert(poseidons[i].squeeze(ctx, gate)?);
+            current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
         }
 
         Ok(current_poseidon_hash.unwrap())

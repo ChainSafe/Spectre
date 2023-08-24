@@ -17,7 +17,7 @@ pub trait Spec: 'static + Sized + Copy + Default + Debug {
 pub struct Test;
 
 impl Spec for Test {
-    const SYNC_COMMITTEE_SIZE: usize = 10;
+    const SYNC_COMMITTEE_SIZE: usize = 512;
     const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 }
 
