@@ -471,7 +471,8 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         gate: &impl GateInstructions<F>,
         pubkeys: Vec<G1Point<F>>,
     ) -> Result<AssignedValue<F>, Error> {
-        const POSEIDON_SIZE: usize = 4;
+        const POSEIDON_SIZE: usize = 8;
+        println!("POSEIDON_SIZE: {}", POSEIDON_SIZE);
         let total_elems = S::SYNC_COMMITTEE_SIZE * G1::NUM_LIMBS;
         let num_poseidons = total_elems / POSEIDON_SIZE;
 
@@ -485,13 +486,11 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         let mut current_poseidon_hash = None;
 
         for i in 0..num_poseidons {
-            if i == 0 {
-                poseidon.update(&pubkeys_limbs[i..i * (POSEIDON_SIZE - 1)]);
-            } else {
-                poseidon.update(
-                    &pubkeys_limbs
-                        [i * (POSEIDON_SIZE - 1)..i * (POSEIDON_SIZE - 1) + (POSEIDON_SIZE - 1)],
-                );
+            poseidon.update(
+                &pubkeys_limbs
+                    [i * (POSEIDON_SIZE - 1)..i * (POSEIDON_SIZE - 1) + (POSEIDON_SIZE - 1)],
+            );
+            if i != 0 {
                 poseidon.update(&[current_poseidon_hash.unwrap()]);
             }
             current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
