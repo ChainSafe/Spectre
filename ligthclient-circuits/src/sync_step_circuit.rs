@@ -5,12 +5,14 @@ use crate::{
         CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
         HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
+    poseidon::{poseidon_sponge, g1_array_poseidon},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
+    ssz_merkle::ssz_merkleize_chunks,
     util::{
         decode_into_field, AssignedValueCell, Challenges, IntoWitness, SubCircuit,
         SubCircuitBuilder, SubCircuitConfig,
     },
-    witness::{self, HashInput, HashInputChunk, DUMMY_PUBKEY, DUMMY_VALIDATOR},
+    witness::{self, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
@@ -42,27 +44,19 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use ssz_rs::Merkleized;
 
-pub const ZERO_HASHES: [[u8; 32]; 2] = [
-    [0; 32],
-    [
-        245, 165, 253, 66, 209, 106, 32, 48, 39, 152, 239, 110, 211, 9, 151, 155, 67, 0, 61, 35,
-        32, 217, 240, 232, 234, 152, 49, 169, 39, 89, 251, 75,
-    ],
-];
-
 #[derive(Clone, Debug)]
-pub struct SyncCircuitConfig<F: Field> {
+pub struct SyncStepCircuitConfig<F: Field> {
     range: RangeConfig<F>,
     sha256_config: Sha256CircuitConfig<F>,
 }
 
-pub struct SyncCircuitArgs<F: Field> {
+pub struct SyncStepCircuitArgs<F: Field> {
     pub range: RangeConfig<F>,
     pub sha256_config: Sha256CircuitConfig<F>,
 }
 
-impl<F: Field> SubCircuitConfig<F> for SyncCircuitConfig<F> {
-    type ConfigArgs = SyncCircuitArgs<F>;
+impl<F: Field> SubCircuitConfig<F> for SyncStepCircuitConfig<F> {
+    type ConfigArgs = SyncStepCircuitArgs<F>;
 
     fn new<S: Spec>(_meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
         let range = args.range;
@@ -78,21 +72,20 @@ impl<F: Field> SubCircuitConfig<F> for SyncCircuitConfig<F> {
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug)]
-pub struct SyncCircuitBuilder<S: Spec, F: Field> {
+pub struct SyncStepCircuitBuilder<S: Spec, F: Field> {
     builder: RefCell<GateThreadBuilder<F>>,
     signature: Vec<u8>,
     sha256_offset: usize,
     domain: [u8; 32],
     attested_block: BeaconBlockHeader,
-    pubkeys_compressed: Vec<Vec<u8>>,
+    pubkeys: Vec<G1Affine>,
     pariticipation_bits: Vec<bool>,
-    pubkeys_y: Vec<Fq>,
     dry_run: bool,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
-    type Config = SyncCircuitConfig<F>;
+impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncStepCircuitBuilder<S, F> {
+    type Config = SyncStepCircuitConfig<F>;
     type SynthesisArgs = Vec<AssignedValueCell<F>>;
     type Output = ();
 
@@ -100,20 +93,7 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
         builder: RefCell<GateThreadBuilder<F>>,
         state: &witness::SyncState<F>,
     ) -> Self {
-        let pubkeys_y = state
-            .sync_committee
-            .iter()
-            .map(|v| {
-                let g1_affine = G1Affine::from_uncompressed(
-                    &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
-                )
-                .unwrap();
-
-                g1_affine.y
-            })
-            .collect_vec();
-
-        let sha256_offset = state.sha256_inputs.len() * 144;
+        let sha256_offset = 0; //state.sha256_inputs.len() * 144;
         assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
 
         Self {
@@ -121,11 +101,16 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
             signature: state.sync_signature.clone(),
             domain: state.domain,
             attested_block: state.attested_block.clone(),
-            pubkeys_compressed: state
+            pubkeys: state
                 .sync_committee
                 .iter()
                 .cloned()
-                .map(|v| v.pubkey_uncompressed)
+                .map(|v| {
+                    G1Affine::from_uncompressed_unchecked(
+                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                    )
+                    .unwrap()
+                })
                 .collect_vec(),
             pariticipation_bits: state
                 .sync_committee
@@ -133,8 +118,7 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
                 .cloned()
                 .map(|v| v.is_attested)
                 .collect_vec(),
-            pubkeys_y,
-            sha256_offset: state.sha256_inputs.len() * 144,
+            sha256_offset,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -189,10 +173,13 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
 
                 let ctx = builder.main(0);
 
-                let mut committee_pubkeys = vec![];
-                let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip, &mut committee_pubkeys);
-                let poseidon_commit =
-                    Self::sync_committee_poseidon(ctx, range.gate(), committee_pubkeys)?;
+                let mut pubkey_points = vec![];
+                let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip, &mut pubkey_points);
+                let poseidon_commit = g1_array_poseidon(
+                    ctx,
+                    range.gate(),
+                    pubkey_points,
+                )?;
 
                 let fp12_one = {
                     use ff::Field;
@@ -210,8 +197,7 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
                     self.attested_block.body_root.as_ref().into_witness(),
                 ];
 
-                let attested_header =
-                    self.ssz_merkleize_chunks(chunks, &hasher, ctx, &mut region)?;
+                let attested_header = ssz_merkleize_chunks(ctx, &mut region, &hasher, chunks)?;
 
                 let signing_root = hasher
                     .digest::<64>(
@@ -269,7 +255,7 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncCircuitBuilder<S, F> {
     }
 }
 
-impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
+impl<S: Spec, F: Field> SyncStepCircuitBuilder<S, F> {
     pub fn dry_run(mut self) -> Self {
         self.dry_run = true;
         self
@@ -292,7 +278,7 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'a, F>,
         committee_pubkeys: &mut Vec<G1Point<F>>,
-    ) -> EcPoint<F, FpPoint<F>> {
+    ) -> G1Point<F> {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
 
@@ -300,72 +286,34 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
 
         let pubkey_compressed_len = G1::BYTES_COMPRESSED;
 
-        // let mut pubkeys_compressed = vec![];
-        let mut aggregation_bits = vec![];
+        let mut participation_bits = vec![];
         // let mut attest_digits = iter::repeat_with(|| ctx.load_zero())
         //     .take(S::participation_digits_len::<F>())
         //     .collect_vec();
 
-        // Set y = sqrt(B) for dummy validators to sutisfy curve equation
-        // Note: this only works for curves that have B exponent of 2, e.g. BLS12-381
-        let dymmy_y = Fq::from((G1::B as f64).sqrt() as u64);
+        assert_eq!(self.pubkeys.len(), S::SYNC_COMMITTEE_SIZE);
 
-        for (pubkey_bytes, y_coord, is_attested) in itertools::multizip((
-            self.pubkeys_compressed.iter(),
-            self.pubkeys_y.iter(),
+        for (&pk, is_attested) in itertools::multizip((
+            self.pubkeys.iter(),
             self.pariticipation_bits.iter().copied(),
-        ))
-        .pad_using(S::SYNC_COMMITTEE_SIZE, |_| (&DUMMY_PUBKEY, &dymmy_y, false))
-        {
+        )) {
             let participation_bit = ctx.load_witness(F::from(is_attested as u64));
 
-            // let assigned_x_compressed_bytes: Vec<AssignedValue<F>> =
-            //     ctx.assign_witnesses(pubkey_bytes.iter().map(|&b| F::from(b as u64)));
+            let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
 
-            // // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
-            // assert_eq!(assigned_x_compressed_bytes.len(), pubkey_compressed_len);
-
-            // // masked byte from compressed representation
-            // let masked_byte = &assigned_x_compressed_bytes[pubkey_compressed_len - 1];
-            // // clear the sign bit from masked byte
-            // let cleared_byte = Self::clear_flag_bits(range, masked_byte, ctx);
-            // // Use the cleared byte to construct the x coordinate
-            // let assigned_x_bytes_cleared = [
-            //     &assigned_x_compressed_bytes.as_slice()[..pubkey_compressed_len - 1],
-            //     &[cleared_byte],
-            // ]
-            // .concat();
-            // let x_crt = decode_into_field::<F, G1>(
-            //     assigned_x_bytes_cleared,
-            //     &fp_chip.limb_bases,
-            //     gate,
-            //     ctx,
-            // );
-
-            // // Load private witness y coordinate
-            // let y_crt = fp_chip.load_private(ctx, *y_coord);
-            // // Square y coordinate
-            // let ysq = fp_chip.mul(ctx, y_crt.clone(), y_crt.clone());
-            // // Calculate y^2 using the elliptic curve equation
-            // let ysq_calc = Self::calculate_ysquared::<G1>(ctx, fp_chip, x_crt.clone());
-            // // Constrain witness y^2 to be equal to calculated y^2
-            // fp_chip.assert_equal(ctx, ysq, ysq_calc);
-
-            // // cache assigned compressed pubkey bytes where each byte is constrainted with pubkey point.
-            // // push this to the returnable and then use that
-            // pubkeys_compressed.push(assigned_x_compressed_bytes);
+            // Square y coordinate
+            let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
+            // Calculate y^2 using the elliptic curve equation
+            let ysq_calc = Self::calculate_ysquared::<G1>(ctx, fp_chip, assigned_pk.x.clone());
+            // Constrain witness y^2 to be equal to calculated y^2
+            fp_chip.assert_equal(ctx, ysq, ysq_calc);
 
             // *Note:* normally, we would need to take into account the sign of the y coordinate, but
             // because we are concerned only with signature forgery, if this is the wrong
             // sign, the signature will be invalid anyway and thus verification fails.
 
-            let pk =
-                G1Affine::from_uncompressed_unchecked(&pubkey_bytes.as_slice().try_into().unwrap())
-                    .unwrap();
-            let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
             committee_pubkeys.push(assigned_pk);
-            // participated_pubkeys.push(EcPoint::new(x_crt, y_crt));
-            aggregation_bits.push(participation_bit);
+            participation_bits.push(participation_bit);
 
             // accumulate bits into current commit
             // let current_digit = committee_idx / F::NUM_BITS as usize;
@@ -379,7 +327,7 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
 
         let rand_point = g1_chip.load_random_point::<G1Affine>(ctx);
         let mut acc = rand_point.clone();
-        for (bit, point) in aggregation_bits
+        for (bit, point) in participation_bits
             .into_iter()
             .zip(committee_pubkeys.iter_mut())
         {
@@ -387,23 +335,6 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
             acc = g1_chip.select(ctx, _acc, acc, bit);
         }
         g1_chip.sub_unequal(ctx, acc, rand_point, false)
-    }
-
-    /// Clears the 3 first least significat bits used for flags from a last byte of compressed pubkey.
-    /// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
-    fn clear_flag_bits(
-        range: &RangeChip<F>,
-        b: &AssignedValue<F>,
-        ctx: &mut Context<F>,
-    ) -> AssignedValue<F> {
-        let gate = range.gate();
-        // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
-        let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
-        // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
-        let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
-
-        // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
-        range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
     }
 
     // Calculates y^2 = x^3 + 4 (the curve equation)
@@ -417,91 +348,6 @@ impl<S: Spec, F: Field> SyncCircuitBuilder<S, F> {
 
         let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, C::B.into());
         field_chip.carry_mod(ctx, plus_b)
-    }
-
-    fn ssz_merkleize_chunks<'a, I: IntoIterator<Item = HashInputChunk<QuantumCell<F>>>>(
-        &self,
-        chunks: I,
-        hasher: &'a CachedHashChip<F, Sha256Chip<'a, F>>,
-        ctx: &mut Context<F>,
-        region: &mut Region<'_, F>,
-    ) -> Result<Vec<AssignedValue<F>>, Error>
-    where
-        I::IntoIter: ExactSizeIterator,
-    {
-        let mut chunks = chunks.into_iter().collect_vec();
-        let len_even = chunks.len() + chunks.len() % 2;
-        let height = (len_even as f64).log2().ceil() as usize;
-
-        for depth in 0..height {
-            // Pad to even length using 32 zero bytes assigned as constants.
-            let len_even = chunks.len() + chunks.len() % 2;
-            let padded_chunks = chunks
-                .into_iter()
-                .pad_using(len_even, |_| {
-                    HashInputChunk::from(
-                        ZERO_HASHES[depth].map(|b| ctx.load_constant(F::from(b as u64))),
-                    )
-                })
-                .collect_vec();
-
-            chunks = padded_chunks
-                .into_iter()
-                .tuples()
-                .map(|(left, right)| {
-                    hasher
-                        .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
-                        .map(|res| res.output_bytes.into())
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-        }
-
-        assert_eq!(chunks.len(), 1, "merkleize_chunks: expected one chunk");
-
-        let root = chunks.pop().unwrap().map(|cell| match cell {
-            QuantumCell::Existing(av) => av,
-            _ => unreachable!(),
-        });
-
-        Ok(root.bytes)
-    }
-
-    fn sync_committee_poseidon(
-        ctx: &mut Context<F>,
-        gate: &impl GateInstructions<F>,
-        pubkeys: Vec<G1Point<F>>,
-    ) -> Result<AssignedValue<F>, Error> {
-        const POSEIDON_SIZE: usize = 16;
-        const R_F: usize = 8;
-        const R_P: usize = 68;
-        println!("POSEIDON_SIZE: {}", POSEIDON_SIZE);
-        let total_elems = S::SYNC_COMMITTEE_SIZE * G1::NUM_LIMBS;
-        println!("total_elems: {total_elems}");
-
-        let pubkeys_limbs = pubkeys
-            .iter()
-            .flat_map(|pk| pk.x.limbs())
-            .copied()
-            .collect_vec();
-        let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, 8, 68)
-            .expect("Failed to construct Poseidon circuit");
-        let mut current_poseidon_hash = None;
-
-        let mut total_absorbed = 0;
-        for (i, chunk) in pubkeys_limbs.chunks(POSEIDON_SIZE - 3).enumerate() {
-            // let slice = &pubkeys_limbs
-            //     [i * (POSEIDON_SIZE - 1)..i * (POSEIDON_SIZE - 1) + (POSEIDON_SIZE - 1)];
-            total_absorbed += chunk.len();
-            poseidon.update(chunk);
-            if i != 0 {
-                poseidon.update(&[current_poseidon_hash.unwrap()]);
-            }
-            current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
-            // println!("-------------------");
-        }
-        println!("total_absorbed: {}", total_absorbed);
-
-        Ok(current_poseidon_hash.unwrap())
     }
 }
 
@@ -549,11 +395,11 @@ mod tests {
 
     #[derive(Clone, Debug)]
     struct TestCircuit<S: Spec, F: Field> {
-        inner: SyncCircuitBuilder<S, F>,
+        inner: SyncStepCircuitBuilder<S, F>,
     }
 
     impl<S: Spec, F: Field> Circuit<F> for TestCircuit<S, F> {
-        type Config = (SyncCircuitConfig<F>, Challenges<Value<F>>);
+        type Config = (SyncStepCircuitConfig<F>, Challenges<Value<F>>);
         type FloorPlanner = SimpleFloorPlanner;
 
         fn without_witnesses(&self) -> Self {
@@ -564,9 +410,9 @@ mod tests {
             let range = RangeCircuitBuilder::configure(meta);
             let hash_table = Sha256Table::construct(meta);
             let sha256_config = Sha256CircuitConfig::new::<Test>(meta, hash_table);
-            let config = SyncCircuitConfig::new::<Test>(
+            let config = SyncStepCircuitConfig::new::<Test>(
                 meta,
-                SyncCircuitArgs {
+                SyncStepCircuitArgs {
                     range,
                     sha256_config,
                 },
@@ -629,7 +475,7 @@ mod tests {
             std::env::set_var("LOOKUP_BITS", 16.to_string());
 
             let circuit = TestCircuit::<Test, Fr> {
-                inner: SyncCircuitBuilder::new_from_state(RefCell::from(builder.clone()), &state)
+                inner: SyncStepCircuitBuilder::new_from_state(RefCell::from(builder.clone()), &state)
                     .dry_run(),
             };
 
@@ -643,7 +489,7 @@ mod tests {
 
         let builder = RefCell::from(builder);
         TestCircuit::<Test, Fr> {
-            inner: SyncCircuitBuilder::new_from_state(builder, &state),
+            inner: SyncStepCircuitBuilder::new_from_state(builder, &state),
         }
     }
 

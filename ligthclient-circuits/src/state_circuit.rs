@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_state_circuit() {
-        let k = 17;
+        let k = 18;
         let state_input: SyncStateInput =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state: SyncState<Fr> = state_input.into();
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_state_proofgen() {
-        let k = 17;
+        let k = 18;
         let state_input: SyncStateInput =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state: SyncState<Fr> = state_input.into();

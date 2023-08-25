@@ -102,7 +102,10 @@ const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 let view = ssz.altair.SyncCommittee.fields.pubkeys.toView(beaconState.currentSyncCommittee.pubkeys);
 
-let gindices = Array.from({ length: N_validators }, (_, i) => ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex);
+let gindices = Array.from({ length: N_validators }, (_, i) => {
+    const g = ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex;
+    return [g * 2n, g * 2n + 1n]
+}).flat();
 
 let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
 
@@ -113,7 +116,6 @@ printTrace(partial_tree, trace);
 //     `../test_data/merkle_trace.json`,
 //     serialize(trace)
 // );
-
 
 let input = {
     targetEpoch: targetEpoch,

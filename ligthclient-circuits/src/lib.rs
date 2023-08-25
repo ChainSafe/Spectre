@@ -13,6 +13,10 @@ pub mod table;
 pub(crate) mod util;
 pub mod witness;
 
-pub mod sha256_circuit;
-pub mod sync_circuit;
-pub mod state_circuit;
+mod sha256_circuit;
+mod sync_step_circuit;
+mod state_circuit;
+mod committee_update_circuit;
+
+mod ssz_merkle;
+mod poseidon;
