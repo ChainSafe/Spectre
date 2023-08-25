@@ -26,19 +26,19 @@ halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "dev/
 # halo2curves = { path = "../halo2curves" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false, features = [
-    "halo2-pse",
-    "display",
-] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib",rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false }
-poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false }
-
-# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+# halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false, features = [
 #     "halo2-pse",
 #     "display",
 # ] }
-# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
-# poseidon = { path = "../halo2-lib/hashes/poseidon", default-features = false }
+# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib",rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false }
+# poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "7cebe716bb0569a7cb741c44ef8e87b2eadbbafb", default-features = false }
+
+halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
+poseidon = { path = "../halo2-lib/hashes/poseidon", default-features = false }
 
 
 # [patch."https://github.com/timoftime/halo2curves"]
