@@ -1,0 +1,13 @@
+[package]
+name = "spectre-prover"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "=4.2", features = ["derive"] }
+strum = "0.25"
+cli-batteries = "=0.4"
+eyre = "0.6"
+
+[build-dependencies]
+cli-batteries = "=0.4"
