@@ -109,8 +109,7 @@ impl<T: Clone> Challenges<T> {
 /// other via lookup tables and/or shared public inputs.  This type must contain
 /// all the inputs required to synthesize this circuit (and the contained
 /// table(s) if any).
-pub trait SubCircuit<'a, F: Field>
-{
+pub trait SubCircuit<'a, F: Field> {
     /// Configuration of the SubCircuit.
     type Config;
 

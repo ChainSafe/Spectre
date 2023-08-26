@@ -74,7 +74,6 @@ impl Sha256Table {
             hash_rlc: meta.advice_column_in(SecondPhase),
         };
 
-
         for column in config.input_chunks {
             meta.enable_equality(column);
         }

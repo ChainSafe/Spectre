@@ -5,7 +5,7 @@ use crate::{
         CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
         HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
-    poseidon::{poseidon_sponge, g1_array_poseidon},
+    poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
     util::{
