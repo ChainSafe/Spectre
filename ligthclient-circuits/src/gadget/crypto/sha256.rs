@@ -283,7 +283,7 @@ mod test {
 
     use crate::table::Sha256Table;
     use crate::util::{
-        full_prover, full_verifier, gen_pkey, Challenges, IntoWitness, SubCircuitConfig,
+        full_prover, full_verifier, gen_pkey, Challenges, IntoWitness,
     };
 
     use super::*;

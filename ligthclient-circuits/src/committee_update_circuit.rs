@@ -8,10 +8,7 @@ use crate::{
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
-    util::{
-        decode_into_field, AssignedValueCell, Challenges, IntoWitness, SubCircuit,
-        SubCircuitBuilder, SubCircuitConfig,
-    },
+    util::{decode_into_field, AssignedValueCell, Challenges, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
@@ -50,26 +47,6 @@ pub struct CommitteeUpdateCircuitConfig<F: Field> {
     sha256_config: Sha256CircuitConfig<F>,
 }
 
-pub struct CommitteeUpdateCircuitArgs<F: Field> {
-    pub range: RangeConfig<F>,
-    pub sha256_config: Sha256CircuitConfig<F>,
-}
-
-impl<F: Field> SubCircuitConfig<F> for CommitteeUpdateCircuitConfig<F> {
-    type ConfigArgs = CommitteeUpdateCircuitArgs<F>;
-
-    fn new<S: Spec>(_meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
-        let range = args.range;
-        let sha256_config = args.sha256_config;
-        Self {
-            range,
-            sha256_config,
-        }
-    }
-
-    fn annotate_columns_in_region(&self, _region: &mut Region<'_, F>) {}
-}
-
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuitBuilder<S: Spec, F: Field> {
@@ -81,11 +58,7 @@ pub struct CommitteeUpdateCircuitBuilder<S: Spec, F: Field> {
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S, F> {
-    type Config = CommitteeUpdateCircuitConfig<F>;
-    type SynthesisArgs = Vec<AssignedValueCell<F>>;
-    type Output = ();
-
+impl<S: Spec, F: Field> CommitteeUpdateCircuitBuilder<S, F> {
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<F>>,
         state: &witness::SyncState<F>,
@@ -127,10 +100,9 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S
     /// - all attestation have same source and target epoch
     fn synthesize_sub(
         &self,
-        config: &Self::Config,
+        config: &CommitteeUpdateCircuitConfig<F>,
         challenges: &Challenges<Value<F>>,
         layouter: &mut impl Layouter<F>,
-        attested_header_root: Self::SynthesisArgs,
     ) -> Result<(), Error> {
         let mut first_pass = halo2_base::SKIP_FIRST_PASS;
 
@@ -163,7 +135,6 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S
         layouter.assign_region(
             || "AggregationCircuitBuilder generated circuit",
             |mut region| {
-                config.annotate_columns_in_region(&mut region);
                 if first_pass {
                     first_pass = false;
                     return Ok(());
@@ -206,12 +177,8 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S
         )
     }
 
-    fn unusable_rows() -> usize {
-        todo!()
-    }
-
-    fn min_num_rows_state(_block: &witness::SyncState<F>) -> (usize, usize) {
-        todo!()
+    pub fn instance(&self) -> Vec<Vec<F>> {
+        vec![]
     }
 }
 
@@ -376,13 +343,10 @@ mod tests {
             let range = RangeCircuitBuilder::configure(meta);
             let hash_table = Sha256Table::construct(meta);
             let sha256_config = Sha256CircuitConfig::new::<Test>(meta, hash_table);
-            let config = CommitteeUpdateCircuitConfig::new::<Test>(
-                meta,
-                CommitteeUpdateCircuitArgs {
-                    range,
-                    sha256_config,
-                },
-            );
+            let config = CommitteeUpdateCircuitConfig {
+                range,
+                sha256_config,
+            };
 
             (
                 config,
@@ -401,7 +365,7 @@ mod tests {
                 .load_lookup_table(&mut layouter)
                 .expect("load range lookup table");
             self.inner
-                .synthesize_sub(&config.0, &config.1, &mut layouter, vec![])?;
+                .synthesize_sub(&config.0, &config.1, &mut layouter)?;
             Ok(())
         }
     }

@@ -624,7 +624,7 @@ mod test {
     use crate::gadget::crypto::Sha256Chip;
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::Sha256Table;
-    use crate::util::{print_fq2_dev, Challenges, IntoWitness, SubCircuitConfig};
+    use crate::util::{print_fq2_dev, Challenges, IntoWitness};
 
     use super::*;
     use eth_types::Mainnet;
