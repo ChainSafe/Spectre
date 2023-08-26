@@ -100,17 +100,17 @@ const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 //----------------- State tree -----------------//
 
-let view = ssz.altair.SyncCommittee.fields.pubkeys.toView(beaconState.currentSyncCommittee.pubkeys);
+// let view = ssz.altair.SyncCommittee.fields.pubkeys.toView(beaconState.currentSyncCommittee.pubkeys);
 
-let gindices = Array.from({ length: N_validators }, (_, i) => {
-    const g = ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex;
-    return [g * 2n, g * 2n + 1n]
-}).flat();
+// let gindices = Array.from({ length: N_validators }, (_, i) => {
+//     const g = ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex;
+//     return [g * 2n, g * 2n + 1n]
+// }).flat();
 
-let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
+// let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
 
-let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, []);
-printTrace(partial_tree, trace);
+// let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, []);
+// printTrace(partial_tree, trace);
 
 // fs.writeFileSync(
 //     `../test_data/merkle_trace.json`,
@@ -128,7 +128,7 @@ let input = {
     domain: Array.from(domain),
     attestedBlock: attestedBlockJson,
     syncSignature: syncSigBytes,
-    merkleTrace: trace,
+    merkleTrace: [],
 }
 
 fs.writeFileSync(
