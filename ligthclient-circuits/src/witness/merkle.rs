@@ -40,28 +40,17 @@ impl MerkleTrace {
             .unwrap()
     }
 
-    pub fn trace_by_levels(&self) -> Vec<Vec<&MerkleTraceStep>> {
+    pub fn sorted(&self) -> Vec<MerkleTraceStep> {
         self.0
-            .iter()
-            .group_by(|step| step.depth)
-            .into_iter()
-            .sorted_by_key(|(depth, _steps)| *depth)
-            .map(|(_depth, steps)| steps.collect_vec())
-            .collect_vec()
-    }
-
-    pub fn trace_by_level_map(&self) -> HashMap<usize, Vec<&MerkleTraceStep>> {
-        self.0.iter().into_group_map_by(|step| step.depth)
-    }
-
-    pub fn sha256_inputs(&self) -> Vec<HashInput<u8>> {
-        let mut steps_sorted = self
-            .0
             .clone()
             .into_iter()
             .sorted_by_key(|e| e.depth)
             .rev()
-            .collect_vec();
+            .collect_vec()
+    }
+
+    pub fn sha256_inputs(&self) -> Vec<HashInput<u8>> {
+        let mut steps_sorted = self.sorted();
 
         // filter out the first (root) level as it require no hashing.
         if steps_sorted.last().unwrap().depth == 1 {

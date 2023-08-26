@@ -16,7 +16,7 @@ import { DOMAIN_SYNC_COMMITTEE } from "@lodestar/params";
 
 const DST = "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
-const N_validators = parseInt(process.argv[2]) || 10;
+const N_validators = parseInt(process.argv[2]) || 512;
 
 let privKeyHexes: string[] = JSON.parse(fs.readFileSync("../test_data/private_keys.json").toString());
 
@@ -26,6 +26,7 @@ const targetEpoch = 25;
 
 let beaconState = ssz.capella.BeaconState.deserialize(new Uint8Array(fs.readFileSync("../test_data/beacon_state_2915750")));
 beaconState.validators = [];
+beaconState.currentSyncCommittee.pubkeys = [];
 const config = createBeaconConfig(chainConfig, beaconState.genesisValidatorsRoot);
 
 
@@ -34,7 +35,6 @@ const config = createBeaconConfig(chainConfig, beaconState.genesisValidatorsRoot
 let pubKeyPoints: ProjPointType<bigint>[] = [];
 
 for (let i = 0; i < N_validators; i++) {
-    // use 5 pregenerated private keys to avoid changing JSON files.
     let privKey = i < privKeyHexes.length ? hexToBytes(privKeyHexes[i]) : bls12_381.utils.randomPrivateKey();
     let p = bls12_381.G1.ProjectivePoint.fromPrivateKey(privKey);
     let pubkey = g1PointToBytesLE(p, true);
@@ -51,6 +51,7 @@ for (let i = 0; i < N_validators; i++) {
     });
     privKeyHexes[i] = bytesToHex(privKey);
     pubKeyPoints.push(p);
+    beaconState.currentSyncCommittee.pubkeys.push(pubkey);
 }
 
 
@@ -63,6 +64,7 @@ fs.writeFileSync(
 //----------------- Sync Committee -----------------//
 
 const aggregatedPubKey = bls12_381.aggregatePublicKeys(pubKeyPoints);
+beaconState.currentSyncCommittee.aggregatePubkey = g1PointToBytesLE(aggregatedPubKey, true);
 
 //--------------------- Sync ---------------------//
 
@@ -98,20 +100,22 @@ const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 //----------------- State tree -----------------//
 
-// let view = BeaconStateSsz.toView(beaconState);
+// let view = ssz.altair.SyncCommittee.fields.pubkeys.toView(beaconState.currentSyncCommittee.pubkeys);
 
+// let gindices = Array.from({ length: N_validators }, (_, i) => {
+//     const g = ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex;
+//     return [g * 2n, g * 2n + 1n]
+// }).flat();
 
 // let proof = createProof(view.node, { type: ProofType.multi, gindices: gindices }) as MultiProof;
 
-// let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, nonRlcGindices);
-// // printTrace(partial_tree, trace);
-// console.log("state_root:", bytesToHex(view.hashTreeRoot()));
+// let [partial_tree, trace] = createNodeFromMultiProofWithTrace(proof.leaves, proof.witnesses, proof.gindices, []);
+// printTrace(partial_tree, trace);
 
 // fs.writeFileSync(
 //     `../test_data/merkle_trace.json`,
 //     serialize(trace)
 // );
-
 
 let input = {
     targetEpoch: targetEpoch,
@@ -124,7 +128,7 @@ let input = {
     domain: Array.from(domain),
     attestedBlock: attestedBlockJson,
     syncSignature: syncSigBytes,
-    merkleTrace: []
+    merkleTrace: [],
 }
 
 fs.writeFileSync(

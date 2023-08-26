@@ -14,7 +14,7 @@ use ssz_rs::Merkleized;
 /// SyncState is the struct used by all circuits, which contains all the needed
 /// data for witness generation.
 #[derive(Debug, Clone, Default)]
-pub struct SyncState<S: Spec, F: Field> {
+pub struct SyncState<F: Field> {
     pub randomness: F,
 
     pub target_epoch: u64,
@@ -32,8 +32,6 @@ pub struct SyncState<S: Spec, F: Field> {
     pub sha256_inputs: Vec<HashInput<u8>>,
 
     pub state_root: [u8; 32],
-
-    _s: PhantomData<S>,
 }
 
 /// SyncState is the struct used by all circuits, which contains all the needed
@@ -53,7 +51,7 @@ pub struct SyncStateInput {
     pub merkle_trace: MerkleTrace,
 }
 
-impl<S: Spec, F: Field> From<SyncStateInput> for SyncState<S, F> {
+impl<F: Field> From<SyncStateInput> for SyncState<F> {
     fn from(
         SyncStateInput {
             target_epoch,
@@ -75,7 +73,6 @@ impl<S: Spec, F: Field> From<SyncStateInput> for SyncState<S, F> {
             merkle_trace,
             sha256_inputs,
             randomness: Sha256CircuitConfig::fixed_challenge(),
-            _s: PhantomData,
         }
     }
 }

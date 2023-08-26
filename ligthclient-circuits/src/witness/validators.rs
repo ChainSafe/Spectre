@@ -20,11 +20,6 @@ pub struct Validator {
     pub pubkey_uncompressed: Vec<u8>,
 }
 
-lazy_static! {
-    pub static ref DUMMY_VALIDATOR: Validator = Validator::default();
-    pub static ref DUMMY_PUBKEY: Vec<u8> = iter::once(192).pad_using(48, |_| 0).rev().collect();
-}
-
 impl Default for Validator {
     fn default() -> Self {
         Validator {
