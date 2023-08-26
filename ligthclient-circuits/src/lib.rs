@@ -15,7 +15,6 @@ pub mod witness;
 
 mod sha256_circuit;
 mod sync_step_circuit;
-mod state_circuit;
 mod committee_update_circuit;
 
 mod ssz_merkle;
