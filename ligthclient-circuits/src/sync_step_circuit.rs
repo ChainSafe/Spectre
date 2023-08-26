@@ -5,7 +5,7 @@ use crate::{
         CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
         HashToCurveCache, HashToCurveChip, Sha256Chip,
     },
-    poseidon::{poseidon_sponge, g1_array_poseidon},
+    poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
     util::{
@@ -174,12 +174,9 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for SyncStepCircuitBuilder<S, F> {
                 let ctx = builder.main(0);
 
                 let mut pubkey_points = vec![];
-                let agg_pubkey = self.aggregate_pubkeys(ctx, &fp_chip, &mut pubkey_points);
-                let poseidon_commit = g1_array_poseidon(
-                    ctx,
-                    range.gate(),
-                    pubkey_points,
-                )?;
+                let (agg_pubkey, participation_sum) =
+                    self.aggregate_pubkeys(ctx, &fp_chip, &mut pubkey_points);
+                let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
 
                 let fp12_one = {
                     use ff::Field;
@@ -278,7 +275,7 @@ impl<S: Spec, F: Field> SyncStepCircuitBuilder<S, F> {
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'a, F>,
         committee_pubkeys: &mut Vec<G1Point<F>>,
-    ) -> G1Point<F> {
+    ) -> (G1Point<F>, AssignedValue<F>) {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
 
@@ -287,9 +284,6 @@ impl<S: Spec, F: Field> SyncStepCircuitBuilder<S, F> {
         let pubkey_compressed_len = G1::BYTES_COMPRESSED;
 
         let mut participation_bits = vec![];
-        // let mut attest_digits = iter::repeat_with(|| ctx.load_zero())
-        //     .take(S::participation_digits_len::<F>())
-        //     .collect_vec();
 
         assert_eq!(self.pubkeys.len(), S::SYNC_COMMITTEE_SIZE);
 
@@ -298,6 +292,7 @@ impl<S: Spec, F: Field> SyncStepCircuitBuilder<S, F> {
             self.pariticipation_bits.iter().copied(),
         )) {
             let participation_bit = ctx.load_witness(F::from(is_attested as u64));
+            gate.assert_bit(ctx, participation_bit);
 
             let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
 
@@ -328,13 +323,17 @@ impl<S: Spec, F: Field> SyncStepCircuitBuilder<S, F> {
         let rand_point = g1_chip.load_random_point::<G1Affine>(ctx);
         let mut acc = rand_point.clone();
         for (bit, point) in participation_bits
-            .into_iter()
+            .iter()
+            .copied()
             .zip(committee_pubkeys.iter_mut())
         {
-            let _acc = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
-            acc = g1_chip.select(ctx, _acc, acc, bit);
+            let sum = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
+            acc = g1_chip.select(ctx, sum, acc, bit);
         }
-        g1_chip.sub_unequal(ctx, acc, rand_point, false)
+        let agg_pubkey = g1_chip.sub_unequal(ctx, acc, rand_point, false);
+        let participation_sum = gate.sum(ctx, participation_bits);
+
+        (agg_pubkey, participation_sum)
     }
 
     // Calculates y^2 = x^3 + 4 (the curve equation)
@@ -475,8 +474,11 @@ mod tests {
             std::env::set_var("LOOKUP_BITS", 16.to_string());
 
             let circuit = TestCircuit::<Test, Fr> {
-                inner: SyncStepCircuitBuilder::new_from_state(RefCell::from(builder.clone()), &state)
-                    .dry_run(),
+                inner: SyncStepCircuitBuilder::new_from_state(
+                    RefCell::from(builder.clone()),
+                    &state,
+                )
+                .dry_run(),
             };
 
             let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
