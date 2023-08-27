@@ -24,6 +24,9 @@ pub struct SyncStepArgs {
 
     #[clap(long, short, default_value = "./build")]
     pub build_dir: PathBuf,
+
+    #[clap(long, short, default_value = "./sync_state.json")]
+    pub input_path: PathBuf,
     
     #[clap(index = 1, help = "path to output", default_value = ".")]
     pub path_out: PathBuf, 
@@ -40,6 +43,9 @@ pub struct CommitteeUpdateArgs {
 
     #[clap(long, short, default_value = "./build")]
     pub build_dir: PathBuf,
+
+    #[clap(long, short, default_value = "./sync_state.json")]
+    pub input_path: PathBuf,
     
     #[clap(index = 1, help = "path to output", default_value = ".")]
     pub path_out: PathBuf, 
