@@ -1,6 +1,5 @@
 //! The circuit for SHA256 hash function.
 //! This implementation is based on:
-//! - https://hackmd.io/@tsgAyLwURdqHzWxSmwVLjw/Sk5AOhWhc#Bit-implementation
 //! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
 
 mod sha256_bit;

@@ -1,15 +1,27 @@
-use std::{cell::RefCell, collections::HashMap, iter, marker::PhantomData, ops::Neg, rc::Rc, vec, env::{set_var, var}, path::Path, fs};
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    env::{set_var, var},
+    fs, iter,
+    marker::PhantomData,
+    ops::Neg,
+    path::Path,
+    rc::Rc,
+    vec,
+};
 
 use crate::{
     gadget::crypto::{
         CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
-        HashToCurveCache, HashToCurveChip, Sha256Chip,
+        HashToCurveCache, HashToCurveChip, Sha256Chip, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
     table::Sha256Table,
-    util::{decode_into_field, AssignedValueCell, Challenges, IntoWitness, gen_pkey, AppCircuitExt},
+    util::{
+        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
+    },
     witness::{self, HashInput, HashInputChunk, SyncStateInput},
 };
 use eth_types::{AppCurveExt, Field, Spec};
@@ -17,11 +29,12 @@ use ethereum_consensus::phase0::BeaconBlockHeader;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
-        builder::{GateThreadBuilder, RangeCircuitBuilder, FlexGateConfigParams},
-        range::RangeConfig, flex_gate::GateStrategy,
+        builder::{FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder},
+        flex_gate::GateStrategy,
+        range::RangeConfig,
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    utils::{CurveAffineExt, fs::gen_srs},
+    utils::{fs::gen_srs, CurveAffineExt},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -32,9 +45,14 @@ use halo2_ecc::{
 };
 use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{Circuit, ConstraintSystem, Error, ProvingKey}, dev::MockProver, poly::kzg::commitment::ParamsKZG,
+    dev::MockProver,
+    plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
+    poly::kzg::commitment::ParamsKZG,
 };
-use halo2curves::{bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2}, bn256};
+use halo2curves::{
+    bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
+    bn256,
+};
 use itertools::Itertools;
 use lazy_static::__Deref;
 use num_bigint::BigUint;
@@ -46,7 +64,7 @@ use ssz_rs::Merkleized;
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuitConfig<F: Field> {
     range: RangeConfig<F>,
-    sha256_config: Sha256CircuitConfig<F>,
+    sha256_config: RefCell<SpreadConfig<F>>,
     challenges: Challenges<Value<F>>,
 }
 
@@ -54,7 +72,6 @@ pub struct CommitteeUpdateCircuitConfig<F: Field> {
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     builder: RefCell<GateThreadBuilder<F>>,
-    sha256_offset: usize,
     pubkeys_compressed: Vec<Vec<u8>>,
     pubkeys_y: Vec<Fq>,
     dry_run: bool,
@@ -79,9 +96,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             })
             .collect_vec();
 
-        let sha256_offset = 0; //state.sha256_inputs.len() * 144;
-        assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
-
         Self {
             builder,
             pubkeys_compressed: state
@@ -91,7 +105,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .map(|v| v.pubkey)
                 .collect_vec(),
             pubkeys_y,
-            sha256_offset, //state.sha256_inputs.len() * 144,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -208,11 +221,10 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let range = RangeCircuitBuilder::configure(meta);
-        let hash_table = Sha256Table::construct(meta);
-        let sha256_config = Sha256CircuitConfig::new::<S>(meta, hash_table);
+        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
         CommitteeUpdateCircuitConfig {
             range,
-            sha256_config,
+            sha256_config: RefCell::new(sha256_config),
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
     }
@@ -234,13 +246,13 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
-        let sha256_chip = Sha256Chip::new(
-            &config.sha256_config,
-            &range,
-            config.challenges.sha256_input(),
-            None,
-            self.sha256_offset,
-        );
+        // let sha256_chip = Sha256Chip::new(
+        //     &config.sha256_config,
+        //     &range,
+        //     config.challenges.sha256_input(),
+        //     None,
+        //     self.sha256_offset,
+        // );
 
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
@@ -265,17 +277,17 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
                     .map(|bytes| ctx.assign_witnesses(bytes.iter().map(|&b| F::from(b as u64))))
                     .collect_vec();
 
-                let root = Self::sync_committee_root_ssz(
-                    ctx,
-                    &mut region,
-                    &sha256_chip,
-                    compressed_encodings.clone(),
-                )?;
+                // let root = Self::sync_committee_root_ssz(
+                //     ctx,
+                //     &mut region,
+                //     &sha256_chip,
+                //     compressed_encodings.clone(),
+                // )?;
 
                 let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
                 let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
 
-                let extra_assignments = sha256_chip.take_extra_assignments();
+                let extra_assignments = Default::default(); //sha256_chip.take_extra_assignments();
 
                 if self.dry_run {
                     return Ok(());

@@ -1,6 +1,7 @@
-//! The chip that implements `draft-irtf-cfrg-hash-to-curve-16`
-//! https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-16
+// //! The chip that implements `draft-irtf-cfrg-hash-to-curve-16`
+// //! https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-16
 
+use std::ops::Deref;
 use std::{cell::RefCell, iter, marker::PhantomData};
 
 use crate::util::AsBits;
@@ -25,7 +26,6 @@ use halo2_ecc::{
 use halo2_proofs::{circuit::Region, plonk::Error};
 use halo2curves::group::GroupEncoding;
 use itertools::Itertools;
-use lazy_static::{__Deref, lazy_static};
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
@@ -622,6 +622,7 @@ mod test {
     use std::{cell::RefCell, marker::PhantomData};
 
     use crate::gadget::crypto::Sha256Chip;
+    use crate::gadget::crypto::sha256::SpreadConfig;
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::Sha256Table;
     use crate::util::{print_fq2_dev, Challenges, IntoWitness};
@@ -647,7 +648,7 @@ mod test {
 
     #[derive(Debug, Clone)]
     struct TestConfig<F: Field> {
-        sha256_config: Sha256CircuitConfig<F>,
+        sha256_config: RefCell<SpreadConfig<F>>,
         pub max_byte_size: usize,
         range: RangeConfig<F>,
         challenges: Challenges<Value<F>>,
@@ -669,8 +670,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha_table = Sha256Table::construct(meta);
-            let sha256_configs = Sha256CircuitConfig::<F>::new::<Mainnet>(meta, sha_table);
+            let sha256_configs = SpreadConfig::<F>::configure(meta, 8, 1);
             let range = RangeConfig::configure(
                 meta,
                 RangeStrategy::Vertical,
@@ -682,7 +682,7 @@ mod test {
             );
             let challenges = Challenges::construct(meta);
             Self::Config {
-                sha256_config: sha256_configs,
+                sha256_config: RefCell::new(sha256_configs),
                 max_byte_size: Self::MAX_BYTE_SIZE,
                 range,
                 challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
@@ -696,13 +696,7 @@ mod test {
         ) -> Result<(), Error> {
             config.range.load_lookup_table(&mut layouter)?;
             let mut first_pass = SKIP_FIRST_PASS;
-            let sha256 = Sha256Chip::new(
-                &config.sha256_config,
-                &self.range,
-                config.challenges.sha256_input(),
-                None,
-                0,
-            );
+            let sha256 = Sha256Chip::new(config.sha256_config, &self.range, None);
 
             let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(&sha256);
             let fp_chip =
@@ -715,7 +709,6 @@ mod test {
                         first_pass = false;
                         return Ok(());
                     }
-                    config.sha256_config.annotate_columns_in_region(&mut region);
 
                     let builder = &mut self.builder.borrow_mut();
                     let ctx = builder.main(0);

@@ -13,7 +13,7 @@ use std::{
 use crate::{
     gadget::crypto::{
         CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
-        HashToCurveCache, HashToCurveChip, Sha256Chip,
+        HashToCurveCache, HashToCurveChip, Sha256Chip, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
@@ -64,7 +64,7 @@ use ssz_rs::Merkleized;
 #[derive(Clone, Debug)]
 pub struct SyncStepCircuitConfig<F: Field> {
     range: RangeConfig<F>,
-    sha256_config: Sha256CircuitConfig<F>,
+    sha256_config: RefCell<SpreadConfig<F>>,
     challenges: Challenges<Value<F>>,
 }
 
@@ -238,12 +238,11 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let range = RangeCircuitBuilder::configure(meta);
-        let hash_table = Sha256Table::construct(meta);
-        let sha256_config = Sha256CircuitConfig::new::<S>(meta, hash_table);
+        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
 
         SyncStepCircuitConfig {
             range,
-            sha256_config,
+            sha256_config: RefCell::new(sha256_config),
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
     }
@@ -270,11 +269,9 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
         let pairing_chip = PairingChip::new(&fp_chip);
         let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
         let sha256_chip = Sha256Chip::new(
-            &config.sha256_config,
+            config.sha256_config,
             &range,
-            config.challenges.sha256_input(),
             None,
-            self.sha256_offset,
         );
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
 
