@@ -19,7 +19,9 @@ use crate::{
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
     table::Sha256Table,
-    util::{decode_into_field, gen_pkey, AssignedValueCell, Challenges, IntoWitness},
+    util::{
+        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
+    },
     witness::{self, HashInput, HashInputChunk, SyncStateInput},
 };
 use eth_types::{AppCurveExt, Field, Spec};
@@ -224,64 +226,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, C::B.into());
         field_chip.carry_mod(ctx, plus_b)
     }
-
-    pub fn instance(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
-
-    pub fn parametrize(k: usize) -> FlexGateConfigParams {
-        let circuit = SyncStepCircuit::<S, F>::default();
-
-        let mock_k = 17;
-        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
-        // we have to perfrom dry run to determine best circuit config.
-        let mock_params = FlexGateConfigParams {
-            strategy: GateStrategy::Vertical,
-            k: mock_k,
-            num_advice_per_phase: vec![80],
-            num_lookup_advice_per_phase: vec![15],
-            num_fixed: 1,
-        };
-
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&mock_params).unwrap(),
-        );
-        std::env::set_var("LOOKUP_BITS", 16.to_string());
-
-        let _ = MockProver::<F>::run(mock_k as u32, &circuit, vec![]);
-        circuit.builder.borrow().config(k, Some(0));
-        std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
-        let params: FlexGateConfigParams =
-            serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-        println!("params: {:?}", params);
-        params
-    }
-
-    pub fn setup(
-        config: FlexGateConfigParams,
-        out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-        Vec<usize>,
-    ) {
-        let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
-
-        set_var("LOOKUP_BITS", (config.k - 1).to_string());
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&config).unwrap(),
-        );
-
-        let params = gen_srs(config.k as u32);
-
-        let num_instance = circuit.num_instance();
-
-        let pk = gen_pkey(|| "sync_step", &params, out, circuit).unwrap();
-
-        (params, pk, num_instance)
-    }
 }
 
 impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
@@ -423,15 +367,70 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
 }
 
 impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
-    fn num_instance(&self) -> Vec<usize> {
-        self.instance().iter().map(|v| v.len()).collect()
+    fn instances(&self) -> Vec<Vec<F>> {
+        vec![]
     }
 
-    fn instances(&self) -> Vec<Vec<F>> {
-        self.instance()
+    fn num_instance(&self) -> Vec<usize> {
+        self.instances().iter().map(|v| v.len()).collect()
     }
 }
 
+impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
+    fn parametrize(k: usize) -> FlexGateConfigParams {
+        let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
+
+        let mock_k = 17;
+        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
+        // we have to perfrom dry run to determine best circuit config.
+        let mock_params = FlexGateConfigParams {
+            strategy: GateStrategy::Vertical,
+            k: mock_k,
+            num_advice_per_phase: vec![80],
+            num_lookup_advice_per_phase: vec![15],
+            num_fixed: 1,
+        };
+
+        set_var(
+            "FLEX_GATE_CONFIG_PARAMS",
+            serde_json::to_string(&mock_params).unwrap(),
+        );
+        std::env::set_var("LOOKUP_BITS", 16.to_string());
+
+        let _ = MockProver::<bn256::Fr>::run(mock_k as u32, &circuit, vec![]);
+        circuit.builder.borrow().config(k, Some(0));
+        std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
+        let params: FlexGateConfigParams =
+            serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        println!("params: {:?}", params);
+        params
+    }
+
+    fn setup(
+        config: FlexGateConfigParams,
+        out: Option<&Path>,
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        Vec<usize>,
+    ) {
+        let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
+
+        set_var("LOOKUP_BITS", (config.k - 1).to_string());
+        set_var(
+            "FLEX_GATE_CONFIG_PARAMS",
+            serde_json::to_string(&config).unwrap(),
+        );
+
+        let params = gen_srs(config.k as u32);
+
+        let num_instance = circuit.num_instance();
+
+        let pk = gen_pkey(|| "sync_step", &params, out, circuit).unwrap();
+
+        (params, pk, num_instance)
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::{

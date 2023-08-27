@@ -1,7 +1,7 @@
 //! Common utility traits and functions.
 
 mod common;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, path::Path};
 
 pub use common::*;
 
@@ -12,10 +12,11 @@ mod conversion;
 pub(crate) use conversion::*;
 
 mod proof;
+use halo2curves::bn256;
 pub use proof::*;
 
 use halo2_base::{
-    gates::builder::GateThreadBuilder,
+    gates::builder::{GateThreadBuilder, FlexGateConfigParams},
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
@@ -41,8 +42,8 @@ use eth_types::*;
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{
-        Challenge, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase, VirtualCells,
-    },
+        Challenge, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase, VirtualCells, ProvingKey,
+    }, poly::kzg::commitment::ParamsKZG,
 };
 
 /// Helper trait that implements functionality to represent a generic type as
@@ -62,6 +63,19 @@ pub(crate) fn query_expression<F: Field, T>(
         Some(0.expr())
     });
     expr.unwrap()
+}
+
+pub trait AppCircuitExt<F: Field>: CircuitExt<F> {
+    fn parametrize(k: usize) -> FlexGateConfigParams;
+
+    fn setup(
+        config: FlexGateConfigParams,
+        out: Option<&Path>,
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        Vec<usize>,
+    );
 }
 
 /// Randomness used in circuits.
