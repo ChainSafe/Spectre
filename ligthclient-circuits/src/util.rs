@@ -65,7 +65,7 @@ pub(crate) fn query_expression<F: Field, T>(
     expr.unwrap()
 }
 
-pub trait AppCircuitExt<F: Field>: CircuitExt<F> {
+pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
     fn parametrize(k: usize) -> FlexGateConfigParams;
 
     fn setup(
