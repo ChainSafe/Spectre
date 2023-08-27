@@ -22,7 +22,7 @@ use crate::{
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
-    witness::{self, HashInput, HashInputChunk, SyncStateInput},
+    witness::{self, HashInput, HashInputChunk, SyncStateInput, SyncState},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
@@ -73,7 +73,6 @@ pub struct SyncStepCircuitConfig<F: Field> {
 pub struct SyncStepCircuit<S: Spec, F: Field> {
     builder: RefCell<GateThreadBuilder<F>>,
     signature: Vec<u8>,
-    sha256_offset: usize,
     domain: [u8; 32],
     attested_block: BeaconBlockHeader,
     pubkeys: Vec<G1Affine>,
@@ -82,55 +81,7 @@ pub struct SyncStepCircuit<S: Spec, F: Field> {
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
-    fn default() -> Self {
-        let builder: GateThreadBuilder<F> = GateThreadBuilder::new(false);
-
-        // TODO: hard code default data
-        let state_input: SyncStateInput =
-            serde_json::from_slice(&fs::read("./test_data/sync_state.json").unwrap()).unwrap();
-        let state = state_input.into();
-
-        Self::new_from_state(RefCell::from(builder), &state)
-    }
-}
-
 impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState<F>,
-    ) -> Self {
-        let sha256_offset = 0; //state.sha256_inputs.len() * 144;
-        assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
-
-        Self {
-            builder,
-            signature: state.sync_signature.clone(),
-            domain: state.domain,
-            attested_block: state.attested_block.clone(),
-            pubkeys: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| {
-                    G1Affine::from_uncompressed_unchecked(
-                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
-                    )
-                    .unwrap()
-                })
-                .collect_vec(),
-            pariticipation_bits: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| v.is_attested)
-                .collect_vec(),
-            sha256_offset,
-            dry_run: false,
-            _spec: PhantomData,
-        }
-    }
-
     pub fn dry_run(mut self) -> Self {
         self.dry_run = true;
         self
@@ -268,11 +219,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
         let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
         let pairing_chip = PairingChip::new(&fp_chip);
         let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
-        let sha256_chip = Sha256Chip::new(
-            config.sha256_config,
-            &range,
-            None,
-        );
+        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
 
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
@@ -316,7 +263,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 let attested_header = ssz_merkleize_chunks(ctx, &mut region, &hasher, chunks)?;
 
                 let signing_root = hasher
-                    .digest::<64>(
+                    .digest::<128>(
                         HashInput::TwoToOne(
                             attested_header.into(),
                             self.domain.to_vec().into_witness(),
@@ -374,8 +321,39 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
 }
 
 impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
+    fn new_from_state(
+        builder: RefCell<GateThreadBuilder<bn256::Fr>>,
+        state: &witness::SyncState<bn256::Fr>,
+    ) -> Self {
+        Self {
+            builder,
+            signature: state.sync_signature.clone(),
+            domain: state.domain,
+            attested_block: state.attested_block.clone(),
+            pubkeys: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| {
+                    G1Affine::from_uncompressed_unchecked(
+                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                    )
+                    .unwrap()
+                })
+                .collect_vec(),
+            pariticipation_bits: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| v.is_attested)
+                .collect_vec(),
+            dry_run: false,
+            _spec: PhantomData,
+        }
+    }
+
     fn parametrize(k: usize) -> FlexGateConfigParams {
-        let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
+        let circuit = SyncStepCircuit::<S, bn256::Fr>::default().dry_run();
 
         let mock_k = 17;
         // Due to the composite nature of Sync circuit (vanila + halo2-lib)
@@ -383,8 +361,8 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
         let mock_params = FlexGateConfigParams {
             strategy: GateStrategy::Vertical,
             k: mock_k,
-            num_advice_per_phase: vec![80],
-            num_lookup_advice_per_phase: vec![15],
+            num_advice_per_phase: vec![100],
+            num_lookup_advice_per_phase: vec![20],
             num_fixed: 1,
         };
 
@@ -404,13 +382,9 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
     }
 
     fn setup(
-        config: FlexGateConfigParams,
+        config: &FlexGateConfigParams,
         out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-        Vec<usize>,
-    ) {
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>) {
         let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
 
         set_var("LOOKUP_BITS", (config.k - 1).to_string());
@@ -421,13 +395,49 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
 
         let params = gen_srs(config.k as u32);
 
-        let num_instance = circuit.num_instance();
-
         let pk = gen_pkey(|| "sync_step", &params, out, circuit).unwrap();
 
-        (params, pk, num_instance)
+        (params, pk)
     }
 }
+
+impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
+    fn default() -> Self {
+        let builder = RefCell::new(GateThreadBuilder::new(false));
+
+        // TODO: hard code default data
+        let state_input: SyncStateInput =
+            serde_json::from_slice(&fs::read("./test_data/sync_state.json").unwrap()).unwrap();
+        let state: SyncState<F> = state_input.into();
+
+        Self {
+            builder,
+            signature: state.sync_signature.clone(),
+            domain: state.domain,
+            attested_block: state.attested_block.clone(),
+            pubkeys: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| {
+                    G1Affine::from_uncompressed_unchecked(
+                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                    )
+                    .unwrap()
+                })
+                .collect_vec(),
+            pariticipation_bits: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| v.is_attested)
+                .collect_vec(),
+            dry_run: false,
+            _spec: PhantomData,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -495,12 +505,12 @@ mod tests {
 
     #[test]
     fn test_sync_proofgen() {
-        let k = 17;
+        let k = 20;
         let circuit = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);
 
-        let pkey = gen_pkey(|| "sync", &params, None, circuit.clone()).unwrap();
+        let pkey = gen_pkey(|| "sync_step", &params, None, circuit.clone()).unwrap();
 
         let public_inputs = circuit.instances();
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());

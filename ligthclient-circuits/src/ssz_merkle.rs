@@ -46,7 +46,7 @@ where
             .tuples()
             .map(|(left, right)| {
                 hasher
-                    .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
+                    .digest::<128>(HashInput::TwoToOne(left, right), ctx, region)
                     .map(|res| res.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;

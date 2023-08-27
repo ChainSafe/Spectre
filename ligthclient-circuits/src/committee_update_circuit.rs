@@ -207,7 +207,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
+        //ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
+        Ok(pubkeys_hashes.pop().unwrap())
+        // Ok(vec![])
     }
 }
 
@@ -246,13 +248,11 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
-        // let sha256_chip = Sha256Chip::new(
-        //     &config.sha256_config,
-        //     &range,
-        //     config.challenges.sha256_input(),
-        //     None,
-        //     self.sha256_offset,
-        // );
+        let sha256_chip = Sha256Chip::new(
+            config.sha256_config,
+            &range,
+            None,
+        );
 
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
@@ -277,12 +277,12 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
                     .map(|bytes| ctx.assign_witnesses(bytes.iter().map(|&b| F::from(b as u64))))
                     .collect_vec();
 
-                // let root = Self::sync_committee_root_ssz(
-                //     ctx,
-                //     &mut region,
-                //     &sha256_chip,
-                //     compressed_encodings.clone(),
-                // )?;
+                let root = Self::sync_committee_root_ssz(
+                    ctx,
+                    &mut region,
+                    &sha256_chip,
+                    compressed_encodings.clone(),
+                )?;
 
                 let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
                 let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
@@ -318,17 +318,48 @@ impl<S: Spec, F: Field> CircuitExt<F> for CommitteeUpdateCircuit<S, F> {
 }
 
 impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> {
-    fn parametrize(k: usize) -> FlexGateConfigParams {
-        let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default();
+    fn new_from_state(
+        builder: RefCell<GateThreadBuilder<bn256::Fr>>,
+        state: &witness::SyncState<bn256::Fr>,
+    ) -> Self {
+        let pubkeys_y = state
+            .sync_committee
+            .iter()
+            .map(|v| {
+                let g1_affine = G1Affine::from_uncompressed(
+                    &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                )
+                .unwrap();
 
-        let mock_k = 18;
+                g1_affine.y
+            })
+            .collect_vec();
+
+        Self {
+            builder,
+            pubkeys_compressed: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| v.pubkey)
+                .collect_vec(),
+            pubkeys_y,
+            dry_run: false,
+            _spec: PhantomData,
+        }
+    }
+
+    fn parametrize(k: usize) -> FlexGateConfigParams {
+        let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default().dry_run();
+
+        let mock_k = 19;
         // Due to the composite nature of Sync circuit (vanila + halo2-lib)
         // we have to perfrom dry run to determine best circuit config.
         let mock_params = FlexGateConfigParams {
             strategy: GateStrategy::Vertical,
             k: mock_k,
-            num_advice_per_phase: vec![20],
-            num_lookup_advice_per_phase: vec![1],
+            num_advice_per_phase: vec![300],
+            num_lookup_advice_per_phase: vec![60],
             num_fixed: 1,
         };
 
@@ -336,7 +367,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
             "FLEX_GATE_CONFIG_PARAMS",
             serde_json::to_string(&mock_params).unwrap(),
         );
-        std::env::set_var("LOOKUP_BITS", 17.to_string());
+        std::env::set_var("LOOKUP_BITS", (mock_k - 1).to_string());
 
         let _ = MockProver::<bn256::Fr>::run(mock_k as u32, &circuit, vec![]);
         circuit.builder.borrow().config(k, Some(0));
@@ -348,12 +379,11 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
     }
 
     fn setup(
-        config: FlexGateConfigParams,
+        config: &FlexGateConfigParams,
         out: Option<&Path>,
     ) -> (
         ParamsKZG<bn256::Bn256>,
         ProvingKey<bn256::G1Affine>,
-        Vec<usize>,
     ) {
         let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default();
 
@@ -365,11 +395,9 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
 
         let params = gen_srs(config.k as u32);
 
-        let num_instance = circuit.num_instance();
-
         let pk = gen_pkey(|| "committee_update", &params, out, circuit).unwrap();
 
-        (params, pk, num_instance)
+        (params, pk)
     }
 }
 
@@ -453,7 +481,7 @@ mod tests {
 
     #[test]
     fn test_committee_update_proofgen() {
-        let k = 18;
+        let k = 21;
         let circuit = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);

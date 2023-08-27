@@ -210,7 +210,7 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
         let gate = range.gate();
 
         // constants
-        const MAX_INPUT_SIZE: usize = 160;
+        // const MAX_INPUT_SIZE: usize = 192;
         let zero = ctx.load_zero();
         let one = ctx.load_constant(F::one());
 
@@ -242,13 +242,14 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             .chain(dst_prime.clone());
 
         let b_0 = hash_chip
-            .digest::<MAX_INPUT_SIZE>(msg_prime.into(), ctx, region)?
+            .digest::<192>(msg_prime.into(), ctx, region)?
             .output_bytes;
+
 
         b_vals.insert(
             0,
             hash_chip
-                .digest::<MAX_INPUT_SIZE>(
+                .digest::<128>(
                     b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
@@ -263,7 +264,7 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             b_vals.insert(
                 i,
                 hash_chip
-                    .digest::<MAX_INPUT_SIZE>(
+                    .digest::<128>(
                         strxor(b_0, b_vals[i - 1], gate, ctx)
                             .into_iter()
                             .chain(iter::once(ctx.load_constant(F::from(i as u64 + 1))))
@@ -618,6 +619,7 @@ pub struct HashToCurveCache<F: Field> {
 
 #[cfg(test)]
 mod test {
+    use std::env::var;
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
@@ -629,6 +631,7 @@ mod test {
 
     use super::*;
     use eth_types::Mainnet;
+    use halo2_base::gates::builder::FlexGateConfigParams;
     use halo2_base::gates::range::RangeConfig;
     use halo2_base::safe_types::RangeChip;
     use halo2_base::SKIP_FIRST_PASS;
@@ -727,6 +730,11 @@ mod test {
 
                     let extra_assignments = h2c_chip.hash_chip.take_extra_assignments();
 
+                    builder.config(TestCircuit::<S, F>::K, Some(0));
+                    let params: FlexGateConfigParams =
+                        serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+                    println!("params: {:?}", params);
+
                     let _ = builder.assign_all(
                         &config.range.gate,
                         &config.range.lookup_advice,
@@ -745,11 +753,11 @@ mod test {
 
     impl<S: Spec, F: Field> TestCircuit<S, F> {
         const MAX_BYTE_SIZE: usize = 160;
-        const NUM_ADVICE: usize = 25;
+        const NUM_ADVICE: usize = 21;
         const NUM_FIXED: usize = 1;
-        const NUM_LOOKUP_ADVICE: usize = 5;
+        const NUM_LOOKUP_ADVICE: usize = 3;
         const LOOKUP_BITS: usize = 8;
-        const K: usize = 16;
+        const K: usize = 17;
     }
 
     #[test]

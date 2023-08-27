@@ -42,8 +42,9 @@ contract SpectreDeployLocal is Script {
     function run() external {
         vm.startBroadcast();
 
-        address verifierAddress = address(deployContract("sync_step"));
+        // address verifierAddress = address(deployContract("sync_step"));
         // deployContract("committee_update");
+        deployContract("sync_step");
 
         vm.stopBroadcast();
     }
