@@ -115,7 +115,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         self
     }
 
-    /// Takes a list of pubkeys and aggregates them.
     fn decode_pubkeys<'a, I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
         &self,
         ctx: &mut Context<F>,

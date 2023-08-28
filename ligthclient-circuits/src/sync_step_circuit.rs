@@ -534,7 +534,6 @@ mod tests {
             num_instance,
             None,
         );
-        println!("contract size: {}", deployment_code.len());
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
 
         evm_verify(deployment_code, instances, proof);

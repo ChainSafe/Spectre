@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import "forge-std/Script.sol";
 import "forge-std/safeconsole.sol";
+import {Spectre} from "../src/Spectre.sol";
 
 contract SpectreDeployLocal is Script {
     function deployContract(string memory fileName) public returns (address) {
@@ -48,12 +49,9 @@ contract SpectreDeployLocal is Script {
 
         proof = vm.parseBytes(vm.readFile("test/data/sync_step_21.calldata"));
 
-        (bool success,) = syncStepVerifierAddress.call(proof);
+        Spectre spectre = new Spectre(syncStepVerifierAddress);
 
-        if (!success) {
-            revert("Proof verification failed");
-        }
-
+        spectre.postHeader(proof);
 
         vm.stopBroadcast();
     }
