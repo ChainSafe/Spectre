@@ -248,11 +248,7 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
-        let sha256_chip = Sha256Chip::new(
-            config.sha256_config,
-            &range,
-            None,
-        );
+        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
 
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
@@ -381,10 +377,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
     fn setup(
         config: &FlexGateConfigParams,
         out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-    ) {
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>) {
         let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default();
 
         set_var("LOOKUP_BITS", (config.k - 1).to_string());
@@ -403,14 +396,24 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
 
 impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
     fn default() -> Self {
-        let builder: GateThreadBuilder<F> = GateThreadBuilder::new(false);
+        let builder: GateThreadBuilder<F> = GateThreadBuilder::keygen();
 
-        // TODO: hard code default data
-        let state_input: SyncStateInput =
-            serde_json::from_slice(&fs::read("./test_data/sync_state.json").unwrap()).unwrap();
-        let state = state_input.into();
+        let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
+        let dymmy_y = Fq::from((G1::B as f64).sqrt() as u64);
 
-        Self::new_from_state(RefCell::from(builder), &state)
+        let pubkeys_y = iter::repeat(dymmy_y)
+            .take(S::SYNC_COMMITTEE_SIZE)
+            .collect_vec();
+
+        Self {
+            builder: RefCell::from(builder),
+            pubkeys_compressed: iter::repeat(dummy_x_bytes)
+                .take(S::SYNC_COMMITTEE_SIZE)
+                .collect_vec(),
+            pubkeys_y,
+            dry_run: false,
+            _spec: PhantomData,
+        }
     }
 }
 

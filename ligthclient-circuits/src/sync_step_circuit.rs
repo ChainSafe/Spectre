@@ -22,7 +22,7 @@ use crate::{
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
-    witness::{self, HashInput, HashInputChunk, SyncStateInput, SyncState},
+    witness::{self, HashInput, HashInputChunk, SyncState, SyncStateInput},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
@@ -403,35 +403,25 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
 
 impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
     fn default() -> Self {
-        let builder = RefCell::new(GateThreadBuilder::new(false));
+        let builder = RefCell::new(GateThreadBuilder::keygen());
 
-        // TODO: hard code default data
-        let state_input: SyncStateInput =
-            serde_json::from_slice(&fs::read("./test_data/sync_state.json").unwrap()).unwrap();
-        let state: SyncState<F> = state_input.into();
+        let dummy_pk_bytes = hex::decode("f5f151e52f1e8a5b09e4c6f0b25fb13463d442709f21a84f98dcb76a7953aa5225c12e4dd524a95f9be8dfdfa0621c0252adea177adcce725f8b47d0b27370572ad6c5638122cab820103c9bcbb3239939de60b4814c117631d82963a7d7900a").unwrap();
+        let dummy_pk_point =
+            G1Affine::from_uncompressed_unchecked(&dummy_pk_bytes.as_slice().try_into().unwrap())
+                .unwrap();
 
         Self {
             builder,
-            signature: state.sync_signature.clone(),
-            domain: state.domain,
-            attested_block: state.attested_block.clone(),
-            pubkeys: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| {
-                    G1Affine::from_uncompressed_unchecked(
-                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
-                    )
-                    .unwrap()
-                })
+            signature: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
+            domain: [
+                7, 0, 0, 0, 48, 83, 175, 74, 95, 250, 246, 166, 104, 40, 151, 228, 42, 212, 194, 8,
+                48, 56, 232, 147, 61, 9, 41, 204, 88, 234, 56, 134,
+            ],
+            attested_block: BeaconBlockHeader::default(),
+            pubkeys: iter::repeat(dummy_pk_point)
+                .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
-            pariticipation_bits: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| v.is_attested)
-                .collect_vec(),
+            pariticipation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
             dry_run: false,
             _spec: PhantomData,
         }
