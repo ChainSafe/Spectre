@@ -1,7 +1,7 @@
 //! Common utility traits and functions.
 
 mod common;
-use std::{cell::RefCell, rc::Rc, path::Path};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub use common::*;
 
@@ -16,7 +16,7 @@ use halo2curves::bn256;
 pub use proof::*;
 
 use halo2_base::{
-    gates::builder::{GateThreadBuilder, FlexGateConfigParams},
+    gates::builder::{FlexGateConfigParams, GateThreadBuilder},
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
@@ -42,8 +42,10 @@ use eth_types::*;
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{
-        Challenge, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase, VirtualCells, ProvingKey,
-    }, poly::kzg::commitment::ParamsKZG,
+        Challenge, ConstraintSystem, Error, Expression, FirstPhase, ProvingKey, SecondPhase,
+        VirtualCells,
+    },
+    poly::kzg::commitment::ParamsKZG,
 };
 
 /// Helper trait that implements functionality to represent a generic type as
@@ -76,10 +78,7 @@ pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
     fn setup(
         config: &FlexGateConfigParams,
         out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-    );
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>);
 }
 
 /// Randomness used in circuits.

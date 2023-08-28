@@ -14,8 +14,8 @@ pub mod util;
 pub mod witness;
 
 pub mod committee_update_circuit;
-pub mod sync_step_circuit;
 mod sha256_circuit;
+pub mod sync_step_circuit;
 
 mod poseidon;
 mod ssz_merkle;

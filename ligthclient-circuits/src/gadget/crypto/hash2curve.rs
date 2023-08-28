@@ -245,7 +245,6 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             .digest::<192>(msg_prime.into(), ctx, region)?
             .output_bytes;
 
-
         b_vals.insert(
             0,
             hash_chip
@@ -623,8 +622,8 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::gadget::crypto::Sha256Chip;
     use crate::gadget::crypto::sha256::SpreadConfig;
+    use crate::gadget::crypto::Sha256Chip;
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::Sha256Table;
     use crate::util::{print_fq2_dev, Challenges, IntoWitness};

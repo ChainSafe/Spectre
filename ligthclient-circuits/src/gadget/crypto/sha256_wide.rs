@@ -24,7 +24,7 @@ use halo2_proofs::{
     plonk::{Assigned, Error},
 };
 
-use super::{HashChip, AssignedHashResult};
+use super::{AssignedHashResult, HashChip};
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 
@@ -261,9 +261,7 @@ mod test {
     use std::{cell::RefCell, marker::PhantomData};
 
     use crate::table::Sha256Table;
-    use crate::util::{
-        full_prover, full_verifier, gen_pkey, Challenges, IntoWitness,
-    };
+    use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
     use super::*;
     use ark_std::{end_timer, start_timer};

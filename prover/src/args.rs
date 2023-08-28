@@ -19,7 +19,11 @@ pub struct SyncStepArgs {
     #[clap(long, short, default_value = "proof")]
     pub out: Out,
 
-    #[clap(long, short, default_value = "./ligthclient-circuits/config/sync_step.json")]
+    #[clap(
+        long,
+        short,
+        default_value = "./ligthclient-circuits/config/sync_step.json"
+    )]
     pub config_path: PathBuf,
 
     #[clap(long, short, default_value = "./build")]
@@ -27,18 +31,21 @@ pub struct SyncStepArgs {
 
     #[clap(long, short, default_value = "./sync_state.json")]
     pub input_path: PathBuf,
-    
-    #[clap(index = 1, help = "path to output", default_value = ".")]
-    pub path_out: PathBuf, 
-}
 
+    #[clap(index = 1, help = "path to output", default_value = ".")]
+    pub path_out: PathBuf,
+}
 
 #[derive(Clone, clap::Args)]
 pub struct CommitteeUpdateArgs {
     #[clap(long, short, default_value = "proof")]
     pub out: Out,
 
-    #[clap(long, short, default_value = "./ligthclient-circuits/config/committee_update.json")]
+    #[clap(
+        long,
+        short,
+        default_value = "./ligthclient-circuits/config/committee_update.json"
+    )]
     pub config_path: PathBuf,
 
     #[clap(long, short, default_value = "./build")]
@@ -46,11 +53,10 @@ pub struct CommitteeUpdateArgs {
 
     #[clap(long, short, default_value = "./sync_state.json")]
     pub input_path: PathBuf,
-    
-    #[clap(index = 1, help = "path to output", default_value = ".")]
-    pub path_out: PathBuf, 
-}
 
+    #[clap(index = 1, help = "path to output", default_value = ".")]
+    pub path_out: PathBuf,
+}
 
 #[derive(Clone, Debug, PartialEq, EnumString)]
 pub enum Out {

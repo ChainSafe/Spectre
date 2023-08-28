@@ -465,7 +465,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
     use snark_verifier_sdk::{
-        evm::{evm_verify, gen_evm_proof_shplonk, encode_calldata},
+        evm::{encode_calldata, evm_verify, gen_evm_proof_shplonk},
         halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
         CircuitExt, SHPLONK,
     };
