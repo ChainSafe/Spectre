@@ -12,8 +12,8 @@ use std::{
 
 use crate::{
     gadget::crypto::{
-        CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
-        HashToCurveCache, HashToCurveChip, Sha256Chip, SpreadConfig,
+        Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
+        HashToCurveChip, Sha256Chip, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
@@ -248,7 +248,6 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     use ff::Field;
                     fp12_chip.load_constant(ctx, Fq12::one())
                 };
-                let hasher = CachedHashChip::new(&sha256_chip);
                 let mut h2c_cache = HashToCurveCache::<F>::default();
 
                 // Verify attestted header
@@ -260,9 +259,9 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     self.attested_block.body_root.as_ref().into_witness(),
                 ];
 
-                let attested_header = ssz_merkleize_chunks(ctx, &mut region, &hasher, chunks)?;
+                let attested_header = ssz_merkleize_chunks(ctx, &mut region, &sha256_chip, chunks)?;
 
-                let signing_root = hasher
+                let signing_root = sha256_chip
                     .digest::<128>(
                         HashInput::TwoToOne(
                             attested_header.into(),
@@ -377,7 +376,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
         std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
         let params: FlexGateConfigParams =
             serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-        println!("params: {:?}", params);
+        println!("config used: {:?}", params);
         params
     }
 
@@ -425,6 +424,36 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             dry_run: false,
             _spec: PhantomData,
         }
+        // TODO: hard code default data
+        // let state_input: SyncStateInput =
+        //     serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
+        // let state: SyncState<F> = state_input.into();
+
+        // Self {
+        //     builder,
+        //     signature: state.sync_signature.clone(),
+        //     domain: state.domain,
+        //     attested_block: state.attested_block.clone(),
+        //     pubkeys: state
+        //         .sync_committee
+        //         .iter()
+        //         .cloned()
+        //         .map(|v| {
+        //             G1Affine::from_uncompressed_unchecked(
+        //                 &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+        //             )
+        //             .unwrap()
+        //         })
+        //         .collect_vec(),
+        //     pariticipation_bits: state
+        //         .sync_committee
+        //         .iter()
+        //         .cloned()
+        //         .map(|v| v.is_attested)
+        //         .collect_vec(),
+        //     dry_run: false,
+        //     _spec: PhantomData,
+        // }
     }
 }
 
@@ -466,26 +495,38 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
     use snark_verifier_sdk::{
+        evm::{evm_verify, gen_evm_proof_shplonk},
         halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
         CircuitExt, SHPLONK,
     };
 
-    fn get_circuit_with_data(k: usize) -> SyncStepCircuit<Test, Fr> {
+    fn get_circuit_with_data(k: usize) -> (SyncStepCircuit<Test, Fr>, FlexGateConfigParams) {
         let builder = GateThreadBuilder::new(false);
         let state_input: SyncStateInput =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state = state_input.into();
 
-        let _ = SyncStepCircuit::<Test, Fr>::parametrize(k);
+        let config = if let Ok(f) = fs::read("./config/sync_step.json") {
+            serde_json::from_slice(&f).expect("read config file")
+        } else {
+            SyncStepCircuit::<Test, Fr>::parametrize(k)
+        };
+        
+        set_var(
+            "FLEX_GATE_CONFIG_PARAMS",
+            serde_json::to_string(&config).unwrap(),
+        );
+        set_var("LOOKUP_BITS", (config.k - 1).to_string());
+        println!("config used: {:?}", config);
 
         let builder = RefCell::from(builder);
-        SyncStepCircuit::new_from_state(builder, &state)
+        (SyncStepCircuit::new_from_state(builder, &state), config)
     }
 
     #[test]
     fn test_sync_circuit() {
         let k = 17;
-        let circuit = get_circuit_with_data(k);
+        let (circuit, _) = get_circuit_with_data(k);
 
         let timer = start_timer!(|| "sync circuit mock prover");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
@@ -496,7 +537,7 @@ mod tests {
     #[test]
     fn test_sync_proofgen() {
         let k = 20;
-        let circuit = get_circuit_with_data(k);
+        let (circuit, _) = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);
 
@@ -506,5 +547,25 @@ mod tests {
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
 
         assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
+    }
+
+    #[test]
+    fn test_sync_evm_verify() {
+        let k = 20;
+        let (circuit, config) = get_circuit_with_data(k);
+
+        let (params, pk) = SyncStepCircuit::<Test, Fr>::setup(&config, None);
+
+        let instances = circuit.instances();
+        let num_instance = circuit.num_instance();
+        let deployment_code = gen_evm_verifier_shplonk::<SyncStepCircuit<Test, Fr>>(
+            &params,
+            pk.get_vk(),
+            num_instance,
+            None,
+        );
+        let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
+
+        evm_verify(deployment_code, instances, proof);
     }
 }

@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::{cell::RefCell, char::MAX};
 
 use crate::gadget::crypto::sha256::compression::{sha256_compression, INIT_STATE};
-use crate::gadget::rlc;
 use crate::util::AssignedValueCell;
 use crate::{
     sha256_circuit::{util::Sha256AssignedRows, Sha256CircuitConfig},
@@ -75,7 +74,6 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         ctx: &mut Context<F>,
         region: &mut Region<'_, F>,
     ) -> Result<AssignedHashResult<F>, Error> {
-        let binary_input: HashInput<u8> = input.clone().into();
         let assigned_input = input.into_assigned(ctx);
 
         // let mut extra_assignment = self.extra_assignments.borrow_mut();
