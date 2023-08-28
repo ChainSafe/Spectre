@@ -40,6 +40,10 @@ poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "7cebe716bb05
 # halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
 # poseidon = { path = "../halo2-lib/hashes/poseidon", default-features = false }
 
+[patch."https://github.com/axiom-crypto/snark-verifier.git"]
+snark-verifier = { path = "../examples/snark-verifier/snark-verifier", default-features = false }
+snark-verifier-sdk = { path = "../examples/snark-verifier/snark-verifier-sdk", default-features = false }
+
 
 # [patch."https://github.com/timoftime/halo2curves"]
 # halo2curves = { path = "../halo2curves" }

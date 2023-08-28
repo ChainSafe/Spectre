@@ -12,7 +12,7 @@ use lightclient_circuits::{
     FlexGateConfigParams,
 };
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::GateThreadBuilder;
-use snark_verifier_sdk::evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk};
+use snark_verifier_sdk::evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk, write_calldata};
 
 mod args;
 
@@ -23,12 +23,15 @@ fn main() {
 async fn app(options: Options) -> eyre::Result<()> {
     match options.proof {
         Proof::CommitteeUpdate(args) => match args.out {
-            Out::Proof => gen_evm_proof::<CommitteeUpdateCircuit<Test, Fr>>(
-                &args.config_path,
-                &args.build_dir,
-                &args.input_path,
-                &args.path_out,
-            ),
+            Out::Proof => {
+                gen_evm_proof::<CommitteeUpdateCircuit<Test, Fr>>(
+                    &args.config_path,
+                    &args.build_dir,
+                    &args.input_path,
+                    Some(&args.path_out),
+                    None,
+                );
+            }
             Out::Artifacts => setup_circuit::<CommitteeUpdateCircuit<Test, Fr>>(
                 &args.config_path,
                 &args.build_dir,
@@ -38,20 +41,35 @@ async fn app(options: Options) -> eyre::Result<()> {
                 &args.build_dir.join("committee_update.vkey"),
                 &args.path_out,
             ),
-        },
-        Proof::SyncStep(args) => match args.out {
-            Out::Proof => gen_evm_proof::<SyncStepCircuit<Test, Fr>>(
+            Out::Calldata => gen_evm_calldata::<CommitteeUpdateCircuit<Test, Fr>>(
                 &args.config_path,
                 &args.build_dir,
                 &args.input_path,
                 &args.path_out,
             ),
+        },
+        Proof::SyncStep(args) => match args.out {
+            Out::Proof => {
+                gen_evm_proof::<SyncStepCircuit<Test, Fr>>(
+                    &args.config_path,
+                    &args.build_dir,
+                    &args.input_path,
+                    Some(&args.path_out),
+                    None,
+                );
+            }
             Out::Artifacts => {
                 setup_circuit::<SyncStepCircuit<Test, Fr>>(&args.config_path, &args.build_dir)
             }
             Out::EvmVerifier => gen_evm_verifier::<SyncStepCircuit<Test, Fr>>(
                 &args.config_path,
                 &args.build_dir.join("sync_step.vkey"),
+                &args.path_out,
+            ),
+            Out::Calldata => gen_evm_calldata::<SyncStepCircuit<Test, Fr>>(
+                &args.config_path,
+                &args.build_dir,
+                &args.input_path,
                 &args.path_out,
             ),
         },
@@ -87,8 +105,9 @@ fn gen_evm_proof<C: AppCircuitExt<Fr>>(
     config_path: &Path,
     build_dir: &Path,
     path_in: &Path,
-    path_out: &Path,
-) {
+    path_out: Option<&Path>,
+    instances: Option<&mut Vec<Vec<Fr>>>,
+) -> Vec<u8> {
     let config: FlexGateConfigParams =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
 
@@ -101,13 +120,33 @@ fn gen_evm_proof<C: AppCircuitExt<Fr>>(
 
     let circuit = C::new_from_state(builder, &state);
 
-    let instances = circuit.instances();
+    let public_inputs = circuit.instances();
 
     set_config(&config);
 
-    let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances);
+    let proof = gen_evm_proof_shplonk(&params, &pk, circuit, public_inputs.clone());
 
-    fs::write(path_out, proof).expect("Failed to write proof to file");
+    if let Some(path) = path_out {
+        fs::write(path, proof.clone()).expect("Failed to write proof to file");
+    }
+
+    if let Some(instances) = instances {
+        *instances = public_inputs;
+    }
+
+    proof
+}
+
+fn gen_evm_calldata<C: AppCircuitExt<Fr>>(
+    config_path: &Path,
+    build_dir: &Path,
+    path_in: &Path,
+    path_out: &Path,
+) {
+    let mut instances = vec![];
+    let proof = gen_evm_proof::<C>(config_path, build_dir, path_in, None, Some(&mut instances));
+
+    write_calldata(&instances, &proof, path_out).unwrap();
 }
 
 fn set_config(config: &FlexGateConfigParams) {

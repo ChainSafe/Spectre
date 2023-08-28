@@ -38,13 +38,22 @@ contract SpectreDeployLocal is Script {
         return deployedAddress;
     }
 
+    bytes proof;
+    address syncStepVerifierAddress;
 
     function run() external {
         vm.startBroadcast();
 
-        // address verifierAddress = address(deployContract("sync_step"));
-        // deployContract("committee_update");
-        deployContract("sync_step");
+        syncStepVerifierAddress = address(deployContract("sync_step_k21"));
+
+        proof = vm.parseBytes(vm.readFile("test/data/sync_step_21.calldata"));
+
+        (bool success,) = syncStepVerifierAddress.call(proof);
+
+        if (!success) {
+            revert("Proof verification failed");
+        }
+
 
         vm.stopBroadcast();
     }

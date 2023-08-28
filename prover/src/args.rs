@@ -60,4 +60,6 @@ pub enum Out {
     Artifacts,
     #[strum(serialize = "evm-verifier")]
     EvmVerifier,
+    #[strum(serialize = "calldata")]
+    Calldata,
 }

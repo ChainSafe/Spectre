@@ -424,36 +424,6 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             dry_run: false,
             _spec: PhantomData,
         }
-        // TODO: hard code default data
-        // let state_input: SyncStateInput =
-        //     serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
-        // let state: SyncState<F> = state_input.into();
-
-        // Self {
-        //     builder,
-        //     signature: state.sync_signature.clone(),
-        //     domain: state.domain,
-        //     attested_block: state.attested_block.clone(),
-        //     pubkeys: state
-        //         .sync_committee
-        //         .iter()
-        //         .cloned()
-        //         .map(|v| {
-        //             G1Affine::from_uncompressed_unchecked(
-        //                 &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
-        //             )
-        //             .unwrap()
-        //         })
-        //         .collect_vec(),
-        //     pariticipation_bits: state
-        //         .sync_committee
-        //         .iter()
-        //         .cloned()
-        //         .map(|v| v.is_attested)
-        //         .collect_vec(),
-        //     dry_run: false,
-        //     _spec: PhantomData,
-        // }
     }
 }
 
@@ -495,7 +465,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
     use snark_verifier_sdk::{
-        evm::{evm_verify, gen_evm_proof_shplonk},
+        evm::{evm_verify, gen_evm_proof_shplonk, encode_calldata},
         halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
         CircuitExt, SHPLONK,
     };
@@ -506,12 +476,12 @@ mod tests {
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state = state_input.into();
 
-        let config = if let Ok(f) = fs::read("./config/sync_step.json") {
+        let config = if let Ok(f) = fs::read("./config/sync_step_k21.json") {
             serde_json::from_slice(&f).expect("read config file")
         } else {
             SyncStepCircuit::<Test, Fr>::parametrize(k)
         };
-        
+
         set_var(
             "FLEX_GATE_CONFIG_PARAMS",
             serde_json::to_string(&config).unwrap(),
@@ -551,7 +521,7 @@ mod tests {
 
     #[test]
     fn test_sync_evm_verify() {
-        let k = 20;
+        let k = 21;
         let (circuit, config) = get_circuit_with_data(k);
 
         let (params, pk) = SyncStepCircuit::<Test, Fr>::setup(&config, None);
@@ -564,6 +534,7 @@ mod tests {
             num_instance,
             None,
         );
+        println!("contract size: {}", deployment_code.len());
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
 
         evm_verify(deployment_code, instances, proof);
