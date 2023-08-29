@@ -1,29 +1,40 @@
-use std::{cell::RefCell, collections::HashMap, iter, marker::PhantomData, ops::Neg, rc::Rc, vec};
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    env::{set_var, var},
+    fs, iter,
+    marker::PhantomData,
+    ops::Neg,
+    path::Path,
+    rc::Rc,
+    vec,
+};
 
 use crate::{
     gadget::crypto::{
-        CachedHashChip, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip,
-        HashToCurveCache, HashToCurveChip, Sha256Chip,
+        Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
+        HashToCurveChip, Sha256Chip, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::ssz_merkleize_chunks,
+    table::Sha256Table,
     util::{
-        decode_into_field, AssignedValueCell, Challenges, IntoWitness, SubCircuit,
-        SubCircuitBuilder, SubCircuitConfig,
+        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
-    witness::{self, HashInput, HashInputChunk},
+    witness::{self, HashInput, HashInputChunk, SyncStateInput},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
-        builder::{GateThreadBuilder, RangeCircuitBuilder},
+        builder::{FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder},
+        flex_gate::GateStrategy,
         range::RangeConfig,
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    utils::CurveAffineExt,
+    utils::{fs::gen_srs, CurveAffineExt},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -33,59 +44,41 @@ use halo2_ecc::{
     fields::{fp12, vector::FieldVector, FieldChip, FieldExtConstructor},
 };
 use halo2_proofs::{
-    circuit::{Layouter, Region, Value},
-    plonk::{ConstraintSystem, Error},
+    circuit::{Layouter, Region, SimpleFloorPlanner, Value},
+    dev::MockProver,
+    plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
+    poly::kzg::commitment::ParamsKZG,
 };
-use halo2curves::bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2};
+use halo2curves::{
+    bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
+    bn256,
+};
 use itertools::Itertools;
 use lazy_static::__Deref;
 use num_bigint::BigUint;
 use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
+use snark_verifier_sdk::CircuitExt;
 use ssz_rs::Merkleized;
 
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuitConfig<F: Field> {
     range: RangeConfig<F>,
-    sha256_config: Sha256CircuitConfig<F>,
-}
-
-pub struct CommitteeUpdateCircuitArgs<F: Field> {
-    pub range: RangeConfig<F>,
-    pub sha256_config: Sha256CircuitConfig<F>,
-}
-
-impl<F: Field> SubCircuitConfig<F> for CommitteeUpdateCircuitConfig<F> {
-    type ConfigArgs = CommitteeUpdateCircuitArgs<F>;
-
-    fn new<S: Spec>(_meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
-        let range = args.range;
-        let sha256_config = args.sha256_config;
-        Self {
-            range,
-            sha256_config,
-        }
-    }
-
-    fn annotate_columns_in_region(&self, _region: &mut Region<'_, F>) {}
+    sha256_config: RefCell<SpreadConfig<F>>,
+    challenges: Challenges<Value<F>>,
 }
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug)]
-pub struct CommitteeUpdateCircuitBuilder<S: Spec, F: Field> {
+pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     builder: RefCell<GateThreadBuilder<F>>,
-    sha256_offset: usize,
     pubkeys_compressed: Vec<Vec<u8>>,
     pubkeys_y: Vec<Fq>,
     dry_run: bool,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S, F> {
-    type Config = CommitteeUpdateCircuitConfig<F>;
-    type SynthesisArgs = Vec<AssignedValueCell<F>>;
-    type Output = ();
-
+impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<F>>,
         state: &witness::SyncState<F>,
@@ -103,9 +96,6 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S
             })
             .collect_vec();
 
-        let sha256_offset = 0; //state.sha256_inputs.len() * 144;
-        assert_eq!(sha256_offset % (NUM_ROUNDS + 8), 0, "invalid sha256 offset");
-
         Self {
             builder,
             pubkeys_compressed: state
@@ -115,113 +105,16 @@ impl<S: Spec, F: Field> SubCircuitBuilder<F> for CommitteeUpdateCircuitBuilder<S
                 .map(|v| v.pubkey)
                 .collect_vec(),
             pubkeys_y,
-            sha256_offset, //state.sha256_inputs.len() * 144,
             dry_run: false,
             _spec: PhantomData,
         }
     }
 
-    /// Assumptions:
-    /// - partial attestations are aggregated into full attestations
-    /// - number of attestations is less than MAX_COMMITTEES_PER_SLOT * SLOTS_PER_EPOCH
-    /// - all attestation have same source and target epoch
-    fn synthesize_sub(
-        &self,
-        config: &Self::Config,
-        challenges: &Challenges<Value<F>>,
-        layouter: &mut impl Layouter<F>,
-        attested_header_root: Self::SynthesisArgs,
-    ) -> Result<(), Error> {
-        let mut first_pass = halo2_base::SKIP_FIRST_PASS;
-
-        let range = RangeChip::default(config.range.lookup_bits());
-        let fp_chip = FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
-        let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
-        let g1_chip = EccChip::new(fp2_chip.fp_chip());
-
-        let sha256_chip = Sha256Chip::new(
-            &config.sha256_config,
-            &range,
-            challenges.sha256_input(),
-            None,
-            self.sha256_offset,
-        );
-
-        // let g2_chip = EccChip::new(&fp2_chip);
-        // let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
-        // let pairing_chip = PairingChip::new(&fp_chip);
-        // let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
-        // let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
-
-        let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
-        let mut builder = if self.dry_run {
-            self.builder.borrow_mut()
-        } else {
-            builder_clone.borrow_mut()
-        };
-
-        layouter.assign_region(
-            || "AggregationCircuitBuilder generated circuit",
-            |mut region| {
-                config.annotate_columns_in_region(&mut region);
-                if first_pass {
-                    first_pass = false;
-                    return Ok(());
-                }
-
-                let ctx = builder.main(0);
-
-                let compressed_encodings = self
-                    .pubkeys_compressed
-                    .iter()
-                    .map(|bytes| ctx.assign_witnesses(bytes.iter().map(|&b| F::from(b as u64))))
-                    .collect_vec();
-
-                let root = Self::sync_committee_root_ssz(
-                    ctx,
-                    &mut region,
-                    &sha256_chip,
-                    compressed_encodings.clone(),
-                )?;
-
-                let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
-                let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
-
-                let extra_assignments = sha256_chip.take_extra_assignments();
-
-                if self.dry_run {
-                    return Ok(());
-                }
-
-                let _ = builder.assign_all(
-                    &config.range.gate,
-                    &config.range.lookup_advice,
-                    &config.range.q_lookup,
-                    &mut region,
-                    extra_assignments,
-                );
-
-                Ok(())
-            },
-        )
-    }
-
-    fn unusable_rows() -> usize {
-        todo!()
-    }
-
-    fn min_num_rows_state(_block: &witness::SyncState<F>) -> (usize, usize) {
-        todo!()
-    }
-}
-
-impl<S: Spec, F: Field> CommitteeUpdateCircuitBuilder<S, F> {
     pub fn dry_run(mut self) -> Self {
         self.dry_run = true;
         self
     }
 
-    /// Takes a list of pubkeys and aggregates them.
     fn decode_pubkeys<'a, I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
         &self,
         ctx: &mut Context<F>,
@@ -313,7 +206,213 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuitBuilder<S, F> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
+        //ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
+        Ok(pubkeys_hashes.pop().unwrap())
+        // Ok(vec![])
+    }
+}
+
+impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
+    type Config = CommitteeUpdateCircuitConfig<F>;
+    type FloorPlanner = SimpleFloorPlanner;
+
+    fn without_witnesses(&self) -> Self {
+        unimplemented!()
+    }
+
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+        let range = RangeCircuitBuilder::configure(meta);
+        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
+        CommitteeUpdateCircuitConfig {
+            range,
+            sha256_config: RefCell::new(sha256_config),
+            challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
+        }
+    }
+
+    fn synthesize(
+        &self,
+        mut config: Self::Config,
+        mut layouter: impl Layouter<F>,
+    ) -> Result<(), Error> {
+        config
+            .range
+            .load_lookup_table(&mut layouter)
+            .expect("load range lookup table");
+
+        let mut first_pass = halo2_base::SKIP_FIRST_PASS;
+
+        let range = RangeChip::default(config.range.lookup_bits());
+        let fp_chip = FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
+        let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
+        let g1_chip = EccChip::new(fp2_chip.fp_chip());
+
+        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
+
+        let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
+        let mut builder = if self.dry_run {
+            self.builder.borrow_mut()
+        } else {
+            builder_clone.borrow_mut()
+        };
+
+        layouter.assign_region(
+            || "AggregationCircuitBuilder generated circuit",
+            |mut region| {
+                if first_pass {
+                    first_pass = false;
+                    return Ok(());
+                }
+
+                let ctx = builder.main(0);
+
+                let compressed_encodings = self
+                    .pubkeys_compressed
+                    .iter()
+                    .map(|bytes| ctx.assign_witnesses(bytes.iter().map(|&b| F::from(b as u64))))
+                    .collect_vec();
+
+                let root = Self::sync_committee_root_ssz(
+                    ctx,
+                    &mut region,
+                    &sha256_chip,
+                    compressed_encodings.clone(),
+                )?;
+
+                let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
+                let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
+
+                let extra_assignments = Default::default(); //sha256_chip.take_extra_assignments();
+
+                if self.dry_run {
+                    return Ok(());
+                }
+
+                let _ = builder.assign_all(
+                    &config.range.gate,
+                    &config.range.lookup_advice,
+                    &config.range.q_lookup,
+                    &mut region,
+                    extra_assignments,
+                );
+
+                Ok(())
+            },
+        )
+    }
+}
+
+impl<S: Spec, F: Field> CircuitExt<F> for CommitteeUpdateCircuit<S, F> {
+    fn num_instance(&self) -> Vec<usize> {
+        self.instances().iter().map(|v| v.len()).collect()
+    }
+
+    fn instances(&self) -> Vec<Vec<F>> {
+        vec![]
+    }
+}
+
+impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> {
+    fn new_from_state(
+        builder: RefCell<GateThreadBuilder<bn256::Fr>>,
+        state: &witness::SyncState<bn256::Fr>,
+    ) -> Self {
+        let pubkeys_y = state
+            .sync_committee
+            .iter()
+            .map(|v| {
+                let g1_affine = G1Affine::from_uncompressed(
+                    &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
+                )
+                .unwrap();
+
+                g1_affine.y
+            })
+            .collect_vec();
+
+        Self {
+            builder,
+            pubkeys_compressed: state
+                .sync_committee
+                .iter()
+                .cloned()
+                .map(|v| v.pubkey)
+                .collect_vec(),
+            pubkeys_y,
+            dry_run: false,
+            _spec: PhantomData,
+        }
+    }
+
+    fn parametrize(k: usize) -> FlexGateConfigParams {
+        let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default().dry_run();
+
+        let mock_k = 19;
+        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
+        // we have to perfrom dry run to determine best circuit config.
+        let mock_params = FlexGateConfigParams {
+            strategy: GateStrategy::Vertical,
+            k: mock_k,
+            num_advice_per_phase: vec![300],
+            num_lookup_advice_per_phase: vec![60],
+            num_fixed: 1,
+        };
+
+        set_var(
+            "FLEX_GATE_CONFIG_PARAMS",
+            serde_json::to_string(&mock_params).unwrap(),
+        );
+        std::env::set_var("LOOKUP_BITS", (mock_k - 1).to_string());
+
+        let _ = MockProver::<bn256::Fr>::run(mock_k as u32, &circuit, vec![]);
+        circuit.builder.borrow().config(k, Some(0));
+        std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
+        let params: FlexGateConfigParams =
+            serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        println!("params: {:?}", params);
+        params
+    }
+
+    fn setup(
+        config: &FlexGateConfigParams,
+        out: Option<&Path>,
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>) {
+        let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default();
+
+        set_var("LOOKUP_BITS", (config.k - 1).to_string());
+        set_var(
+            "FLEX_GATE_CONFIG_PARAMS",
+            serde_json::to_string(&config).unwrap(),
+        );
+
+        let params = gen_srs(config.k as u32);
+
+        let pk = gen_pkey(|| "committee_update", &params, out, circuit).unwrap();
+
+        (params, pk)
+    }
+}
+
+impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
+    fn default() -> Self {
+        let builder: GateThreadBuilder<F> = GateThreadBuilder::keygen();
+
+        let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
+        let dymmy_y = Fq::from((G1::B as f64).sqrt() as u64);
+
+        let pubkeys_y = iter::repeat(dymmy_y)
+            .take(S::SYNC_COMMITTEE_SIZE)
+            .collect_vec();
+
+        Self {
+            builder: RefCell::from(builder),
+            pubkeys_compressed: iter::repeat(dummy_x_bytes)
+                .take(S::SYNC_COMMITTEE_SIZE)
+                .collect_vec(),
+            pubkeys_y,
+            dry_run: false,
+            _spec: PhantomData,
+        }
     }
 }
 
@@ -359,115 +458,24 @@ mod tests {
         CircuitExt, SHPLONK,
     };
 
-    #[derive(Clone, Debug)]
-    struct TestCircuit<S: Spec, F: Field> {
-        inner: CommitteeUpdateCircuitBuilder<S, F>,
-    }
-
-    impl<S: Spec, F: Field> Circuit<F> for TestCircuit<S, F> {
-        type Config = (CommitteeUpdateCircuitConfig<F>, Challenges<Value<F>>);
-        type FloorPlanner = SimpleFloorPlanner;
-
-        fn without_witnesses(&self) -> Self {
-            unimplemented!()
-        }
-
-        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let range = RangeCircuitBuilder::configure(meta);
-            let hash_table = Sha256Table::construct(meta);
-            let sha256_config = Sha256CircuitConfig::new::<Test>(meta, hash_table);
-            let config = CommitteeUpdateCircuitConfig::new::<Test>(
-                meta,
-                CommitteeUpdateCircuitArgs {
-                    range,
-                    sha256_config,
-                },
-            );
-
-            (
-                config,
-                Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
-            )
-        }
-
-        fn synthesize(
-            &self,
-            mut config: Self::Config,
-            mut layouter: impl Layouter<F>,
-        ) -> Result<(), Error> {
-            config
-                .0
-                .range
-                .load_lookup_table(&mut layouter)
-                .expect("load range lookup table");
-            self.inner
-                .synthesize_sub(&config.0, &config.1, &mut layouter, vec![])?;
-            Ok(())
-        }
-    }
-
-    impl<S: Spec, F: Field> CircuitExt<F> for TestCircuit<S, F> {
-        fn num_instance(&self) -> Vec<usize> {
-            self.inner.instance().iter().map(|v| v.len()).collect()
-        }
-
-        fn instances(&self) -> Vec<Vec<F>> {
-            self.inner.instance()
-        }
-    }
-
-    fn get_circuit_with_data(k: usize) -> TestCircuit<Test, Fr> {
+    fn get_circuit_with_data(k: usize) -> CommitteeUpdateCircuit<Test, Fr> {
         let builder = GateThreadBuilder::new(false);
         let state_input: SyncStateInput =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
         let state = state_input.into();
 
-        let mock_k = 18;
-        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
-        // we have to perfrom dry run to determine best circuit config.
-        {
-            let mock_params = FlexGateConfigParams {
-                strategy: GateStrategy::Vertical,
-                k: mock_k,
-                num_advice_per_phase: vec![80],
-                num_lookup_advice_per_phase: vec![15],
-                num_fixed: 1,
-            };
-
-            set_var(
-                "FLEX_GATE_CONFIG_PARAMS",
-                serde_json::to_string(&mock_params).unwrap(),
-            );
-            std::env::set_var("LOOKUP_BITS", 16.to_string());
-
-            let circuit = TestCircuit::<Test, Fr> {
-                inner: CommitteeUpdateCircuitBuilder::new_from_state(
-                    RefCell::from(builder.clone()),
-                    &state,
-                )
-                .dry_run(),
-            };
-
-            let _ = MockProver::<Fr>::run(mock_k as u32, &circuit, vec![]);
-            circuit.inner.builder.borrow().config(k, Some(0));
-            std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
-            let pp: FlexGateConfigParams =
-                serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-            println!("params: {:?}", pp);
-        }
+        let _ = CommitteeUpdateCircuit::<Test, Fr>::parametrize(k);
 
         let builder = RefCell::from(builder);
-        TestCircuit::<Test, Fr> {
-            inner: CommitteeUpdateCircuitBuilder::new_from_state(builder, &state),
-        }
+        CommitteeUpdateCircuit::new_from_state(builder, &state)
     }
 
     #[test]
     fn test_committee_update_circuit() {
-        let k = 17;
+        let k = 18;
         let circuit = get_circuit_with_data(k);
 
-        let timer = start_timer!(|| "sync circuit mock prover");
+        let timer = start_timer!(|| "committee_update circuit mock prover");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
         end_timer!(timer);
@@ -475,12 +483,12 @@ mod tests {
 
     #[test]
     fn test_committee_update_proofgen() {
-        let k = 18;
+        let k = 21;
         let circuit = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);
 
-        let pkey = gen_pkey(|| "sync", &params, None, circuit.clone()).unwrap();
+        let pkey = gen_pkey(|| "committee_update", &params, None, circuit.clone()).unwrap();
 
         let public_inputs = circuit.instances();
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());

@@ -17,18 +17,17 @@ halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "comm
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
 poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
-poseidon-circuit = { git = "https://github.com/scroll-tech/poseidon-circuit.git", branch = "scroll-dev-0408", features = [
-    'short',
-] }
 
-# aggregation 
+# verifier SDK 
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
+    "loader_evm"
 ] }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
+    "loader_evm"
 ] }
 
 # crypto
@@ -36,7 +35,7 @@ num-bigint = { version = "0.4", features = ["rand"] }
 pasta_curves = "0.4.1"
 ff = "0.12"
 group = "0.12"
-sha2 = "0.10.6"
+sha2 = { version = "0.10.6", features = ["compress"] }
 
 # ethereum
 ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "46ca171" }

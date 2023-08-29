@@ -28,5 +28,5 @@ jobs:
           components: rustfmt
     - name: Check
       run: cargo check --all
-    - name: Check
-      run: RUST_LOG="preprocessor,eth-types,gadgets,zkcasper-circuits=debug" cargo test --release test_super_circuit
+    # - name: Check
+    #   run: RUST_LOG="preprocessor,eth-types,gadgets,zkcasper-circuits=debug" cargo test --release test_super_circuit

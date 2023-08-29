@@ -1,6 +1,5 @@
 //! The circuit for SHA256 hash function.
 //! This implementation is based on:
-//! - https://hackmd.io/@tsgAyLwURdqHzWxSmwVLjw/Sk5AOhWhc#Bit-implementation
 //! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
 
 mod sha256_bit;
@@ -14,7 +13,7 @@ use crate::table::sha256_table::Sha256TableAssignedRow;
 use crate::witness::HashInputChunk;
 use crate::{
     table::{LookupTable, Sha256Table},
-    util::{AssignedValueCell, BaseConstraintBuilder, Challenges, SubCircuit, SubCircuitConfig},
+    util::{AssignedValueCell, BaseConstraintBuilder, Challenges},
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
@@ -69,10 +68,8 @@ pub struct Sha256CircuitConfig<F> {
     _marker: PhantomData<F>,
 }
 
-impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
-    type ConfigArgs = Sha256Table;
-
-    fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self {
+impl<F: Field> Sha256CircuitConfig<F> {
+    pub fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Sha256Table) -> Self {
         // consts
         let two = F::from(2);
         let f256 = two.pow_const(8);
@@ -728,7 +725,7 @@ impl<F: Field> SubCircuitConfig<F> for Sha256CircuitConfig<F> {
         }
     }
 
-    fn annotate_columns_in_region(&self, region: &mut Region<F>) {
+    pub fn annotate_columns_in_region(&self, region: &mut Region<F>) {
         self.hash_table.annotate_columns_in_region(region);
         self.annotations().iter().for_each(|(column, name)| {
             region.name_column(|| name, *column);
@@ -1112,11 +1109,7 @@ pub struct Sha256Circuit<'a, F: Field> {
     _marker: PhantomData<F>,
 }
 
-impl<'a, F: Field> SubCircuit<'a, F> for Sha256Circuit<'a, F> {
-    type Config = Sha256CircuitConfig<F>;
-    type SynthesisArgs = ();
-    type Output = Vec<Sha256TableAssignedRow<F>>;
-
+impl<'a, F: Field> Sha256Circuit<'a, F> {
     fn new_from_state(state: &'a witness::SyncState<F>) -> Self {
         Self::new(&state.sha256_inputs)
     }
@@ -1124,22 +1117,12 @@ impl<'a, F: Field> SubCircuit<'a, F> for Sha256Circuit<'a, F> {
     /// Make the assignments to the KeccakCircuit
     fn synthesize_sub(
         &self,
-        config: &Self::Config,
+        config: &Sha256CircuitConfig<F>,
         challenges: &Challenges<Value<F>>,
         layouter: &mut impl Layouter<F>,
-        _: Self::SynthesisArgs,
     ) -> Result<Vec<Sha256TableAssignedRow<F>>, Error> {
         let witness = Self::generate_witness(self.inputs, *challenges);
         config.assign(layouter, witness.as_slice())
-    }
-
-    fn unusable_rows() -> usize {
-        todo!()
-    }
-
-    /// Return the minimum number of rows required to prove the block
-    fn min_num_rows_state(_block: &witness::SyncState<F>) -> (usize, usize) {
-        todo!()
     }
 }
 
@@ -1201,7 +1184,7 @@ mod tests {
             mut layouter: impl Layouter<F>,
         ) -> Result<(), Error> {
             self.inner
-                .synthesize_sub(&config.0, &config.1, &mut layouter, ())?;
+                .synthesize_sub(&config.0, &config.1, &mut layouter)?;
             Ok(())
         }
     }

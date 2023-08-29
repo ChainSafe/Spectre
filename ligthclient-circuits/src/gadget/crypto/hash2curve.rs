@@ -1,6 +1,7 @@
-//! The chip that implements `draft-irtf-cfrg-hash-to-curve-16`
-//! https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-16
+// //! The chip that implements `draft-irtf-cfrg-hash-to-curve-16`
+// //! https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-hash-to-curve-16
 
+use std::ops::Deref;
 use std::{cell::RefCell, iter, marker::PhantomData};
 
 use crate::util::AsBits;
@@ -25,7 +26,6 @@ use halo2_ecc::{
 use halo2_proofs::{circuit::Region, plonk::Error};
 use halo2curves::group::GroupEncoding;
 use itertools::Itertools;
-use lazy_static::{__Deref, lazy_static};
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
@@ -210,7 +210,7 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
         let gate = range.gate();
 
         // constants
-        const MAX_INPUT_SIZE: usize = 160;
+        // const MAX_INPUT_SIZE: usize = 192;
         let zero = ctx.load_zero();
         let one = ctx.load_constant(F::one());
 
@@ -242,13 +242,13 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             .chain(dst_prime.clone());
 
         let b_0 = hash_chip
-            .digest::<MAX_INPUT_SIZE>(msg_prime.into(), ctx, region)?
+            .digest::<192>(msg_prime.into(), ctx, region)?
             .output_bytes;
 
         b_vals.insert(
             0,
             hash_chip
-                .digest::<MAX_INPUT_SIZE>(
+                .digest::<128>(
                     b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
@@ -263,7 +263,7 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             b_vals.insert(
                 i,
                 hash_chip
-                    .digest::<MAX_INPUT_SIZE>(
+                    .digest::<128>(
                         strxor(b_0, b_vals[i - 1], gate, ctx)
                             .into_iter()
                             .chain(iter::once(ctx.load_constant(F::from(i as u64 + 1))))
@@ -618,16 +618,19 @@ pub struct HashToCurveCache<F: Field> {
 
 #[cfg(test)]
 mod test {
+    use std::env::var;
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
+    use crate::gadget::crypto::sha256::SpreadConfig;
     use crate::gadget::crypto::Sha256Chip;
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::Sha256Table;
-    use crate::util::{print_fq2_dev, Challenges, IntoWitness, SubCircuitConfig};
+    use crate::util::{print_fq2_dev, Challenges, IntoWitness};
 
     use super::*;
     use eth_types::Mainnet;
+    use halo2_base::gates::builder::FlexGateConfigParams;
     use halo2_base::gates::range::RangeConfig;
     use halo2_base::safe_types::RangeChip;
     use halo2_base::SKIP_FIRST_PASS;
@@ -647,7 +650,7 @@ mod test {
 
     #[derive(Debug, Clone)]
     struct TestConfig<F: Field> {
-        sha256_config: Sha256CircuitConfig<F>,
+        sha256_config: RefCell<SpreadConfig<F>>,
         pub max_byte_size: usize,
         range: RangeConfig<F>,
         challenges: Challenges<Value<F>>,
@@ -669,8 +672,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha_table = Sha256Table::construct(meta);
-            let sha256_configs = Sha256CircuitConfig::<F>::new::<Mainnet>(meta, sha_table);
+            let sha256_configs = SpreadConfig::<F>::configure(meta, 8, 1);
             let range = RangeConfig::configure(
                 meta,
                 RangeStrategy::Vertical,
@@ -682,7 +684,7 @@ mod test {
             );
             let challenges = Challenges::construct(meta);
             Self::Config {
-                sha256_config: sha256_configs,
+                sha256_config: RefCell::new(sha256_configs),
                 max_byte_size: Self::MAX_BYTE_SIZE,
                 range,
                 challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
@@ -696,13 +698,7 @@ mod test {
         ) -> Result<(), Error> {
             config.range.load_lookup_table(&mut layouter)?;
             let mut first_pass = SKIP_FIRST_PASS;
-            let sha256 = Sha256Chip::new(
-                &config.sha256_config,
-                &self.range,
-                config.challenges.sha256_input(),
-                None,
-                0,
-            );
+            let sha256 = Sha256Chip::new(config.sha256_config, &self.range, None);
 
             let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(&sha256);
             let fp_chip =
@@ -715,7 +711,6 @@ mod test {
                         first_pass = false;
                         return Ok(());
                     }
-                    config.sha256_config.annotate_columns_in_region(&mut region);
 
                     let builder = &mut self.builder.borrow_mut();
                     let ctx = builder.main(0);
@@ -733,6 +728,11 @@ mod test {
                     print_fq2_dev::<G2, F>(hp.y(), "res_p.y");
 
                     let extra_assignments = h2c_chip.hash_chip.take_extra_assignments();
+
+                    builder.config(TestCircuit::<S, F>::K, Some(0));
+                    let params: FlexGateConfigParams =
+                        serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+                    println!("params: {:?}", params);
 
                     let _ = builder.assign_all(
                         &config.range.gate,
@@ -752,11 +752,11 @@ mod test {
 
     impl<S: Spec, F: Field> TestCircuit<S, F> {
         const MAX_BYTE_SIZE: usize = 160;
-        const NUM_ADVICE: usize = 25;
+        const NUM_ADVICE: usize = 21;
         const NUM_FIXED: usize = 1;
-        const NUM_LOOKUP_ADVICE: usize = 5;
+        const NUM_LOOKUP_ADVICE: usize = 3;
         const LOOKUP_BITS: usize = 8;
-        const K: usize = 16;
+        const K: usize = 17;
     }
 
     #[test]

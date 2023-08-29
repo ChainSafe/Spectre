@@ -5,6 +5,7 @@ use itertools::Itertools;
 
 use crate::{
     gadget::crypto::HashChip,
+    util::{IntoConstant, IntoWitness},
     witness::{HashInput, HashInputChunk},
 };
 
@@ -34,19 +35,16 @@ where
         let len_even = chunks.len() + chunks.len() % 2;
         let padded_chunks = chunks
             .into_iter()
-            .pad_using(len_even, |_| {
-                HashInputChunk::from(
-                    ZERO_HASHES[depth].map(|b| ctx.load_constant(F::from(b as u64))),
-                )
-            })
+            .pad_using(len_even, |_| ZERO_HASHES[depth].as_slice().into_constant())
             .collect_vec();
 
         chunks = padded_chunks
             .into_iter()
             .tuples()
+            .take(3)
             .map(|(left, right)| {
                 hasher
-                    .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
+                    .digest::<128>(HashInput::TwoToOne(left, right), ctx, region)
                     .map(|res| res.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;

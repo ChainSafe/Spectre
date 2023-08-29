@@ -1,21 +1,22 @@
 //! Common utility traits and functions.
 
 mod common;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 pub use common::*;
 
 mod constraint_builder;
-pub use constraint_builder::*;
+pub(crate) use constraint_builder::*;
 
 mod conversion;
-pub use conversion::*;
+pub(crate) use conversion::*;
 
 mod proof;
+use halo2curves::bn256;
 pub use proof::*;
 
 use halo2_base::{
-    gates::builder::GateThreadBuilder,
+    gates::builder::{FlexGateConfigParams, GateThreadBuilder},
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
@@ -41,8 +42,10 @@ use eth_types::*;
 use halo2_proofs::{
     circuit::{Layouter, Region, Value},
     plonk::{
-        Challenge, ConstraintSystem, Error, Expression, FirstPhase, SecondPhase, VirtualCells,
+        Challenge, ConstraintSystem, Error, Expression, FirstPhase, ProvingKey, SecondPhase,
+        VirtualCells,
     },
+    poly::kzg::commitment::ParamsKZG,
 };
 
 /// Helper trait that implements functionality to represent a generic type as
@@ -62,6 +65,20 @@ pub(crate) fn query_expression<F: Field, T>(
         Some(0.expr())
     });
     expr.unwrap()
+}
+
+pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
+    fn new_from_state(
+        builder: RefCell<GateThreadBuilder<F>>,
+        state: &witness::SyncState<F>,
+    ) -> Self;
+
+    fn parametrize(k: usize) -> FlexGateConfigParams;
+
+    fn setup(
+        config: &FlexGateConfigParams,
+        out: Option<&Path>,
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>);
 }
 
 /// Randomness used in circuits.
@@ -102,99 +119,6 @@ impl<T: Clone> Challenges<T> {
     pub(crate) fn mock(sha256_input: T) -> Self {
         Self { sha256_input }
     }
-}
-
-/// SubCircuit is a circuit that performs the verification of a specific part of
-/// the full Casper finality verification. The SubCircuit's interact with each
-/// other via lookup tables and/or shared public inputs.  This type must contain
-/// all the inputs required to synthesize this circuit (and the contained
-/// table(s) if any).
-pub trait SubCircuit<'a, F: Field> {
-    /// Configuration of the SubCircuit.
-    type Config;
-
-    /// Arguments for [`synthesize_sub`].
-    type SynthesisArgs;
-
-    type Output;
-
-    /// Create a new SubCircuit from a witness Block
-    fn new_from_state(state: &'a witness::SyncState<F>) -> Self;
-
-    /// Assign only the columns used by this sub-circuit.  This includes the
-    /// columns that belong to the exposed lookup table contained within, if
-    /// any; and excludes external tables that this sub-circuit does lookups
-    /// to.
-    fn synthesize_sub(
-        &self,
-        config: &Self::Config,
-        challenges: &Challenges<Value<F>>,
-        layouter: &mut impl Layouter<F>,
-        args: Self::SynthesisArgs,
-    ) -> Result<Self::Output, Error>;
-
-    /// Returns the instance columns required for this circuit.
-    fn instances(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
-
-    /// Returns number of unusable rows of the SubCircuit, which should be
-    /// `meta.blinding_factors() + 1`.
-    fn unusable_rows() -> usize;
-
-    /// Return the minimum number of rows required to prove the block.
-    /// Row numbers without/with padding are both returned.
-    fn min_num_rows_state(block: &witness::SyncState<F>) -> (usize, usize);
-}
-
-/// Analog of [`SubCircuit`] for halo2-lib circuits.
-pub trait SubCircuitBuilder<F: Field> {
-    /// Configuration of the SubCircuitBuilder.
-    type Config;
-
-    /// Arguments for [`synthesize_sub`].
-    type SynthesisArgs;
-
-    type Output;
-
-    /// Create a new SubCircuitBuilder from a witness Block
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState<F>,
-    ) -> Self;
-
-    fn synthesize_sub(
-        &self,
-        config: &Self::Config,
-        challenges: &Challenges<Value<F>>,
-        layouter: &mut impl Layouter<F>,
-        args: Self::SynthesisArgs,
-    ) -> Result<Self::Output, Error>;
-
-    /// Returns the instance columns required for this circuit.
-    fn instance(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
-
-    /// Returns number of unusable rows of the SubCircuit, which should be
-    /// `meta.blinding_factors() + 1`.
-    fn unusable_rows() -> usize;
-
-    /// Return the minimum number of rows required to prove the block.
-    /// Row numbers without/with padding are both returned.
-    fn min_num_rows_state(block: &witness::SyncState<F>) -> (usize, usize);
-}
-
-/// SubCircuit configuration
-pub trait SubCircuitConfig<F: Field> {
-    /// Config constructor arguments
-    type ConfigArgs;
-
-    /// Type constructor
-    fn new<S: Spec>(meta: &mut ConstraintSystem<F>, args: Self::ConfigArgs) -> Self;
-
-    /// Annotates columns of a circuit embedded within a circuit region.
-    fn annotate_columns_in_region(&self, region: &mut Region<F>);
 }
 
 /// Packs bits into bytes
