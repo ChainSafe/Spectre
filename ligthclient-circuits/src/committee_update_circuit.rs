@@ -302,7 +302,6 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
     }
 }
 
-
 impl<S: Spec, F: Field> CircuitExt<F> for CommitteeUpdateCircuit<S, F> {
     fn num_instance(&self) -> Vec<usize> {
         self.instances().iter().map(|v| v.len()).collect()
@@ -417,7 +416,6 @@ impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -448,16 +446,21 @@ mod tests {
         dev::MockProver,
         halo2curves::bn256::Fr,
         plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
-        poly::{kzg::commitment::ParamsKZG, commitment::Params},
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
     };
     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
     use rand::rngs::OsRng;
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
+    use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk};
     use snark_verifier_sdk::{
-        halo2::{aggregation::{AggregationCircuit, AggregationConfigParams}, gen_proof_shplonk, gen_snark_shplonk},
-        CircuitExt, SHPLONK, Snark, gen_pk,
+        gen_pk,
+        halo2::{
+            aggregation::{AggregationCircuit, AggregationConfigParams},
+            gen_proof_shplonk, gen_snark_shplonk,
+        },
+        CircuitExt, Snark, SHPLONK,
     };
 
     fn get_circuit_with_data(k: usize) -> CommitteeUpdateCircuit<Test, Fr> {
@@ -513,14 +516,13 @@ mod tests {
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);
 
-
         let agg_config = AggregationConfigParams::from_path(path);
 
         let params = gen_srs(agg_config.degree);
         println!("agg_params k: {:?}", params.k());
         let lookup_bits = params.k() as usize - 1;
 
-        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params,iter::once(snark.clone()));
+        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params, iter::once(snark.clone()));
 
         let start0 = start_timer!(|| "gen vk & pk");
         let pk = gen_pk(&params, &agg_circuit, Some(Path::new("agg.pk")));
@@ -528,14 +530,36 @@ mod tests {
         let break_points = agg_circuit.break_points();
 
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
-                    CircuitBuilderStage::Prover,
-                    Some(break_points.clone()),
-                    lookup_bits,
-                    &params,
-                    iter::once(snark),
-                );
+            CircuitBuilderStage::Prover,
+            Some(break_points.clone()),
+            lookup_bits,
+            &params,
+            iter::once(snark.clone()),
+        );
 
         let instances = agg_circuit.instances();
         gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
+
+        // evm
+
+        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+            CircuitBuilderStage::Prover,
+            Some(break_points.clone()),
+            lookup_bits,
+            &params,
+            iter::once(snark),
+        );
+
+        let num_instances = agg_circuit.num_instance();
+        let instances = agg_circuit.instances();
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+
+        let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
+            &params,
+            pk.get_vk(),
+            num_instances,
+            None,
+        );
+        evm_verify(deployment_code, instances, proof);
     }
 }
