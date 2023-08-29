@@ -510,23 +510,30 @@ mod tests {
         let path = "./config/committee_update_aggregation.json";
         let k = 18;
         let circuit = get_circuit_with_data(k);
-
         let params_app = gen_srs(k as u32);
-
         let snark = gen_application_snark(k, &params_app);
+
 
         let agg_config = AggregationConfigParams::from_path(path);
 
         let params = gen_srs(agg_config.degree);
-        println!("agg_params: {:?}", params);
+        println!("agg_params k: {:?}", params.k());
         let lookup_bits = params.k() as usize - 1;
 
-        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params,iter::once(snark));
+        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params,iter::once(snark.clone()));
 
         let start0 = start_timer!(|| "gen vk & pk");
         let pk = gen_pk(&params, &agg_circuit, Some(Path::new("agg.pk")));
         end_timer!(start0);
         let break_points = agg_circuit.break_points();
+
+        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+                    CircuitBuilderStage::Prover,
+                    Some(break_points.clone()),
+                    lookup_bits,
+                    &params,
+                    iter::once(snark),
+                );
 
         let instances = agg_circuit.instances();
         gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
