@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn test_committee_update_proofgen() {
-        let k = 21;
+        let k = 18;
         let circuit = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);
@@ -504,14 +504,15 @@ mod tests {
 
         let public_inputs = circuit.instances();
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
-
-        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
+        let timer = start_timer!(|| "committee_update circuit full verifier");
+        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs));
+        end_timer!(timer);
     }
 
     #[test]
     fn circuit_agg() {
         let path = "./config/committee_update_aggregation.json";
-        let k = 18;
+        let k = 21;
         let circuit = get_circuit_with_data(k);
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);
@@ -529,19 +530,23 @@ mod tests {
         end_timer!(start0);
         let break_points = agg_circuit.break_points();
 
-        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
-            CircuitBuilderStage::Prover,
-            Some(break_points.clone()),
-            lookup_bits,
-            &params,
-            iter::once(snark.clone()),
-        );
+        // let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+        //     CircuitBuilderStage::Prover,
+        //     Some(break_points.clone()),
+        //     lookup_bits,
+        //     &params,
+        //     iter::once(snark.clone()),
+        // );
+
+        let agg_circuit = AggregationCircuit::prover::<SHPLONK>(&params, iter::once(snark.clone()), break_points.clone());
 
         let instances = agg_circuit.instances();
+        println!("Gen splonk proof!");
         gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
 
         // evm
 
+        println!("EVM!");
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
             CircuitBuilderStage::Prover,
             Some(break_points.clone()),

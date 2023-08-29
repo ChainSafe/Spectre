@@ -22,7 +22,8 @@ poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "commun
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
+    "halo2-pse"
 ] }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
