@@ -27,7 +27,8 @@ snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", t
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
+    "halo2-pse",
 ] }
 
 # crypto

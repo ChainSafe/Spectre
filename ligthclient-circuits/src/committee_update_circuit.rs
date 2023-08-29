@@ -302,6 +302,7 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
     }
 }
 
+
 impl<S: Spec, F: Field> CircuitExt<F> for CommitteeUpdateCircuit<S, F> {
     fn num_instance(&self) -> Vec<usize> {
         self.instances().iter().map(|v| v.len()).collect()
@@ -416,6 +417,7 @@ impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -446,7 +448,7 @@ mod tests {
         dev::MockProver,
         halo2curves::bn256::Fr,
         plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
-        poly::kzg::commitment::ParamsKZG,
+        poly::{kzg::commitment::ParamsKZG, commitment::Params},
     };
     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
@@ -454,8 +456,8 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
     use snark_verifier_sdk::{
-        halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
-        CircuitExt, SHPLONK,
+        halo2::{aggregation::{AggregationCircuit, AggregationConfigParams}, gen_proof_shplonk, gen_snark_shplonk},
+        CircuitExt, SHPLONK, Snark, gen_pk,
     };
 
     fn get_circuit_with_data(k: usize) -> CommitteeUpdateCircuit<Test, Fr> {
@@ -468,6 +470,13 @@ mod tests {
 
         let builder = RefCell::from(builder);
         CommitteeUpdateCircuit::new_from_state(builder, &state)
+    }
+
+    fn gen_application_snark(k: usize, params: &ParamsKZG<bn256::Bn256>) -> Snark {
+        let circuit = get_circuit_with_data(k);
+
+        let pk = gen_pk(params, &circuit, Some(Path::new("app.pk")));
+        gen_snark_shplonk(params, &pk, circuit, Some(Path::new("app.snark")))
     }
 
     #[test]
@@ -494,5 +503,32 @@ mod tests {
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
 
         assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
+    }
+
+    #[test]
+    fn circuit_agg() {
+        let path = "./config/committee_update_aggregation.json";
+        let k = 18;
+        let circuit = get_circuit_with_data(k);
+
+        let params_app = gen_srs(k as u32);
+
+        let snark = gen_application_snark(k, &params_app);
+
+        let agg_config = AggregationConfigParams::from_path(path);
+
+        let params = gen_srs(agg_config.degree);
+        println!("agg_params: {:?}", params);
+        let lookup_bits = params.k() as usize - 1;
+
+        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params,iter::once(snark));
+
+        let start0 = start_timer!(|| "gen vk & pk");
+        let pk = gen_pk(&params, &agg_circuit, Some(Path::new("agg.pk")));
+        end_timer!(start0);
+        let break_points = agg_circuit.break_points();
+
+        let instances = agg_circuit.instances();
+        gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
     }
 }
