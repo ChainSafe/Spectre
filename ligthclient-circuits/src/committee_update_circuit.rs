@@ -478,8 +478,8 @@ mod tests {
     fn gen_application_snark(k: usize, params: &ParamsKZG<bn256::Bn256>) -> Snark {
         let circuit = get_circuit_with_data(k);
 
-        let pk = gen_pk(params, &circuit, Some(Path::new("app.pk")));
-        gen_snark_shplonk(params, &pk, circuit, Some(Path::new("app.snark")))
+        let pk = gen_pk(params, &circuit, None);
+        gen_snark_shplonk(params, &pk, circuit, None::<&Path>)
     }
 
     #[test]
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn circuit_agg() {
         let path = "./config/committee_update_aggregation.json";
-        let k = 21;
+        let k = 18;
         let circuit = get_circuit_with_data(k);
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);
@@ -525,8 +525,8 @@ mod tests {
 
         let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params, iter::once(snark.clone()));
 
-        let start0 = start_timer!(|| "gen vk & pk");
-        let pk = gen_pk(&params, &agg_circuit, Some(Path::new("agg.pk")));
+        let start0 = start_timer!(|| "Aggregation Circuit gen vk & pk");
+        let pk = gen_pk(&params, &agg_circuit, None);
         end_timer!(start0);
         let break_points = agg_circuit.break_points();
 
@@ -538,11 +538,11 @@ mod tests {
         //     iter::once(snark.clone()),
         // );
 
-        let agg_circuit = AggregationCircuit::prover::<SHPLONK>(&params, iter::once(snark.clone()), break_points.clone());
+        // let agg_circuit = AggregationCircuit::prover::<SHPLONK>(&params, iter::once(snark.clone()), break_points.clone());
 
-        let instances = agg_circuit.instances();
-        println!("Gen splonk proof!");
-        gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
+        // let instances = agg_circuit.instances();
+        // println!("Gen splonk proof!");
+        // gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
 
         // evm
 
@@ -558,13 +558,14 @@ mod tests {
         let num_instances = agg_circuit.num_instance();
         let instances = agg_circuit.instances();
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
-
+        println!("proof size: {}", proof.len());
         let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
             &params,
             pk.get_vk(),
             num_instances,
-            None,
+            Some(Path::new("./vvv.yul")),
         );
+        println!("deployment_code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances, proof);
     }
 }
