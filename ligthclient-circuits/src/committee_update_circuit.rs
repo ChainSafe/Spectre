@@ -13,7 +13,7 @@ use std::{
 use crate::{
     gadget::crypto::{
         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
-        HashToCurveChip, Sha256Chip, SpreadConfig,
+        HashToCurveChip, Sha256ChipWide, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
@@ -64,7 +64,7 @@ use ssz_rs::Merkleized;
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuitConfig<F: Field> {
     range: RangeConfig<F>,
-    sha256_config: RefCell<SpreadConfig<F>>,
+    sha256_config: Sha256CircuitConfig<F>,
     challenges: Challenges<Value<F>>,
 }
 
@@ -75,6 +75,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     pubkeys_compressed: Vec<Vec<u8>>,
     pubkeys_y: Vec<Fq>,
     dry_run: bool,
+    sha256_offset: usize,
     _spec: PhantomData<S>,
 }
 
@@ -95,7 +96,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 g1_affine.y
             })
             .collect_vec();
-
+        let sha256_offset = 0;
         Self {
             builder,
             pubkeys_compressed: state
@@ -106,6 +107,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .collect_vec(),
             pubkeys_y,
             dry_run: false,
+            sha256_offset,
             _spec: PhantomData,
         }
     }
@@ -195,7 +197,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .into_iter()
             .map(|bytes| {
                 hasher
-                    .digest::<128>(
+                    .digest::<64>(
                         HashInput::Single(
                             bytes.into_iter().pad_using(64, |_| ctx.load_zero()).into(),
                         ),
@@ -220,10 +222,11 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let range = RangeCircuitBuilder::configure(meta);
-        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
+        let hash_table = Sha256Table::construct(meta);
+        let sha256_config = Sha256CircuitConfig::new::<S>(meta, hash_table);
         CommitteeUpdateCircuitConfig {
             range,
-            sha256_config: RefCell::new(sha256_config),
+            sha256_config,
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
     }
@@ -245,8 +248,14 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
-        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
-
+        let sha256_chip = Sha256ChipWide::new(
+            &config.sha256_config,
+            &range,
+            config.challenges.sha256_input(),
+            None,
+            self.sha256_offset,
+        );
+        
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
             self.builder.borrow_mut()
@@ -280,7 +289,7 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
                 let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
                 let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
 
-                let extra_assignments = Default::default(); //sha256_chip.take_extra_assignments();
+                let extra_assignments = sha256_chip.take_extra_assignments();
 
                 if self.dry_run {
                     return Ok(());
@@ -337,6 +346,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
                 .map(|v| v.pubkey)
                 .collect_vec(),
             pubkeys_y,
+            sha256_offset: 0,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -408,6 +418,7 @@ impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
             pubkeys_y,
+            sha256_offset:0,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -515,7 +526,7 @@ mod tests {
     #[test]
     fn circuit_agg() {
         let path = "./config/committee_update_aggregation.json";
-        let k = 19;
+        let k = 18;
         let circuit = get_circuit_with_data(k);
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);

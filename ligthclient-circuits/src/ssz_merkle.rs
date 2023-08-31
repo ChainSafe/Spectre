@@ -292,7 +292,7 @@ where
             .take(3)
             .map(|(left, right)| {
                 hasher
-                    .digest::<128>(HashInput::TwoToOne(left, right), ctx, region)
+                    .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
                     .map(|res| res.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
