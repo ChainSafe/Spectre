@@ -121,7 +121,7 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         // for _ in 0..remaining_byte_size {
         //     assigned_input_bytes.push(assign_byte(0u8));
         // }
-        // assert_eq!(assigned_input_bytes.len(), MAX_INPUT_SIZE);
+        assert_eq!(assigned_input_bytes.len(), MAX_INPUT_SIZE);
         // todo: only check for no already assigned
         // for &assigned in assigned_input_bytes.iter() {
         //     range.range_check(ctx, assigned, 8);

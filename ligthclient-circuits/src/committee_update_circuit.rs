@@ -195,7 +195,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .into_iter()
             .map(|bytes| {
                 hasher
-                    .digest::<64>(
+                    .digest::<128>(
                         HashInput::Single(
                             bytes.into_iter().pad_using(64, |_| ctx.load_zero()).into(),
                         ),
@@ -205,10 +205,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .map(|r| r.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        //ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
-        Ok(pubkeys_hashes.pop().unwrap())
-        // Ok(vec![])
+        println!("pubkeys_hashes: {:?}", pubkeys_hashes.len());
+        ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
     }
 }
 
@@ -489,7 +487,7 @@ mod tests {
 
         let timer = start_timer!(|| "committee_update circuit mock prover");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
+        prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
