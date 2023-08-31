@@ -477,7 +477,12 @@ mod tests {
         let circuit = get_circuit_with_data(k);
 
         let pk = gen_pk(params, &circuit, Some(Path::new(&format!("app_{}.pk", k))));
-        gen_snark_shplonk(params, &pk, circuit, Some(Path::new(&format!("app_{}.proof", k))))
+        gen_snark_shplonk(
+            params,
+            &pk,
+            circuit,
+            Some(Path::new(&format!("app_{}.proof", k))),
+        )
     }
 
     #[test]
