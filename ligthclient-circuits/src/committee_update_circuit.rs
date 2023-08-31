@@ -478,8 +478,8 @@ mod tests {
     fn gen_application_snark(k: usize, params: &ParamsKZG<bn256::Bn256>) -> Snark {
         let circuit = get_circuit_with_data(k);
 
-        let pk = gen_pk(params, &circuit, None);
-        gen_snark_shplonk(params, &pk, circuit, None::<&Path>)
+        let pk = gen_pk(params, &circuit, Some(Path::new(&format!("app_{}.pk", k))));
+        gen_snark_shplonk(params, &pk, circuit, Some(Path::new(&format!("app_{}.proof", k))))
     }
 
     #[test]
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn circuit_agg() {
         let path = "./config/committee_update_aggregation.json";
-        let k = 18;
+        let k = 19;
         let circuit = get_circuit_with_data(k);
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);

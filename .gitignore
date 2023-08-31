@@ -32,6 +32,6 @@ params/
 
 .env
 
-.pk
-.instances
-.proof
+*.pk
+*.instances
+*.proof
