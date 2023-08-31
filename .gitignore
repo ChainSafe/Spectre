@@ -31,3 +31,7 @@ build/
 params/
 
 .env
+
+.pk
+.instances
+.proof
