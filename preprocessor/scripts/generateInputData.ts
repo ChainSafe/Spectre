@@ -3,7 +3,7 @@ import { bls12_381 } from '@noble/curves/bls12-381'
 import {
     ssz,
 } from "@lodestar/types"
-import { createProof, ProofType, MultiProof, Node } from "@chainsafe/persistent-merkle-tree";
+import { createProof, ProofType, MultiProof, Node, SingleProof, TreeOffsetProof } from "@chainsafe/persistent-merkle-tree";
 import { chunkArray, g1PointToLeBytes as g1PointToBytesLE, g2PointToLeBytes, serialize } from "./util";
 import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
 import { hexToBytes, bytesToHex, numberToBytesBE } from "@noble/curves/abstract/utils";
@@ -13,6 +13,7 @@ import { BeaconStateCache, computeSigningRoot } from "@lodestar/state-transition
 import { createBeaconConfig, BeaconConfig } from "@lodestar/config";
 import { config as chainConfig } from "@lodestar/config/default";
 import { DOMAIN_SYNC_COMMITTEE } from "@lodestar/params";
+import { BitArray } from "@chainsafe/ssz";
 
 const DST = "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
 
@@ -66,6 +67,53 @@ fs.writeFileSync(
 const aggregatedPubKey = bls12_381.aggregatePublicKeys(pubKeyPoints);
 beaconState.currentSyncCommittee.aggregatePubkey = g1PointToBytesLE(aggregatedPubKey, true);
 
+
+//-------------- Beacon block body --------------//
+
+let beaconBlockBody = {
+    // executionPayload: {
+    //     withdrawals: [],
+    //     transactions: [
+    //     ],
+    //     blockHash: Uint8Array.from(Array(32).fill(0)),
+    //     parentHash: Uint8Array.from(Array(32).fill(0)),
+    //     feeRecipient: Uint8Array.from(Array(32).fill(0)),
+    //     stateRoot: Uint8Array.from(Array(32).fill(0)),
+    //     receiptsRoot: Uint8Array.from(Array(32).fill(0)),
+    //     logsBloom: Uint8Array.from(Array(32).fill(0)),
+    //     prevRandao: Uint8Array.from(Array(32).fill(0)),
+    //     blockNumber: 0,
+    //     gasLimit: 0,
+    //     gasUsed: 0,
+    //     timestamp: 0,
+    //     extraData: Uint8Array.from(Array(32).fill(0)),
+    //     baseFeePerGas: 0n,
+    // },
+    // blsToExecutionChanges: [],
+    randaoReveal: Uint8Array.from(Array(96).fill(0)), //beaconState.randaoMixes[0],
+    eth1Data: beaconState.eth1Data,
+    graffiti: Uint8Array.from(Array(32).fill(0)),
+    proposerSlashings: [],
+    attesterSlashings: [],
+    attestations: [],
+    deposits: [],
+    voluntaryExits: [],
+    syncAggregate: {
+        syncCommitteeBits: BitArray.fromBitLen(512),
+        syncCommitteeSignature: Uint8Array.from(Array(96).fill(0)),
+    },
+};
+
+let beaconBlockTree = ssz.phase0.BeaconBlockBody.toView(beaconBlockBody);
+
+let beaconBlockRoot = ssz.phase0.BeaconBlockBody.hashTreeRoot(beaconBlockBody)
+
+beaconState.blockRoots[beaconState.blockRoots.length - 1] = beaconBlockRoot;
+
+let execRootGindex = ssz.phase0.BeaconBlockBody.getPathInfo(["eth1Data", "blockHash"]).gindex;
+
+let execMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execRootGindex }) as SingleProof;
+
 //--------------------- Sync ---------------------//
 
 const beaconStateRoot = ssz.capella.BeaconState.hashTreeRoot(beaconState);
@@ -90,17 +138,20 @@ let signatures = privKeyHexes.slice(0, N_validators).map((privKey) => msgPoint.m
 let aggSignature = bls12_381.aggregateSignatures(signatures);
 
 // assert signature is valid
-// console.log("sig:", aggSignature.toAffine());
-// console.log("msg:", msgPoint.toAffine());
-// console.log("pk:", aggregatedPubKey.toAffine());
 console.assert(bls12_381.verify(aggSignature, msgPoint, aggregatedPubKey));
 
 const syncSigBytes = g2PointToLeBytes(aggSignature, true);
 const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
-//----------------- State tree -----------------//
+//----------------- State tree  -----------------//
 
-// let view = ssz.altair.SyncCommittee.fields.pubkeys.toView(beaconState.currentSyncCommittee.pubkeys);
+
+let beaconStateTree = ssz.capella.BeaconState.toView(beaconState);
+
+let finilizedBlockRootGindex = ssz.capella.BeaconState.getPathInfo(["blockRoots", beaconState.blockRoots.length - 1]).gindex;
+
+let stateMerkleProof = createProof(beaconStateTree.node, { type: ProofType.single, gindex: finilizedBlockRootGindex }) as SingleProof;
+
 
 // let gindices = Array.from({ length: N_validators }, (_, i) => {
 //     const g = ssz.altair.SyncCommittee.fields.pubkeys.getPathInfo([i]).gindex;
@@ -128,7 +179,9 @@ let input = {
     domain: Array.from(domain),
     attestedBlock: attestedBlockJson,
     syncSignature: syncSigBytes,
-    merkleTrace: [],
+    execMerkleBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
+    stateMerkleBranch: stateMerkleProof.witnesses.map((w) => Array.from(w)),
+    stateRoot: Array.from(beaconStateRoot),
 }
 
 fs.writeFileSync(
