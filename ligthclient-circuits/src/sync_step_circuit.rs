@@ -22,7 +22,7 @@ use crate::{
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
-    witness::{self, HashInput, HashInputChunk, SyncState, SyncStateInput},
+    witness::{self, HashInput, HashInputChunk, SyncState},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
@@ -322,7 +322,7 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
 impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<bn256::Fr>>,
-        state: &witness::SyncState<bn256::Fr>,
+        state: &witness::SyncState,
     ) -> Self {
         Self {
             builder,
@@ -437,7 +437,7 @@ mod tests {
     use crate::{
         table::Sha256Table,
         util::{full_prover, full_verifier, gen_pkey},
-        witness::{SyncState, SyncStateInput, Validator},
+        witness::{SyncState, Validator},
     };
 
     use super::*;
@@ -472,9 +472,8 @@ mod tests {
 
     fn get_circuit_with_data(k: usize) -> (SyncStepCircuit<Test, Fr>, FlexGateConfigParams) {
         let builder = GateThreadBuilder::new(false);
-        let state_input: SyncStateInput =
+        let state: SyncState =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
-        let state = state_input.into();
 
         let config = if let Ok(f) = fs::read("./config/sync_step_k21.json") {
             serde_json::from_slice(&f).expect("read config file")

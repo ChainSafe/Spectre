@@ -1110,8 +1110,8 @@ pub struct Sha256Circuit<'a, F: Field> {
 }
 
 impl<'a, F: Field> Sha256Circuit<'a, F> {
-    fn new_from_state(state: &'a witness::SyncState<F>) -> Self {
-        Self::new(&state.sha256_inputs)
+    fn new_from_state(state: &'a witness::SyncState) -> Self {
+        todo!()
     }
 
     /// Make the assignments to the KeccakCircuit
