@@ -23,16 +23,18 @@ pub struct SyncState {
 
     pub attested_block: BeaconBlockHeader,
 
-    pub domain: [u8; 32],
+    pub finalized_block: BeaconBlockHeader,
 
-    pub merkle_trace: MerkleTrace,
+    pub domain: [u8; 32],
 
     // pub sha256_inputs: Vec<HashInput<u8>>,
 
-    pub exec_merkle_branch: Vec<Vec<u8>>,
+    pub execution_merkle_branch: Vec<Vec<u8>>,
 
-    pub state_merkle_branch: Vec<Vec<u8>>,
+    pub execution_state_root: Vec<u8>,
 
-    pub state_root: [u8; 32],
+    pub finality_merkle_branch: Vec<Vec<u8>>,
+
+    pub beacon_state_root: Vec<u8>,
 }
 

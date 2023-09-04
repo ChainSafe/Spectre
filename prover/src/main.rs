@@ -8,8 +8,7 @@ use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     sync_step_circuit::SyncStepCircuit,
     util::{read_params, read_vkey, AppCircuitExt},
-    witness::SyncStateInput,
-    FlexGateConfigParams,
+    FlexGateConfigParams, witness::SyncState,
 };
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::GateThreadBuilder;
 use snark_verifier_sdk::evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk, write_calldata};
@@ -113,8 +112,7 @@ fn gen_evm_proof<C: AppCircuitExt<Fr>>(
 
     let (params, pk) = C::setup(&config, Some(build_dir));
 
-    let state_input: SyncStateInput = serde_json::from_slice(&fs::read(path_in).unwrap()).unwrap();
-    let state = state_input.into();
+    let state: SyncState = serde_json::from_slice(&fs::read(path_in).unwrap()).unwrap();
 
     let builder = RefCell::from(GateThreadBuilder::new(false));
 

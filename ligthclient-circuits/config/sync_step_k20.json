@@ -1,0 +1,1 @@
+{ "strategy": "Vertical", "k": 20, "num_advice_per_phase": [17, 0, 0], "num_lookup_advice_per_phase": [2, 0, 0], "num_fixed": 1 }
