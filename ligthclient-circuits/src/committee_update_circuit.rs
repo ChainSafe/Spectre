@@ -492,7 +492,7 @@ mod tests {
             params,
             &pk,
             circuit,
-            Some(Path::new(&format!("app_{}.proof", k))),
+            None::<String>,
         )
     }
 
@@ -526,7 +526,7 @@ mod tests {
     #[test]
     fn circuit_agg() {
         let path = "./config/committee_update_aggregation.json";
-        let k = 18;
+        let k = 17;
         let circuit = get_circuit_with_data(k);
         let params_app = gen_srs(k as u32);
         let snark = gen_application_snark(k, &params_app);
@@ -543,24 +543,6 @@ mod tests {
         let pk = gen_pk(&params, &agg_circuit, None);
         end_timer!(start0);
         let break_points = agg_circuit.break_points();
-
-        // let agg_circuit = AggregationCircuit::new::<SHPLONK>(
-        //     CircuitBuilderStage::Prover,
-        //     Some(break_points.clone()),
-        //     lookup_bits,
-        //     &params,
-        //     iter::once(snark.clone()),
-        // );
-
-        // let agg_circuit = AggregationCircuit::prover::<SHPLONK>(&params, iter::once(snark.clone()), break_points.clone());
-
-        // let instances = agg_circuit.instances();
-        // println!("Gen splonk proof!");
-        // gen_proof_shplonk(&params, &pk, agg_circuit, instances, None);
-
-        // evm
-
-        println!("EVM!");
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
             CircuitBuilderStage::Prover,
             Some(break_points.clone()),
@@ -577,7 +559,7 @@ mod tests {
             &params,
             pk.get_vk(),
             num_instances,
-            Some(Path::new("./vvv.yul")),
+            None,
         );
         println!("deployment_code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances, proof);
