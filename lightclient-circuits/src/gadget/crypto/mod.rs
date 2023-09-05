@@ -10,7 +10,7 @@ use halo2_ecc::{
     ecc::{EcPoint, EccChip},
     fields::{fp2, vector::FieldVector, FieldExtConstructor},
 };
-pub use hash2curve::{HashToCurveCache, HashToCurveChip};
+// pub use hash2curve::{HashToCurveCache, HashToCurveChip};
 pub use sha256::{AssignedHashResult, HashChip, Sha256Chip, SpreadConfig};
 pub use sha256_wide::*;
 pub type FpPoint<F> = ProperCrtUint<F>;
