@@ -255,7 +255,7 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
             None,
             self.sha256_offset,
         );
-        
+
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
             self.builder.borrow_mut()
@@ -418,7 +418,7 @@ impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
             pubkeys_y,
-            sha256_offset:0,
+            sha256_offset: 0,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -488,12 +488,7 @@ mod tests {
         let circuit = get_circuit_with_data(k);
 
         let pk = gen_pk(params, &circuit, Some(Path::new(&format!("app_{}.pk", k))));
-        gen_snark_shplonk(
-            params,
-            &pk,
-            circuit,
-            None::<String>,
-        )
+        gen_snark_shplonk(params, &pk, circuit, None::<String>)
     }
 
     #[test]
