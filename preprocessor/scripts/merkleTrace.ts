@@ -1,4 +1,4 @@
-import { Node, BranchNode, LeafNode, Gindex } from "@chainsafe/persistent-merkle-tree";
+import { Node, BranchNode, LeafNode, Gindex, createProof, ProofInput } from "@chainsafe/persistent-merkle-tree";
 import { SortOrder, computeMultiProofBitstrings, } from "./util";
 
 type TraceRow = {

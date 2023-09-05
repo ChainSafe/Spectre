@@ -265,15 +265,12 @@ pub const ZERO_HASHES: [[u8; 32]; 64] = [
     ],
 ];
 
-pub fn ssz_merkleize_chunks<'a, F: Field, I: IntoIterator<Item = HashInputChunk<QuantumCell<F>>>>(
+pub fn ssz_merkleize_chunks<F: Field>(
     ctx: &mut Context<F>,
     region: &mut Region<'_, F>,
-    hasher: &'a impl HashChip<F>,
-    chunks: I,
-) -> Result<Vec<AssignedValue<F>>, Error>
-where
-    I::IntoIter: ExactSizeIterator,
-{
+    hasher: &impl HashChip<F>,
+    chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+) -> Result<Vec<AssignedValue<F>>, Error> {
     let mut chunks = chunks.into_iter().collect_vec();
     let len_even = chunks.len() + chunks.len() % 2;
     let height = (len_even as f64).log2().ceil() as usize;
@@ -292,7 +289,7 @@ where
             .take(3)
             .map(|(left, right)| {
                 hasher
-                    .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
+                    .digest::<128>(HashInput::TwoToOne(left, right), ctx, region)
                     .map(|res| res.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -306,4 +303,43 @@ where
     });
 
     Ok(root.bytes)
+}
+
+pub fn verify_merkle_proof<F: Field>(
+    ctx: &mut Context<F>,
+    region: &mut Region<'_, F>,
+    hasher: &impl HashChip<F>,
+    proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+    leaf: HashInputChunk<QuantumCell<F>>,
+    root: &[AssignedValue<F>],
+    mut gindex: usize,
+) -> Result<(), Error> {
+    let mut computed_hash = leaf;
+
+    for witness in proof.into_iter() {
+        computed_hash = hasher
+            .digest::<128>(
+                if gindex % 2 == 0 {
+                    HashInput::TwoToOne(computed_hash, witness)
+                } else {
+                    HashInput::TwoToOne(witness, computed_hash)
+                },
+                ctx,
+                region,
+            )?
+            .output_bytes
+            .into();
+        gindex /= 2;
+    }
+
+    let computed_root = computed_hash.bytes.into_iter().map(|b| match b {
+        QuantumCell::Existing(av) => av,
+        _ => unreachable!(),
+    });
+
+    computed_root.zip(root.iter()).for_each(|(a, b)| {
+        ctx.constrain_equal(&a, b);
+    });
+
+    Ok(())
 }

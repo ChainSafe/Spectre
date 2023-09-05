@@ -22,7 +22,7 @@ use crate::{
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
-    witness::{self, HashInput, HashInputChunk, SyncStateInput},
+    witness::{self, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::phase0::BeaconBlockHeader;
@@ -80,10 +80,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState<F>,
-    ) -> Self {
+    fn new_from_state(builder: RefCell<GateThreadBuilder<F>>, state: &witness::SyncState) -> Self {
         let pubkeys_y = state
             .sync_committee
             .iter()
@@ -321,7 +318,7 @@ impl<S: Spec, F: Field> CircuitExt<F> for CommitteeUpdateCircuit<S, F> {
 impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> {
     fn new_from_state(
         builder: RefCell<GateThreadBuilder<bn256::Fr>>,
-        state: &witness::SyncState<bn256::Fr>,
+        state: &witness::SyncState,
     ) -> Self {
         let pubkeys_y = state
             .sync_committee
@@ -434,7 +431,7 @@ mod tests {
     use crate::{
         table::Sha256Table,
         util::{full_prover, full_verifier, gen_pkey},
-        witness::{SyncState, SyncStateInput, Validator},
+        witness::{SyncState, Validator},
     };
 
     use super::*;
@@ -473,9 +470,8 @@ mod tests {
 
     fn get_circuit_with_data(k: usize) -> CommitteeUpdateCircuit<Test, Fr> {
         let builder = GateThreadBuilder::new(false);
-        let state_input: SyncStateInput =
+        let state: SyncState =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
-        let state = state_input.into();
 
         let _ = CommitteeUpdateCircuit::<Test, Fr>::parametrize(k);
 
