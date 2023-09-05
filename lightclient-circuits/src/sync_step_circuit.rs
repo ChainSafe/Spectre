@@ -141,7 +141,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
             builder_clone.borrow_mut()
         };
 
-        let public_input_commitment = layouter.assign_region(
+        let assignments = layouter.assign_region(
             || "AggregationCircuitBuilder generated circuit",
             |mut region| {
                 if first_pass {
@@ -305,7 +305,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     return Ok(None);
                 }
 
-                let _ = builder.assign_all(
+                let assignments = builder.assign_all(
                     &config.range.gate,
                     &config.range.lookup_advice,
                     &config.range.q_lookup,
@@ -313,13 +313,21 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     extra_assignments,
                 );
 
-                // TODO: constaint source_root, target_root with instances: `layouter.constrain_instance`
-                Ok(Some(public_input_commitment))
+                Ok(Some((public_input_commitment, assignments)))
             },
         )?;
-        // public_input_commitment.and_then(|v| {
-        //     Some(layouter.constrain_instance(v[0], config.pi, 0))
-        // });
+        if let Some(assignments) = assignments {
+            let assigned_instances = assignments.0.output_bytes;
+            let assigned_advices = assignments.1.assigned_advices;
+
+            for (i, instance) in assigned_instances.into_iter().enumerate() {
+                let cell = instance.cell.unwrap();
+                let (cell, _) = assigned_advices
+                    .get(&(cell.context_id, cell.offset))
+                    .expect("instance not assigned");
+                layouter.constrain_instance(*cell, config.pi, i);
+            }
+        }
         Ok(())
     }
 }
