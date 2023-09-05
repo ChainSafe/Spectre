@@ -30,10 +30,7 @@ use ff::PrimeField;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
-        builder::{
-            FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder,
-            RangeWithInstanceCircuitBuilder, RangeWithInstanceConfig,
-        },
+        builder::{FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder},
         flex_gate::GateStrategy,
         range::RangeConfig,
     },
@@ -68,9 +65,10 @@ use ssz_rs::{GeneralizedIndex, Merkleized, Node};
 
 #[derive(Clone, Debug)]
 pub struct SyncStepCircuitConfig<F: Field> {
-    range: RangeWithInstanceConfig<F>,
+    range: RangeConfig<F>,
     sha256_config: RefCell<SpreadConfig<F>>,
     challenges: Challenges<Value<F>>,
+    pi: Column<Instance>,
 }
 
 #[allow(type_alias_bounds)]
@@ -100,11 +98,13 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let range = RangeWithInstanceCircuitBuilder::configure(meta);
+        let range = RangeCircuitBuilder::configure(meta);
         let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
-        meta.enable_equality(range.instance);
+        let pi = meta.instance_column();
+        meta.enable_equality(pi);
         SyncStepCircuitConfig {
             range,
+            pi,
             sha256_config: RefCell::new(sha256_config),
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
@@ -117,14 +117,13 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
     ) -> Result<(), Error> {
         config
             .range
-            .range
             .load_lookup_table(&mut layouter)
             .expect("load range lookup table");
 
         assert!(!self.signature.is_empty(), "no attestations supplied");
         let mut first_pass = halo2_base::SKIP_FIRST_PASS;
 
-        let range = RangeChip::default(config.range.range.lookup_bits());
+        let range = RangeChip::default(config.range.lookup_bits());
         let fp_chip = FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
@@ -307,9 +306,9 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 }
 
                 let _ = builder.assign_all(
-                    &config.range.range.gate,
-                    &config.range.range.lookup_advice,
-                    &config.range.range.q_lookup,
+                    &config.range.gate,
+                    &config.range.lookup_advice,
+                    &config.range.q_lookup,
                     &mut region,
                     extra_assignments,
                 );
