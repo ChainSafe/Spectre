@@ -207,7 +207,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .map(|r| r.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
-        println!("pubkeys_hashes: {:?}", pubkeys_hashes.len());
         ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
     }
 }
