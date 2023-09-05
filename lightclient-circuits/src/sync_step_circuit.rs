@@ -141,12 +141,12 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
             builder_clone.borrow_mut()
         };
 
-        layouter.assign_region(
+        let public_input_commitment = layouter.assign_region(
             || "AggregationCircuitBuilder generated circuit",
             |mut region| {
                 if first_pass {
                     first_pass = false;
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 let ctx = builder.main(0);
@@ -293,7 +293,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     &mut region,
                 )?;
 
-                let h = sha256_chip.digest::<128>(
+                let public_input_commitment = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
                     ctx,
                     &mut region,
@@ -302,7 +302,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 let extra_assignments = sha256_chip.take_extra_assignments();
 
                 if self.dry_run {
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 let _ = builder.assign_all(
@@ -314,9 +314,13 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 );
 
                 // TODO: constaint source_root, target_root with instances: `layouter.constrain_instance`
-                Ok(())
+                Ok(Some(public_input_commitment))
             },
-        )
+        )?;
+        // public_input_commitment.and_then(|v| {
+        //     Some(layouter.constrain_instance(v[0], config.pi, 0))
+        // });
+        Ok(())
     }
 }
 
