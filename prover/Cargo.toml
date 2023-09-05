@@ -27,7 +27,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 ] }
 
 # local
-lightclient-circuits = { path = "../ligthclient-circuits" }
+lightclient-circuits = { path = "../lightclient-circuits" }
 eth-types = { path = "../eth-types" }
 
 # misc

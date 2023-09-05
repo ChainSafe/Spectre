@@ -22,9 +22,9 @@ node_modules
 /zkcasper-circuits/build
 /zkcasper-circuits/params
 
-ligthclient-circuits/params/
+lightclient-circuits/params/
 
-ligthclient-circuits/build/
+lightclient-circuits/build/
 
 build/
 
