@@ -28,7 +28,6 @@ pub struct SyncState {
     pub domain: [u8; 32],
 
     // pub sha256_inputs: Vec<HashInput<u8>>,
-
     pub execution_merkle_branch: Vec<Vec<u8>>,
 
     pub execution_state_root: Vec<u8>,
@@ -37,4 +36,3 @@ pub struct SyncState {
 
     pub beacon_state_root: Vec<u8>,
 }
-

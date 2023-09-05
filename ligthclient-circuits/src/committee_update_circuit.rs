@@ -79,10 +79,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState,
-    ) -> Self {
+    fn new_from_state(builder: RefCell<GateThreadBuilder<F>>, state: &witness::SyncState) -> Self {
         let pubkeys_y = state
             .sync_committee
             .iter()

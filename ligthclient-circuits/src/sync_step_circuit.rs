@@ -498,7 +498,7 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
         let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
         let beacon_state_root = compute_root(finilized_header, &state_merkle_branch);
-       
+
         Self {
             builder,
             signature: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),

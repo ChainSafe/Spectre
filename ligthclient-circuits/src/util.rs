@@ -68,10 +68,7 @@ pub(crate) fn query_expression<F: Field, T>(
 }
 
 pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<F>>,
-        state: &witness::SyncState,
-    ) -> Self;
+    fn new_from_state(builder: RefCell<GateThreadBuilder<F>>, state: &witness::SyncState) -> Self;
 
     fn parametrize(k: usize) -> FlexGateConfigParams;
 

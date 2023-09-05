@@ -8,7 +8,8 @@ use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     sync_step_circuit::SyncStepCircuit,
     util::{read_params, read_vkey, AppCircuitExt},
-    FlexGateConfigParams, witness::SyncState,
+    witness::SyncState,
+    FlexGateConfigParams,
 };
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::GateThreadBuilder;
 use snark_verifier_sdk::evm::{gen_evm_proof_shplonk, gen_evm_verifier_shplonk, write_calldata};
