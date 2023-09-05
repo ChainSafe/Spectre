@@ -47,7 +47,7 @@ use halo2_ecc::{
 use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
     dev::MockProver,
-    plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
+    plonk::{Circuit, ConstraintSystem, Error, ProvingKey, Instance, Column},
     poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
@@ -68,6 +68,7 @@ pub struct SyncStepCircuitConfig<F: Field> {
     range: RangeConfig<F>,
     sha256_config: RefCell<SpreadConfig<F>>,
     challenges: Challenges<Value<F>>,
+    pi: Column<Instance>,
 }
 
 #[allow(type_alias_bounds)]
@@ -99,9 +100,11 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let range = RangeCircuitBuilder::configure(meta);
         let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
-
+        let pi = meta.instance_column();
+        meta.enable_equality(pi);
         SyncStepCircuitConfig {
             range,
+            pi,
             sha256_config: RefCell::new(sha256_config),
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
