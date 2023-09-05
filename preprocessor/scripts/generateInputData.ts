@@ -111,6 +111,8 @@ let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload"
 
 let execMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execRootGindex }) as SingleProof;
 
+console.log("Execution merkle proof: ", execMerkleProof.witnesses);
+
 let finalizedBlock = {
     slot: 0,
     proposerIndex: 0,
@@ -153,6 +155,7 @@ console.assert(bls12_381.verify(aggSignature, msgPoint, aggregatedPubKey));
 
 const syncSigBytes = g2PointToLeBytes(aggSignature, true);
 const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
+
 
 //----------------- State tree  -----------------//
 

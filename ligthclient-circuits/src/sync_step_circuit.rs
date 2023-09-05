@@ -82,7 +82,7 @@ pub struct SyncStepCircuit<S: Spec, F: Field> {
     execution_state_root: Vec<u8>,
     execution_merkle_branch: Vec<Vec<u8>>,
     beacon_state_root: Vec<u8>,
-    finility_merkle_branch: Vec<Vec<u8>>,
+    finality_merkle_branch: Vec<Vec<u8>>,
     pariticipation_bits: Vec<bool>,
     dry_run: bool,
     _spec: PhantomData<S>,
@@ -232,7 +232,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     ctx,
                     &mut region,
                     &sha256_chip,
-                    self.finility_merkle_branch
+                    self.finality_merkle_branch
                         .iter()
                         .map(|w| w.clone().into_witness()),
                     finalized_header.into(),
@@ -402,7 +402,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
                 .map(|v| v.is_attested)
                 .collect_vec(),
             execution_merkle_branch: state.execution_merkle_branch.clone(),
-            finility_merkle_branch: state.finality_merkle_branch.clone(),
+            finality_merkle_branch: state.finality_merkle_branch.clone(),
             beacon_state_root: state.beacon_state_root.clone(),
             execution_state_root: state.execution_state_root.clone(),
             dry_run: false,
@@ -411,6 +411,10 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
     }
 
     fn parametrize(k: usize) -> FlexGateConfigParams {
+        // let state: SyncState =
+        // serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
+        // let builder = RefCell::new(GateThreadBuilder::keygen());
+        // let circuit = SyncStepCircuit::<S, bn256::Fr>::new_from_state(builder, &state).dry_run();
         let circuit = SyncStepCircuit::<S, bn256::Fr>::default().dry_run();
 
         let mock_k = 17;
@@ -419,7 +423,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
         let mock_params = FlexGateConfigParams {
             strategy: GateStrategy::Vertical,
             k: mock_k,
-            num_advice_per_phase: vec![100],
+            num_advice_per_phase: vec![200],
             num_lookup_advice_per_phase: vec![20],
             num_fixed: 1,
         };
@@ -431,7 +435,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
         std::env::set_var("LOOKUP_BITS", 16.to_string());
 
         let _ = MockProver::<bn256::Fr>::run(mock_k as u32, &circuit, vec![]);
-        let params = circuit.builder.borrow().config(k, Some(0));
+        let params = circuit.builder.borrow().config(k, None);
         std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
         println!("parametrized with: {:?}", params);
         params
@@ -480,39 +484,21 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             last_hash
         }
 
-        let mut finilized_block_body = capella::BeaconBlockBody::<
-            MAX_PROPOSER_SLASHINGS,
-            MAX_VALIDATORS_PER_COMMITTEE,
-            MAX_ATTESTER_SLASHINGS,
-            MAX_ATTESTATIONS,
-            MAX_DEPOSITS,
-            MAX_VOLUNTARY_EXITS,
-            SYNC_COMMITTEE_SIZE,
-            BYTES_PER_LOGS_BLOOM,
-            MAX_EXTRA_DATA_BYTES,
-            MAX_BYTES_PER_TRANSACTION,
-            MAX_TRANSACTIONS_PER_PAYLOAD,
-            MAX_WITHDRAWALS_PER_PAYLOAD,
-            MAX_BLS_TO_EXECUTION_CHANGES,
-        >::default();
+        let execution_state_root = vec![0; 32];
+        let execution_merkle_branch = vec![vec![0; 32]; S::EXECUTION_STATE_ROOT_DEPTH];
+        let beacon_block_body_root =
+            compute_root(execution_state_root.clone(), &state_merkle_branch);
+
         let mut finalized_block = capella::BeaconBlockHeader {
-            body_root: finilized_block_body.hash_tree_root().unwrap(),
+            body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
             ..Default::default()
         };
         let finilized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
 
-        let finility_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
+        let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
         let beacon_state_root = compute_root(finilized_header, &state_merkle_branch);
-
-        let execution_state_root = vec![0; 32];
-        let execution_merkle_branch =
-            ssz_rs::generate_proof(&mut finilized_block_body, &[S::EXECUTION_STATE_ROOT_INDEX])
-                .unwrap()
-                .iter()
-                .map(|n| n.as_bytes().to_vec())
-                .collect_vec();
-
+       
         Self {
             builder,
             signature: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
@@ -527,7 +513,7 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
                 .collect_vec(),
             pariticipation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
             dry_run: false,
-            finility_merkle_branch,
+            finality_merkle_branch,
             beacon_state_root,
             execution_merkle_branch,
             execution_state_root,
@@ -618,7 +604,7 @@ mod tests {
     #[test]
     fn test_sync_proofgen() {
         let k = 20;
-        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k21.json");
+        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
 
         let params = gen_srs(k as u32);
 
