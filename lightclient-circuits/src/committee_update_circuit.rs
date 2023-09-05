@@ -13,7 +13,7 @@ use std::{
 use crate::{
     gadget::crypto::{
         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
-        HashToCurveChip, Sha256Chip, SpreadConfig,
+        HashToCurveChip, Sha256ChipWide, SpreadConfig,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
@@ -64,7 +64,7 @@ use ssz_rs::Merkleized;
 #[derive(Clone, Debug)]
 pub struct CommitteeUpdateCircuitConfig<F: Field> {
     range: RangeConfig<F>,
-    sha256_config: RefCell<SpreadConfig<F>>,
+    sha256_config: Sha256CircuitConfig<F>,
     challenges: Challenges<Value<F>>,
 }
 
@@ -75,6 +75,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     pubkeys_compressed: Vec<Vec<u8>>,
     pubkeys_y: Vec<Fq>,
     dry_run: bool,
+    sha256_offset: usize,
     _spec: PhantomData<S>,
 }
 
@@ -92,7 +93,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 g1_affine.y
             })
             .collect_vec();
-
+        let sha256_offset = 0;
         Self {
             builder,
             pubkeys_compressed: state
@@ -103,6 +104,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .collect_vec(),
             pubkeys_y,
             dry_run: false,
+            sha256_offset,
             _spec: PhantomData,
         }
     }
@@ -202,10 +204,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .map(|r| r.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
-
-        //ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
-        Ok(pubkeys_hashes.pop().unwrap())
-        // Ok(vec![])
+        ssz_merkleize_chunks(ctx, region, hasher, pubkeys_hashes)
     }
 }
 
@@ -219,10 +218,11 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
         let range = RangeCircuitBuilder::configure(meta);
-        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
+        let hash_table = Sha256Table::construct(meta);
+        let sha256_config = Sha256CircuitConfig::new::<S>(meta, hash_table);
         CommitteeUpdateCircuitConfig {
             range,
-            sha256_config: RefCell::new(sha256_config),
+            sha256_config,
             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
         }
     }
@@ -244,7 +244,13 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
-        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
+        let sha256_chip = Sha256ChipWide::new(
+            &config.sha256_config,
+            &range,
+            config.challenges.sha256_input(),
+            None,
+            self.sha256_offset,
+        );
 
         let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
         let mut builder = if self.dry_run {
@@ -279,7 +285,7 @@ impl<S: Spec, F: Field> Circuit<F> for CommitteeUpdateCircuit<S, F> {
                 let pubkey_points = self.decode_pubkeys(ctx, &fp_chip, compressed_encodings);
                 let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
 
-                let extra_assignments = Default::default(); //sha256_chip.take_extra_assignments();
+                let extra_assignments = sha256_chip.take_extra_assignments();
 
                 if self.dry_run {
                     return Ok(());
@@ -336,6 +342,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> 
                 .map(|v| v.pubkey)
                 .collect_vec(),
             pubkeys_y,
+            sha256_offset: 0,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -407,6 +414,7 @@ impl<S: Spec, F: Field> Default for CommitteeUpdateCircuit<S, F> {
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
             pubkeys_y,
+            sha256_offset: 0,
             dry_run: false,
             _spec: PhantomData,
         }
@@ -443,16 +451,21 @@ mod tests {
         dev::MockProver,
         halo2curves::bn256::Fr,
         plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
-        poly::kzg::commitment::ParamsKZG,
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
     };
     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
     use rand::rngs::OsRng;
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
+    use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk};
     use snark_verifier_sdk::{
-        halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
-        CircuitExt, SHPLONK,
+        gen_pk,
+        halo2::{
+            aggregation::{AggregationCircuit, AggregationConfigParams},
+            gen_proof_shplonk, gen_snark_shplonk,
+        },
+        CircuitExt, Snark, SHPLONK,
     };
 
     fn get_circuit_with_data(k: usize) -> CommitteeUpdateCircuit<Test, Fr> {
@@ -466,6 +479,13 @@ mod tests {
         CommitteeUpdateCircuit::new_from_state(builder, &state)
     }
 
+    fn gen_application_snark(k: usize, params: &ParamsKZG<bn256::Bn256>) -> Snark {
+        let circuit = get_circuit_with_data(k);
+
+        let pk = gen_pk(params, &circuit, Some(Path::new(&format!("app_{}.pk", k))));
+        gen_snark_shplonk(params, &pk, circuit, None::<String>)
+    }
+
     #[test]
     fn test_committee_update_circuit() {
         let k = 18;
@@ -473,13 +493,13 @@ mod tests {
 
         let timer = start_timer!(|| "committee_update circuit mock prover");
         let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
+        prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
     #[test]
     fn test_committee_update_proofgen() {
-        let k = 21;
+        let k = 18;
         let circuit = get_circuit_with_data(k);
 
         let params = gen_srs(k as u32);
@@ -488,7 +508,50 @@ mod tests {
 
         let public_inputs = circuit.instances();
         let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
+        let timer = start_timer!(|| "committee_update circuit full verifier");
+        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs));
+        end_timer!(timer);
+    }
 
-        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
+    #[test]
+    fn circuit_agg() {
+        let path = "./config/committee_update_aggregation.json";
+        let k = 17;
+        let circuit = get_circuit_with_data(k);
+        let params_app = gen_srs(k as u32);
+        let snark = gen_application_snark(k, &params_app);
+
+        let agg_config = AggregationConfigParams::from_path(path);
+
+        let params = gen_srs(agg_config.degree);
+        println!("agg_params k: {:?}", params.k());
+        let lookup_bits = params.k() as usize - 1;
+
+        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params, iter::once(snark.clone()));
+
+        let start0 = start_timer!(|| "Aggregation Circuit gen vk & pk");
+        let pk = gen_pk(&params, &agg_circuit, None);
+        end_timer!(start0);
+        let break_points = agg_circuit.break_points();
+        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+            CircuitBuilderStage::Prover,
+            Some(break_points.clone()),
+            lookup_bits,
+            &params,
+            iter::once(snark),
+        );
+
+        let num_instances = agg_circuit.num_instance();
+        let instances = agg_circuit.instances();
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        println!("proof size: {}", proof.len());
+        let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
+            &params,
+            pk.get_vk(),
+            num_instances,
+            None,
+        );
+        println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
     }
 }

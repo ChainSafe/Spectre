@@ -22,7 +22,7 @@ pub struct SyncStepArgs {
     #[clap(
         long,
         short,
-        default_value = "./ligthclient-circuits/config/sync_step.json"
+        default_value = "./lightclient-circuits/config/sync_step.json"
     )]
     pub config_path: PathBuf,
 
@@ -44,7 +44,7 @@ pub struct CommitteeUpdateArgs {
     #[clap(
         long,
         short,
-        default_value = "./ligthclient-circuits/config/committee_update.json"
+        default_value = "./lightclient-circuits/config/committee_update.json"
     )]
     pub config_path: PathBuf,
 

@@ -19,15 +19,17 @@ halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "commu
 poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
 
 # verifier SDK 
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
+    "halo2-pse"
 ] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
+    "halo2-pse",
 ] }
 
 # crypto
