@@ -47,7 +47,7 @@ use halo2_ecc::{
 use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
     dev::MockProver,
-    plonk::{Circuit, ConstraintSystem, Error, ProvingKey, Instance, Column},
+    plonk::{Circuit, Column, ConstraintSystem, Error, Instance, ProvingKey},
     poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
@@ -84,7 +84,7 @@ pub struct SyncStepCircuit<S: Spec, F: Field> {
     execution_merkle_branch: Vec<Vec<u8>>,
     beacon_state_root: Vec<u8>,
     finality_merkle_branch: Vec<Vec<u8>>,
-    pariticipation_bits: Vec<bool>,
+    participation_bits: Vec<bool>,
     dry_run: bool,
     _spec: PhantomData<S>,
 }
@@ -251,9 +251,52 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     self.execution_merkle_branch
                         .iter()
                         .map(|w| w.clone().into_witness()),
-                    execution_state_root,
+                    execution_state_root.clone(),
                     &finilized_block_body_root,
                     S::EXECUTION_STATE_ROOT_INDEX,
+                )?;
+
+                // Public Input Commitment
+                let attested_slot = self.attested_block.slot.into_witness();
+                let finalized_slot = self.finalized_block.slot.into_witness();
+                let h = sha256_chip.digest::<32>(
+                    HashInput::TwoToOne(attested_slot, finalized_slot),
+                    ctx,
+                    &mut region,
+                )?;
+
+                let finalized_header_root = self
+                    .finalized_block
+                    .clone()
+                    .hash_tree_root()
+                    .map_err(|e| Error::Synthesis)?
+                    .as_ref()
+                    .iter()
+                    .map(|&b| ctx.load_witness(F::from(b as u64)))
+                    .collect_vec();
+                let h = sha256_chip.digest::<128>(
+                    HashInput::TwoToOne(h.output_bytes.into(), finalized_header_root.into()),
+                    ctx,
+                    &mut region,
+                )?;
+
+                let participation = participation_sum;
+                let h = sha256_chip.digest::<128>(
+                    HashInput::TwoToOne(h.output_bytes.into(), iter::once(participation).into()),
+                    ctx,
+                    &mut region,
+                )?;
+
+                let h = sha256_chip.digest::<128>(
+                    HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
+                    ctx,
+                    &mut region,
+                )?;
+
+                let h = sha256_chip.digest::<128>(
+                    HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
+                    ctx,
+                    &mut region,
                 )?;
 
                 let extra_assignments = sha256_chip.take_extra_assignments();
@@ -312,10 +355,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         assert_eq!(self.pubkeys.len(), S::SYNC_COMMITTEE_SIZE);
 
-        for (&pk, is_attested) in itertools::multizip((
-            self.pubkeys.iter(),
-            self.pariticipation_bits.iter().copied(),
-        )) {
+        for (&pk, is_attested) in
+            itertools::multizip((self.pubkeys.iter(), self.participation_bits.iter().copied()))
+        {
             let participation_bit = ctx.load_witness(F::from(is_attested as u64));
             gate.assert_bit(ctx, participation_bit);
 
@@ -398,7 +440,7 @@ impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
                     .unwrap()
                 })
                 .collect_vec(),
-            pariticipation_bits: state
+            participation_bits: state
                 .sync_committee
                 .iter()
                 .cloned()
@@ -514,7 +556,7 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             pubkeys: iter::repeat(dummy_pk_point)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
-            pariticipation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
+            participation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
             dry_run: false,
             finality_merkle_branch,
             beacon_state_root,
