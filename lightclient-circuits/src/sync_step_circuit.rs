@@ -259,7 +259,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 // Public Input Commitment
                 let attested_slot = self.attested_block.slot.into_witness();
                 let finalized_slot = self.finalized_block.slot.into_witness();
-                let h = sha256_chip.digest::<32>(
+                let h = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(attested_slot, finalized_slot),
                     ctx,
                     &mut region,
@@ -281,19 +281,17 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 )?;
 
                 let participation = participation_sum;
-                let h = sha256_chip.digest::<128>(
+                let h = sha256_chip.digest::<64>(
                     HashInput::TwoToOne(h.output_bytes.into(), iter::once(participation).into()),
                     ctx,
                     &mut region,
                 )?;
-
                 let h = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
                     ctx,
                     &mut region,
                 )?;
-
-                let public_input_commitment = sha256_chip.digest::<128>(
+                let public_input_commitment = sha256_chip.digest::<64>(
                     HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
                     ctx,
                     &mut region,
@@ -602,7 +600,7 @@ mod tests {
             flex_gate::GateStrategy,
             range::RangeStrategy,
         },
-        utils::fs::gen_srs,
+        utils::{fs::gen_srs, ScalarField},
     };
     use halo2_proofs::{
         circuit::SimpleFloorPlanner,
@@ -622,6 +620,8 @@ mod tests {
         CircuitExt, SHPLONK,
     };
 
+    use poseidon_native::Poseidon as PoseidonNative;
+
     fn get_circuit_with_data(
         k: usize,
         config_path: &str,
@@ -630,6 +630,53 @@ mod tests {
         let state: SyncState =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
 
+        let attested_slot = state.attested_block.slot;
+        let finalized_slot = state.finalized_block.slot;
+        let h = sha2::Sha256::digest(&[]).to_vec();
+        // let h = sha256_chip.digest::<32>(
+        //     HashInput::TwoToOne(attested_slot, finalized_slot),
+        //     ctx,
+        //     &mut region,
+        // )?;
+
+        let finalized_header_root: [u8; 32] = state
+            .finalized_block
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_bytes()
+            .try_into()
+            .unwrap();
+        // let h = sha256_chip.digest::<128>(
+        //     HashInput::TwoToOne(h.output_bytes.into(), finalized_header_root.into()),
+        //     ctx,
+        //     &mut region,
+        // )?;
+
+        let participation = state
+            .sync_committee
+            .iter()
+            .cloned()
+            .map(|v| v.is_attested as u64)
+            .sum::<u64>();
+        // let h = sha256_chip.digest::<128>(
+        //     HashInput::TwoToOne(h.output_bytes.into(), iter::once(participation).into()),
+        //     ctx,
+        //     &mut region,
+        // )?;
+        let execution_state_root = state.execution_state_root.clone();
+
+        // let h = sha256_chip.digest::<128>(
+        //     HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
+        //     ctx,
+        //     &mut region,
+        // )?;
+
+        // let public_input_commitment = sha256_chip.digest::<128>(
+        //     HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
+        //     ctx,
+        //     &mut region,
+        // )?;
         let config = if let Ok(f) = fs::read(config_path) {
             serde_json::from_slice(&f).expect("read config file")
         } else {
@@ -653,7 +700,7 @@ mod tests {
         let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20.json");
 
         let timer = start_timer!(|| "sync circuit mock prover");
-        let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
+        let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![vec![Fr::zero(); 32]]).unwrap();
         prover.assert_satisfied();
         end_timer!(timer);
     }
