@@ -34,20 +34,22 @@ use halo2_proofs::{
     plonk::{Assigned, Error},
 };
 
+use self::builder::ShaContexts;
+use self::spread::SpreadChip;
+
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 
-pub trait HashChip<F: Field> {
+pub trait HashInstructions<F: Field> {
     const BLOCK_SIZE: usize;
     const DIGEST_SIZE: usize;
 
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
+        ctx: ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
-        ctx: &mut Context<F>,
-        ctx_vanila: &mut Context<F>,
     ) -> Result<AssignedHashResult<F>, Error>;
 
-    fn take_extra_assignments(&self) -> KeygenAssignments<F>;
+    // fn take_extra_assignments(&self) -> KeygenAssignments<F>;
 
     fn range(&self) -> &RangeChip<F>;
 }
@@ -59,24 +61,23 @@ pub struct AssignedHashResult<F: Field> {
     pub output_bytes: [AssignedValue<F>; 32],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: Field> {
-    spread_config: RefCell<SpreadConfig<F>>,
     range: &'a RangeChip<F>,
-    extra_assignments: RefCell<KeygenAssignments<F>>,
+    spread: SpreadChip<'a, F>,
+    // extra_assignments: RefCell<KeygenAssignments<F>>,
 }
 
-impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
+impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
     const BLOCK_SIZE: usize = 64;
     const DIGEST_SIZE: usize = 32;
 
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
+        (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
-        ctx: &mut Context<F>,
-        ctx_spread: &mut Context<F>,
     ) -> Result<AssignedHashResult<F>, Error> {
-        let assigned_input = input.into_assigned(ctx);
+        let assigned_input = input.into_assigned(ctx_gate);
 
         // let mut extra_assignment = self.extra_assignments.borrow_mut();
         // let assigned_advices = &mut extra_assignment.assigned_advices;
@@ -104,7 +105,7 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         //     remaining_byte_size,
         //     one_round_size * (max_round - num_round)
         // );
-        let mut assign_byte = |byte: u8| ctx.load_witness(F::from(byte as u64));
+        let mut assign_byte = |byte: u8| ctx_gate.load_witness(F::from(byte as u64));
 
         assigned_input_bytes.push(assign_byte(0x80));
 
@@ -129,14 +130,14 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
         //     range.range_check(ctx, assigned, 8);
         // }
 
-        let assigned_num_round = ctx.load_witness(F::from(num_round as u64));
+        let assigned_num_round = ctx_gate.load_witness(F::from(num_round as u64));
 
         // compute an initial state from the precomputed_input.
         let mut last_state = INIT_STATE;
 
         let mut assigned_last_state_vec = vec![last_state
             .iter()
-            .map(|state| ctx.load_witness(F::from(*state as u64)))
+            .map(|state| ctx_gate.load_witness(F::from(*state as u64)))
             .collect_vec()];
 
         let mut num_processed_input = 0;
@@ -144,9 +145,9 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
             let assigned_input_word_at_round =
                 &assigned_input_bytes[num_processed_input..(num_processed_input + one_round_size)];
             let new_assigned_hs_out = sha256_compression(
-                ctx,
-                range,
-                &mut self.spread_config.borrow_mut(),
+                (ctx_gate, ctx_dense, ctx_spread),
+                &self.spread,
+                // &mut self.spread_config.borrow_mut(),
                 assigned_input_word_at_round,
                 assigned_last_state_vec.last().unwrap(),
             )?;
@@ -155,16 +156,17 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
             num_processed_input += one_round_size;
         }
 
-        let zero = ctx.load_zero();
+        let zero = ctx_gate.load_zero();
         let mut output_h_out = vec![zero; 8];
         for (n_round, assigned_state) in assigned_last_state_vec.into_iter().enumerate() {
             let selector = gate.is_equal(
-                ctx,
+                ctx_gate,
                 QuantumCell::Constant(F::from(n_round as u64)),
                 assigned_num_round,
             );
             for i in 0..8 {
-                output_h_out[i] = gate.select(ctx, assigned_state[i], output_h_out[i], selector)
+                output_h_out[i] =
+                    gate.select(ctx_gate, assigned_state[i], output_h_out[i], selector)
             }
         }
         let output_digest_bytes = output_h_out
@@ -173,21 +175,21 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
                 let be_bytes = assigned_word.value().get_lower_32().to_be_bytes().to_vec();
                 let assigned_bytes = (0..4)
                     .map(|idx| {
-                        let assigned = ctx.load_witness(F::from(be_bytes[idx] as u64));
-                        range.range_check(ctx, assigned, 8);
+                        let assigned = ctx_gate.load_witness(F::from(be_bytes[idx] as u64));
+                        range.range_check(ctx_gate, assigned, 8);
                         assigned
                     })
                     .collect_vec();
-                let mut sum = ctx.load_zero();
+                let mut sum = ctx_gate.load_zero();
                 for (idx, assigned_byte) in assigned_bytes.iter().copied().enumerate() {
                     sum = gate.mul_add(
-                        ctx,
+                        ctx_gate,
                         assigned_byte,
                         QuantumCell::Constant(F::from(1u64 << (24 - 8 * idx))),
                         sum,
                     );
                 }
-                ctx.constrain_equal(&assigned_word, &sum);
+                ctx_gate.constrain_equal(&assigned_word, &sum);
                 assigned_bytes
             })
             .collect_vec()
@@ -206,9 +208,9 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
     /// **Warning**: In case `extra_assignments` wasn't default at the time of chip initialization,
     /// use `set_extra_assignments` to restore at the start of region declartion.
     /// Otherwise at the second synthesis run, the setted `extra_assignments` will be erased.
-    fn take_extra_assignments(&self) -> KeygenAssignments<F> {
-        self.extra_assignments.take()
-    }
+    // fn take_extra_assignments(&self) -> KeygenAssignments<F> {
+    //     self.extra_assignments.take()
+    // }
 
     fn range(&self) -> &RangeChip<F> {
         self.range
@@ -217,20 +219,20 @@ impl<'a, F: Field> HashChip<F> for Sha256Chip<'a, F> {
 
 impl<'a, F: Field> Sha256Chip<'a, F> {
     pub fn new(
-        spread_config: RefCell<SpreadConfig<F>>,
         range: &'a RangeChip<F>,
-        extra_assignments: Option<KeygenAssignments<F>>,
+        spread: SpreadChip<'a, F>,
+        // extra_assignments: Option<KeygenAssignments<F>>,
     ) -> Self {
         Self {
-            spread_config,
             range,
-            extra_assignments: RefCell::new(extra_assignments.unwrap_or_default()),
+            spread,
+            // extra_assignments: RefCell::new(extra_assignments.unwrap_or_default()),
         }
     }
 
-    fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>) {
-        self.extra_assignments = RefCell::new(extra_assignments);
-    }
+    // fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>) {
+    //     self.extra_assignments = RefCell::new(extra_assignments);
+    // }
 
     fn assigned_cell2value(
         &self,
@@ -281,6 +283,7 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
+    use crate::builder::ShaCircuitBuilder;
     use crate::table::Sha256Table;
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
@@ -406,52 +409,42 @@ mod test {
     //     }
     // }
 
-    impl<F: Field> TestCircuit<F> {
-        const MAX_BYTE_SIZE: usize = 128;
-        const NUM_ADVICE: usize = 700;
-        const NUM_FIXED: usize = 1;
-        const NUM_LOOKUP_ADVICE: usize = 55;
-        const LOOKUP_BITS: usize = 8;
-        const K: usize = 18;
-    }
+    // impl<F: Field> TestCircuit<F> {
+    //     const MAX_BYTE_SIZE: usize = 128;
+    //     const NUM_ADVICE: usize = 700;
+    //     const NUM_FIXED: usize = 1;
+    //     const NUM_LOOKUP_ADVICE: usize = 55;
+    //     const LOOKUP_BITS: usize = 8;
+    //     const K: usize = 18;
+    // }
 
-    fn set_constraints<F: Field>(builder: &ShaThreadBuilder<F>) {
-        let (ctx, ctx_spread) = builder.main();
+    fn get_circuit<F: Field>(k: usize, mut builder: SpreadThreadBuilder<F>, input_vector: &[Vec<u8>]) -> ShaCircuitBuilder<F> {
+        let range = RangeChip::default(8);
+        let spread = SpreadChip::new(&range);
 
-        let spread_config = SpreadConfig::<F>::configure(meta, 8, 2);
-        let range = RangeConfig::configure(
-            meta,
-            RangeStrategy::Vertical,
-            &[Self::NUM_ADVICE],
-            &[Self::NUM_LOOKUP_ADVICE],
-            Self::NUM_FIXED,
-            Self::LOOKUP_BITS,
-            Self::K,
-        );
+        let sha256 = Sha256Chip::new(&range, spread);
+        let (ctx_gate, ctx_dense, ctx_spread) = builder.main();
 
-        let sha256 = Sha256Chip::new(RefCell::new(config.spread_config), &self.range, None);
-        let mut result = sha256.digest::<128>(self.test_input.clone(), ctx, &mut ctx_spread);
+        for input in input_vector {
+            let _ = sha256.digest::<128>((ctx_gate, ctx_dense, ctx_spread), input.as_slice().into_witness()).unwrap();
+        }
+
+        builder.config(k, Some(0));
+        ShaCircuitBuilder::new(builder, range, None)
     }
 
     #[test]
     fn test_sha256_chip_constant_size() {
-        let k = TestCircuit::<Fr>::K as u32;
+        let k = 15;
 
         let test_input = vec![0u8; 64];
-        let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-        println!("output: {:?}", test_output);
-        let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-        let builder = GateThreadBuilder::new(false);
-        let circuit = TestCircuit::<Fr> {
-            builder: RefCell::new(builder),
-            range,
-            test_input: test_input.into_witness(),
-            test_output,
-            _f: PhantomData,
-        };
+      
+        let builder = SpreadThreadBuilder::<Fr>::new(false);
+        
+        let circuit = get_circuit(k, builder, &[test_input]);
+        let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();
 
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
+        prover.assert_satisfied_par();
     }
 
     // #[test]

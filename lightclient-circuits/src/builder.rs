@@ -4,14 +4,14 @@ use eth_types::Field;
 use halo2_base::{
     gates::{
         builder::{FlexGateConfigParams, KeygenAssignments, ThreadBreakPoints},
-        range::RangeConfig,
+        range::{RangeConfig, RangeStrategy},
     },
     safe_types::RangeChip,
     SKIP_FIRST_PASS,
 };
 use halo2_proofs::{
     circuit::{self, Layouter, SimpleFloorPlanner},
-    plonk::{Circuit, ConstraintSystem},
+    plonk::{Circuit, ConstraintSystem, Error},
 };
 
 use crate::{
@@ -19,6 +19,7 @@ use crate::{
     sha256_circuit::Sha256CircuitConfig,
 };
 
+#[derive(Debug, Clone)]
 pub struct SHAConfig<F: Field> {
     pub spread: SpreadConfig<F>,
     pub range: RangeConfig<F>,
@@ -29,34 +30,32 @@ impl<F: Field> SHAConfig<F> {
         let degree = params.k;
         let mut range = RangeConfig::configure(
             meta,
-            params.strategy,
+            RangeStrategy::Vertical,
             &params.num_advice_per_phase,
             &params.num_lookup_advice_per_phase,
             params.num_fixed,
-            params.lookup_bits.unwrap_or(8),
-            degree as usize,
+            params.k - 1,
+            degree,
         );
-        set_var("KECCAK_DEGREE", degree.to_string());
-        set_var("KECCAK_ROWS", params.keccak_rows_per_round.to_string());
         let spread = SpreadConfig::configure(meta, range.lookup_bits(), 2); // TODO configure num_advice_columns
         set_var("UNUSABLE_ROWS", meta.minimum_rows().to_string());
 
-        range.range.gate.max_rows = (1 << degree) - meta.minimum_rows();
+        range.gate.max_rows = (1 << degree) - meta.minimum_rows();
         Self { range, spread }
     }
 }
 
-pub struct ShaCircuitBuilder<'a, F: Field> {
+pub struct ShaCircuitBuilder<F: Field> {
     pub builder: RefCell<SpreadThreadBuilder<F>>,
     pub break_points: RefCell<ThreadBreakPoints>,
-    pub sha256: Sha256Chip<'a, F>,
+    // pub sha256: RefCell<Sha256Chip<'a, F>>,
     pub range: RangeChip<F>,
 }
 
-impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
+impl<F: Field> ShaCircuitBuilder<F> {
     pub fn new(
         builder: SpreadThreadBuilder<F>,
-        sha256: Sha256Chip<F>,
+        // sha256: RefCell<Sha256Chip<'a, F>>,
         range: RangeChip<F>,
         break_points: Option<ThreadBreakPoints>,
         // synthesize_phase1: FnPhase1,
@@ -64,7 +63,7 @@ impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
         Self {
             builder: RefCell::new(builder),
             break_points: RefCell::new(break_points.unwrap_or_default()),
-            sha256,
+            // sha256,
             range,
             // synthesize_phase1: RefCell::new(Some(synthesize_phase1)),
         }
@@ -83,14 +82,9 @@ impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
         layouter: &mut impl Layouter<F>,
     ) -> HashMap<(usize, usize), (circuit::Cell, usize)> {
         config
-            .rlp
             .range
             .load_lookup_table(layouter)
             .expect("load range lookup table");
-        config
-            .keccak
-            .load_aux_tables(layouter)
-            .expect("load keccak lookup tables");
 
         let mut first_pass = SKIP_FIRST_PASS;
         let witness_gen_only = self.builder.borrow().witness_gen_only();
@@ -107,7 +101,7 @@ impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
                     }
                     if !witness_gen_only {
                         let mut builder = self.builder.borrow().clone();
-                        let mut sha256 = self.sha256.borrow().clone();
+                        // let mut sha256 = self.sha256.borrow().clone();
 
                         // Do any custom synthesize functions in SecondPhase
                         let mut assignments = KeygenAssignments {
@@ -116,14 +110,14 @@ impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
                         // let rlp_chip = RlpChip::new(&self.range, Some(&rlc_chip));
                         // f(&mut builder, rlp_chip, keccak_rlcs);
                         assignments = builder.assign_all(
-                            &config.rlp.range.gate,
-                            &config.rlp.range.lookup_advice,
-                            &config.rlp.range.q_lookup,
-                            &config.rlp.rlc,
+                            &config.range.gate,
+                            &config.range.lookup_advice,
+                            &config.range.q_lookup,
+                            &config.spread,
                             &mut region,
                             assignments,
                         );
-                        *self.break_points.borrow_mut() = assignments.break_points;
+                        *self.break_points.borrow_mut() = assignments.break_points[0].clone();
                         assigned_advices = assignments.assigned_advices;
                     } else {
                         unimplemented!()
@@ -136,7 +130,7 @@ impl<'a, F: Field> ShaCircuitBuilder<'a, F> {
     }
 }
 
-impl<'a, F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuilder<'a, F> {
+impl<F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuilder<F> {
     type Config = SHAConfig<F>;
     type FloorPlanner = SimpleFloorPlanner;
 
@@ -144,10 +138,10 @@ impl<'a, F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuil
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> Sha256CircuitConfig<F> {
-        let params: EthConfigParams =
-            serde_json::from_str(&std::env::var("ETH_CONFIG_PARAMS").unwrap()).unwrap();
-        MPTConfig::configure(meta, params)
+    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F> {
+        let params: FlexGateConfigParams =
+            serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        SHAConfig::configure(meta, params)
     }
 
     fn synthesize(
@@ -155,7 +149,7 @@ impl<'a, F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuil
         config: Self::Config,
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-        self.two_phase_synthesize(&config, &mut layouter);
+        self.sub_synthesize(&config, &mut layouter);
         Ok(())
     }
 }
