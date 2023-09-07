@@ -318,7 +318,7 @@
 
 //     for witness in proof.into_iter() {
 //         computed_hash = hasher
-//             .digest::<128>(
+//             .digest::<64>(
 //                 if gindex % 2 == 0 {
 //                     HashInput::TwoToOne(computed_hash, witness)
 //                 } else {

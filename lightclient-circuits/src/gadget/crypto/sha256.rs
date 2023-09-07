@@ -76,11 +76,20 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
-        (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+        (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
         strict: bool,
     ) -> Result<AssignedHashResult<F>, Error> {
-        let assigned_input = input.into_assigned(ctx_gate);
+        let max_processed_bytes = {
+            let mut max_bytes = MAX_INPUT_SIZE + 9;
+            let remainder = max_bytes % 64;
+            if remainder != 0 {
+                max_bytes += 64 - remainder;
+            }
+            max_bytes
+        };
+
+        let assigned_input = input.into_assigned(ctx_base);
 
         let mut assigned_input_bytes = assigned_input.to_vec();
         let input_byte_size = assigned_input_bytes.len();
@@ -89,8 +98,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         let range = self.range;
         let gate = &range.gate;
 
-        assert!(assigned_input_bytes.len() <= MAX_INPUT_SIZE);
-
         let one_round_size = Self::BLOCK_SIZE;
 
         let num_round = if input_byte_size_with_9 % one_round_size == 0 {
@@ -98,7 +105,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         } else {
             input_byte_size_with_9 / one_round_size + 1
         };
-        let max_round = MAX_INPUT_SIZE / one_round_size;
+        let max_round = max_processed_bytes / one_round_size;
         let padded_size = one_round_size * num_round;
         let zero_padding_byte_size = padded_size - input_byte_size_with_9;
         // let remaining_byte_size = MAX_INPUT_SIZE - padded_size;
@@ -106,7 +113,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         //     remaining_byte_size,
         //     one_round_size * (max_round - num_round)
         // );
-        let mut assign_byte = |byte: u8| ctx_gate.load_witness(F::from(byte as u64));
+        let mut assign_byte = |byte: u8| ctx_base.load_witness(F::from(byte as u64));
 
         assigned_input_bytes.push(assign_byte(0x80));
 
@@ -125,30 +132,29 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         // for _ in 0..remaining_byte_size {
         //     assigned_input_bytes.push(assign_byte(0u8));
         // }
-        assert_eq!(assigned_input_bytes.len(), MAX_INPUT_SIZE);
 
         if strict {
             for &assigned in assigned_input_bytes.iter() {
-                range.range_check(ctx_gate, assigned, 8);
+                range.range_check(ctx_base, assigned, 8);
             }
         }
 
-        let assigned_num_round = ctx_gate.load_witness(F::from(num_round as u64));
+        let assigned_num_round = ctx_base.load_witness(F::from(num_round as u64));
 
         // compute an initial state from the precomputed_input.
         let mut last_state = INIT_STATE;
 
         let mut assigned_last_state_vec = vec![last_state
             .iter()
-            .map(|state| ctx_gate.load_witness(F::from(*state as u64)))
+            .map(|state| ctx_base.load_witness(F::from(*state as u64)))
             .collect_vec()];
 
         let mut num_processed_input = 0;
-        while num_processed_input < MAX_INPUT_SIZE {
+        while num_processed_input < max_processed_bytes {
             let assigned_input_word_at_round =
                 &assigned_input_bytes[num_processed_input..(num_processed_input + one_round_size)];
             let new_assigned_hs_out = sha256_compression(
-                (ctx_gate, ctx_dense, ctx_spread),
+                (ctx_base, ctx_dense, ctx_spread),
                 &self.spread,
                 assigned_input_word_at_round,
                 assigned_last_state_vec.last().unwrap(),
@@ -158,17 +164,17 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             num_processed_input += one_round_size;
         }
 
-        let zero = ctx_gate.load_zero();
+        let zero = ctx_base.load_zero();
         let mut output_h_out = vec![zero; 8];
         for (n_round, assigned_state) in assigned_last_state_vec.into_iter().enumerate() {
             let selector = gate.is_equal(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Constant(F::from(n_round as u64)),
                 assigned_num_round,
             );
             for i in 0..8 {
                 output_h_out[i] =
-                    gate.select(ctx_gate, assigned_state[i], output_h_out[i], selector)
+                    gate.select(ctx_base, assigned_state[i], output_h_out[i], selector)
             }
         }
         let output_digest_bytes = output_h_out
@@ -177,21 +183,21 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
                 let be_bytes = assigned_word.value().get_lower_32().to_be_bytes().to_vec();
                 let assigned_bytes = (0..4)
                     .map(|idx| {
-                        let assigned = ctx_gate.load_witness(F::from(be_bytes[idx] as u64));
-                        range.range_check(ctx_gate, assigned, 8);
+                        let assigned = ctx_base.load_witness(F::from(be_bytes[idx] as u64));
+                        range.range_check(ctx_base, assigned, 8);
                         assigned
                     })
                     .collect_vec();
-                let mut sum = ctx_gate.load_zero();
+                let mut sum = ctx_base.load_zero();
                 for (idx, assigned_byte) in assigned_bytes.iter().copied().enumerate() {
                     sum = gate.mul_add(
-                        ctx_gate,
+                        ctx_base,
                         assigned_byte,
                         QuantumCell::Constant(F::from(1u64 << (24 - 8 * idx))),
                         sum,
                     );
                 }
-                ctx_gate.constrain_equal(&assigned_word, &sum);
+                ctx_base.constrain_equal(&assigned_word, &sum);
                 assigned_bytes
             })
             .collect_vec()
@@ -199,20 +205,11 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             .unwrap();
 
         let result = AssignedHashResult {
-            // input_len: assigned_input_byte_size,
             input_bytes: assigned_input_bytes,
             output_bytes: output_digest_bytes,
         };
         Ok(result)
     }
-
-    /// Takes internal `KeygenAssignments` instance, leaving `Default::default()` in its place.
-    /// **Warning**: In case `extra_assignments` wasn't default at the time of chip initialization,
-    /// use `set_extra_assignments` to restore at the start of region declartion.
-    /// Otherwise at the second synthesis run, the setted `extra_assignments` will be erased.
-    // fn take_extra_assignments(&self) -> KeygenAssignments<F> {
-    //     self.extra_assignments.take()
-    // }
 
     fn range(&self) -> &RangeChip<F> {
         self.range
@@ -220,62 +217,8 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 }
 
 impl<'a, F: Field> Sha256Chip<'a, F> {
-    pub fn new(
-        range: &'a RangeChip<F>,
-        spread: SpreadChip<'a, F>,
-        // extra_assignments: Option<KeygenAssignments<F>>,
-    ) -> Self {
-        Self {
-            range,
-            spread,
-            // extra_assignments: RefCell::new(extra_assignments.unwrap_or_default()),
-        }
-    }
-
-    // fn set_extra_assignments(&mut self, extra_assignments: KeygenAssignments<F>) {
-    //     self.extra_assignments = RefCell::new(extra_assignments);
-    // }
-
-    fn assigned_cell2value(
-        &self,
-        ctx: &mut Context<F>,
-        assigned_cell: &AssignedValueCell<F>,
-    ) -> AssignedValue<F> {
-        ctx.load_witness(assigned_cell.value())
-    }
-
-    fn upload_assigned_cells(
-        &self,
-        assigned_cells: impl IntoIterator<Item = &'a AssignedValueCell<F>>,
-        offset: &mut usize,
-        assigned_advices: &mut HashMap<(usize, usize), (circuit::Cell, usize)>,
-        witness_gen_only: bool,
-    ) -> Vec<AssignedValue<F>> {
-        let assigned_values = assigned_cells
-            .into_iter()
-            .enumerate()
-            .map(|(i, assigned_cell)| {
-                let value = Assigned::Trivial(assigned_cell.value);
-
-                let aval = AssignedValue {
-                    value,
-                    cell: (!witness_gen_only).then_some(ContextCell {
-                        context_id: SHA256_CONTEXT_ID,
-                        offset: *offset + i,
-                    }),
-                };
-                if !witness_gen_only {
-                    // we set row_offset = usize::MAX because you should never be directly using lookup on such a cell
-                    assigned_advices.insert(
-                        (SHA256_CONTEXT_ID, *offset + i),
-                        (assigned_cell.cell(), usize::MAX),
-                    );
-                }
-                aval
-            })
-            .collect_vec();
-        *offset += assigned_values.len();
-        assigned_values
+    pub fn new(range: &'a RangeChip<F>, spread: SpreadChip<'a, F>) -> Self {
+        Self { range, spread }
     }
 }
 
@@ -323,14 +266,14 @@ mod test {
         let spread = SpreadChip::new(&range);
 
         let sha256 = Sha256Chip::new(&range, spread);
-        let (ctx_gate, ctx_dense, ctx_spread) = builder.main();
+        let (ctx_base, ctx_dense, ctx_spread) = builder.main();
 
         for input in input_vector {
             let _ = sha256
-                .digest::<128>(
-                    (ctx_gate, ctx_dense, ctx_spread),
+                .digest::<64>(
+                    (ctx_base, ctx_dense, ctx_spread),
                     input.as_slice().into_witness(),
-                    false
+                    false,
                 )
                 .unwrap();
         }

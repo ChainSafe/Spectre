@@ -53,7 +53,7 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
 pub fn sha256_compression<'a, 'b: 'a, F: Field>(
-    (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
     pre_state_words: &[AssignedValue<F>],
@@ -67,10 +67,10 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     let mut message_u32s = assigned_input_bytes
         .chunks(4)
         .map(|bytes| {
-            let mut sum = ctx_gate.load_zero();
+            let mut sum = ctx_base.load_zero();
             for idx in 0..4 {
                 sum = gate.mul_add(
-                    ctx_gate,
+                    ctx_base,
                     QuantumCell::Existing(bytes[3 - idx]),
                     QuantumCell::Constant(F::from(1u64 << (8 * idx))),
                     QuantumCell::Existing(sum),
@@ -88,28 +88,28 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     //     .collect_vec();
     let mut message_spreads = message_u32s
         .iter()
-        .map(|dense| state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, dense))
+        .map(|dense| state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, dense))
         .collect::<Result<Vec<SpreadU32<F>>, Error>>()?;
     for idx in 16..64 {
         // let w_2_spread = state_to_spread_u32(ctx, range, ctx_spread, &message_u32s[idx - 2])?;
         // let w_15_spread = state_to_spread_u32(ctx, range, ctx_spread, &message_u32s[idx - 15])?;
         let term1 = sigma_lower1(
-            (ctx_gate, ctx_dense, ctx_spread),
+            (ctx_base, ctx_dense, ctx_spread),
             spread_chip,
             &message_spreads[idx - 2],
         )?;
         let term3 = sigma_lower0(
-            (ctx_gate, ctx_dense, ctx_spread),
+            (ctx_base, ctx_dense, ctx_spread),
             spread_chip,
             &message_spreads[idx - 15],
         )?;
         // let term1_u32 = bits2u32(ctx, gate, &term1_bits);
         // let term3_u32 = bits2u32(ctx, gate, &term3_bits);
         let new_w = {
-            let mut sum = gate.add(ctx_gate, term1, message_u32s[idx - 7]);
-            sum = gate.add(ctx_gate, sum, term3);
-            sum = gate.add(ctx_gate, sum, message_u32s[idx - 16]);
-            mod_u32(ctx_gate, range, &sum)
+            let mut sum = gate.add(ctx_base, term1, message_u32s[idx - 7]);
+            sum = gate.add(ctx_base, sum, term3);
+            sum = gate.add(ctx_base, sum, message_u32s[idx - 16]);
+            mod_u32(ctx_base, range, &sum)
         };
         // println!(
         //     "idx {} term1 {:?}, term3 {:?}, new_w {:?}",
@@ -120,7 +120,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         // );
         message_u32s.push(new_w);
         let new_w_spread =
-            state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &new_w)?;
+            state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &new_w)?;
         message_spreads.push(new_w_spread);
         // if idx <= 61 {
         //     let new_w_bits = gate.num_to_bits(ctx, &new_w, 32);
@@ -139,13 +139,13 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         pre_state_words[6],
         pre_state_words[7],
     );
-    let mut a_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &a)?;
-    let mut b_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &b)?;
-    let mut c_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &c)?;
+    let mut a_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &a)?;
+    let mut b_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &b)?;
+    let mut c_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &c)?;
     // let mut d_spread = state_to_spread_u32(ctx, range, ctx_spread, &d)?;
-    let mut e_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &e)?;
-    let mut f_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &f)?;
-    let mut g_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &g)?;
+    let mut e_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &e)?;
+    let mut f_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &f)?;
+    let mut g_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &g)?;
     // let mut h_spread = state_to_spread_u32(ctx, range, ctx_spread, &h)?;
     // let mut a_bits = gate.num_to_bits(ctx, &a, 32);
     // let mut b_bits = gate.num_to_bits(ctx, &b, 32);
@@ -153,17 +153,17 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     // let mut e_bits = gate.num_to_bits(ctx, &e, 32);
     // let mut f_bits = gate.num_to_bits(ctx, &f, 32);
     // let mut g_bits = gate.num_to_bits(ctx, &g, 32);
-    let mut t1 = ctx_gate.load_zero();
-    let mut t2 = ctx_gate.load_zero();
+    let mut t1 = ctx_base.load_zero();
+    let mut t2 = ctx_base.load_zero();
     for idx in 0..64 {
         t1 = {
             // let e_spread = state_to_spread_u32(ctx, range, ctx_spread, &e)?;
             // let f_spread = state_to_spread_u32(ctx, range, ctx_spread, &f)?;
             // let g_spread = state_to_spread_u32(ctx, range, ctx_spread, &g)?;
             let sigma_term =
-                sigma_upper1((ctx_gate, ctx_dense, ctx_spread), spread_chip, &e_spread)?;
+                sigma_upper1((ctx_base, ctx_dense, ctx_spread), spread_chip, &e_spread)?;
             let ch_term = ch(
-                (ctx_gate, ctx_dense, ctx_spread),
+                (ctx_base, ctx_dense, ctx_spread),
                 spread_chip,
                 &e_spread,
                 &f_spread,
@@ -175,43 +175,43 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             //     sigma_term.value(),
             //     ch_term.value()
             // );
-            let add1 = gate.add(ctx_gate, h, sigma_term);
+            let add1 = gate.add(ctx_base, h, sigma_term);
             let add2 = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(add1),
                 QuantumCell::Existing(ch_term),
             );
             let add3 = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(add2),
                 QuantumCell::Constant(F::from(ROUND_CONSTANTS[idx] as u64)),
             );
             let add4 = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(add3),
                 QuantumCell::Existing(message_u32s[idx]),
             );
-            mod_u32(ctx_gate, range, &add4)
+            mod_u32(ctx_base, range, &add4)
         };
         t2 = {
             // let a_spread = state_to_spread_u32(ctx, range, ctx_spread, &a)?;
             // let b_spread = state_to_spread_u32(ctx, range, ctx_spread, &b)?;
             // let c_spread = state_to_spread_u32(ctx, range, ctx_spread, &c)?;
             let sigma_term =
-                sigma_upper0((ctx_gate, ctx_dense, ctx_spread), spread_chip, &a_spread)?;
+                sigma_upper0((ctx_base, ctx_dense, ctx_spread), spread_chip, &a_spread)?;
             let maj_term = maj(
-                (ctx_gate, ctx_dense, ctx_spread),
+                (ctx_base, ctx_dense, ctx_spread),
                 spread_chip,
                 &a_spread,
                 &b_spread,
                 &c_spread,
             )?;
             let add = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(sigma_term),
                 QuantumCell::Existing(maj_term),
             );
-            mod_u32(ctx_gate, range, &add)
+            mod_u32(ctx_base, range, &add)
         };
         // println!("idx {}, t1 {:?}, t2 {:?}", idx, t1.value(), t2.value());
         h = g;
@@ -222,13 +222,13 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         f_spread = e_spread;
         e = {
             let add = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(d),
                 QuantumCell::Existing(t1),
             );
-            mod_u32(ctx_gate, range, &add)
+            mod_u32(ctx_base, range, &add)
         };
-        e_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &e)?;
+        e_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &e)?;
         d = c;
         // d_spread = c_spread;
         c = b;
@@ -237,13 +237,13 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         b_spread = a_spread;
         a = {
             let add = gate.add(
-                ctx_gate,
+                ctx_base,
                 QuantumCell::Existing(t1),
                 QuantumCell::Existing(t2),
             );
-            mod_u32(ctx_gate, range, &add)
+            mod_u32(ctx_base, range, &add)
         };
-        a_spread = state_to_spread_u32((ctx_gate, ctx_dense, ctx_spread), spread_chip, &a)?;
+        a_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &a)?;
     }
     let new_states = vec![a, b, c, d, e, f, g, h];
     let next_state_words = new_states
@@ -251,38 +251,38 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         .copied()
         .zip(pre_state_words.iter().copied())
         .map(|(x, y)| {
-            let add = gate.add(ctx_gate, QuantumCell::Existing(x), QuantumCell::Existing(y));
+            let add = gate.add(ctx_base, QuantumCell::Existing(x), QuantumCell::Existing(y));
             // println!(
             //     "pre {:?} new {:?} add {:?}",
             //     y.value(),
             //     x.value(),
             //     add.value()
             // );
-            mod_u32(ctx_gate, range, &add)
+            mod_u32(ctx_base, range, &add)
         })
         .collect_vec();
     Ok(next_state_words)
 }
 
 fn state_to_spread_u32<'a, F: Field>(
-    (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
 ) -> Result<SpreadU32<'a, F>, Error> {
     let gate = spread_chip.range().gate();
     let lo = F::from((x.value().get_lower_32() & ((1 << 16) - 1)) as u64);
     let hi = F::from((x.value().get_lower_32() >> 16) as u64);
-    let assigned_lo = ctx_gate.load_witness(lo);
-    let assigned_hi = ctx_gate.load_witness(hi);
+    let assigned_lo = ctx_base.load_witness(lo);
+    let assigned_hi = ctx_base.load_witness(hi);
     let composed = gate.mul_add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(assigned_hi),
         QuantumCell::Constant(F::from(1u64 << 16)),
         QuantumCell::Existing(assigned_lo),
     );
-    ctx_gate.constrain_equal(x, &composed);
-    let lo_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &assigned_lo)?;
-    let hi_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &assigned_hi)?;
+    ctx_base.constrain_equal(x, &composed);
+    let lo_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &assigned_lo)?;
+    let hi_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &assigned_hi)?;
     Ok((lo_spread, hi_spread))
 }
 
@@ -308,7 +308,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 }
 
 fn ch<'a, 'b: 'a, F: Field>(
-    (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -320,92 +320,92 @@ fn ch<'a, 'b: 'a, F: Field>(
     let range = spread_chip.range();
     let gate = range.gate();
     let p_lo = gate.add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(x_lo),
         QuantumCell::Existing(y_lo),
     );
     let p_hi = gate.add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(x_hi),
         QuantumCell::Existing(y_hi),
     );
     const MASK_EVEN_32: u64 = 0x55555555;
-    let x_neg_lo = gate.neg(ctx_gate, QuantumCell::Existing(x_lo));
-    let x_neg_hi = gate.neg(ctx_gate, QuantumCell::Existing(x_hi));
+    let x_neg_lo = gate.neg(ctx_base, QuantumCell::Existing(x_lo));
+    let x_neg_hi = gate.neg(ctx_base, QuantumCell::Existing(x_hi));
     let q_lo = three_add(
-        ctx_gate,
+        ctx_base,
         gate,
         QuantumCell::Constant(F::from(MASK_EVEN_32)),
         QuantumCell::Existing(x_neg_lo),
         QuantumCell::Existing(z_lo),
     );
     let q_hi = three_add(
-        ctx_gate,
+        ctx_base,
         gate,
         QuantumCell::Constant(F::from(MASK_EVEN_32)),
         QuantumCell::Existing(x_neg_hi),
         QuantumCell::Existing(z_hi),
     );
-    let (p_lo_even, p_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &p_lo)?;
-    let (p_hi_even, p_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &p_hi)?;
-    let (q_lo_even, q_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &q_lo)?;
-    let (q_hi_even, q_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &q_hi)?;
+    let (p_lo_even, p_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &p_lo)?;
+    let (p_hi_even, p_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &p_hi)?;
+    let (q_lo_even, q_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &q_lo)?;
+    let (q_hi_even, q_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &q_hi)?;
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &p_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &p_lo_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_lo_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_lo_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &p_lo);
+        ctx_base.constrain_equal(&sum, &p_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &p_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &p_hi_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_hi_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_hi_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &p_hi);
+        ctx_base.constrain_equal(&sum, &p_hi);
     }
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &q_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &q_lo_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_lo_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_lo_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &q_lo);
+        ctx_base.constrain_equal(&sum, &q_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &q_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &q_hi_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_hi_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_hi_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &q_hi);
+        ctx_base.constrain_equal(&sum, &q_hi);
     }
     let out_lo = gate.add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(p_lo_odd),
         QuantumCell::Existing(q_lo_odd),
     );
     let out_hi = gate.add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(p_hi_odd),
         QuantumCell::Existing(q_hi_odd),
     );
     let out = gate.mul_add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(out_hi),
         QuantumCell::Constant(F::from(1u64 << 16)),
         QuantumCell::Existing(out_lo),
@@ -414,7 +414,7 @@ fn ch<'a, 'b: 'a, F: Field>(
 }
 
 fn maj<'a, 'b: 'a, F: Field>(
-    (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -426,45 +426,45 @@ fn maj<'a, 'b: 'a, F: Field>(
     let range = spread_chip.range();
     let gate = range.gate();
     let m_lo = three_add(
-        ctx_gate,
+        ctx_base,
         range.gate(),
         QuantumCell::Existing(x_lo),
         QuantumCell::Existing(y_lo),
         QuantumCell::Existing(z_lo),
     );
     let m_hi = three_add(
-        ctx_gate,
+        ctx_base,
         range.gate(),
         QuantumCell::Existing(x_hi),
         QuantumCell::Existing(y_hi),
         QuantumCell::Existing(z_hi),
     );
-    let (m_lo_even, m_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &m_lo)?;
-    let (m_hi_even, m_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &m_hi)?;
+    let (m_lo_even, m_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &m_lo)?;
+    let (m_hi_even, m_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &m_hi)?;
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &m_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &m_lo_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_lo_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_lo_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &m_lo);
+        ctx_base.constrain_equal(&sum, &m_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &m_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &m_hi_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_hi_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_hi_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &m_hi);
+        ctx_base.constrain_equal(&sum, &m_hi);
     }
     let m = gate.mul_add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(m_hi_odd),
         QuantumCell::Constant(F::from(1u64 << 16)),
         QuantumCell::Existing(m_lo_odd),
@@ -585,7 +585,7 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
 
 #[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
-    (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
+    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
     starts: &[usize; 4],
@@ -611,7 +611,7 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
 
         // let assigned_spread = spread_config.spread(ctx, range, &assigned_dense)?;
         // let result: Result<AssignedValue<F>, Error> = Ok(assigned_spread);
-        ctx_gate.load_witness(fe_val)
+        ctx_base.load_witness(fe_val)
     };
     let assigned_a = assign_bits(&bits_val, starts[0], ends[0], paddings[0]);
     let assigned_b = assign_bits(&bits_val, starts[1], ends[1], paddings[1]);
@@ -620,30 +620,30 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
     {
         let mut sum = assigned_a;
         sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             assigned_b,
             QuantumCell::Constant(F::from(1 << (2 * starts[1]))),
             sum,
         );
         sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             assigned_c,
             QuantumCell::Constant(F::from(1 << (2 * starts[2]))),
             sum,
         );
         sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             assigned_d,
             QuantumCell::Constant(F::from(1 << (2 * starts[3]))),
             sum,
         );
         let x_composed = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             x_spread.1,
             QuantumCell::Constant(F::from(1 << 32)),
             x_spread.0,
         );
-        ctx_gate.constrain_equal(&x_composed, &sum);
+        ctx_base.constrain_equal(&x_composed, &sum);
     };
 
     let r_spread = {
@@ -651,63 +651,63 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
         // let b_coeff = F::from(1u64 << 0 + 1u64 << 42 + 1u64 << 24);
         // let c_coeff = F::from(1u64 << 22 + 1u64 << 0 + 1u64 << 46);
         // let d_coeff = F::from(1u64 << 40 + 1u64 << 18 + 1u64 << 0);
-        let mut sum = ctx_gate.load_zero();
+        let mut sum = ctx_base.load_zero();
         // let assigned_a_spread = spread_config.spread(ctx, range, &assigned_a)?;
         // let assigned_b_spread = spread_config.spread(ctx, range, &assigned_b)?;
         // let assigned_c_spread = spread_config.spread(ctx, range, &assigned_c)?;
         // let assigned_d_spread = spread_config.spread(ctx, range, &assigned_d)?;
-        sum = gate.mul_add(ctx_gate, QuantumCell::Constant(coeffs[0]), assigned_a, sum);
-        sum = gate.mul_add(ctx_gate, QuantumCell::Constant(coeffs[1]), assigned_b, sum);
-        sum = gate.mul_add(ctx_gate, QuantumCell::Constant(coeffs[2]), assigned_c, sum);
-        sum = gate.mul_add(ctx_gate, QuantumCell::Constant(coeffs[3]), assigned_d, sum);
+        sum = gate.mul_add(ctx_base, QuantumCell::Constant(coeffs[0]), assigned_a, sum);
+        sum = gate.mul_add(ctx_base, QuantumCell::Constant(coeffs[1]), assigned_b, sum);
+        sum = gate.mul_add(ctx_base, QuantumCell::Constant(coeffs[2]), assigned_c, sum);
+        sum = gate.mul_add(ctx_base, QuantumCell::Constant(coeffs[3]), assigned_d, sum);
         sum
     };
     let (r_lo, r_hi) = {
         let lo = F::from(r_spread.value().get_lower_32() as u64);
         let hi = F::from(((r_spread.value().get_lower_128() >> 32) & ((1u128 << 32) - 1)) as u64);
-        let assigned_lo = ctx_gate.load_witness(lo);
-        let assigned_hi = ctx_gate.load_witness(hi);
-        range.range_check(ctx_gate, assigned_lo, 32);
-        range.range_check(ctx_gate, assigned_hi, 32);
+        let assigned_lo = ctx_base.load_witness(lo);
+        let assigned_hi = ctx_base.load_witness(hi);
+        range.range_check(ctx_base, assigned_lo, 32);
+        range.range_check(ctx_base, assigned_hi, 32);
         let composed = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Existing(assigned_hi),
             QuantumCell::Constant(F::from(1u64 << 32)),
             QuantumCell::Existing(assigned_lo),
         );
-        ctx_gate.constrain_equal(&r_spread, &composed);
+        ctx_base.constrain_equal(&r_spread, &composed);
         (assigned_lo, assigned_hi)
     };
 
-    let (r_lo_even, r_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &r_lo)?;
-    let (r_hi_even, r_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_gate, &r_hi)?;
+    let (r_lo_even, r_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &r_lo)?;
+    let (r_hi_even, r_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &r_hi)?;
 
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &r_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &r_lo_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_lo_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_lo_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &r_lo);
+        ctx_base.constrain_equal(&sum, &r_lo);
     }
 
     {
-        let even_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &r_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_gate, ctx_dense, ctx_spread), &r_hi_odd)?;
+        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_hi_even)?;
+        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_hi_odd)?;
         let sum = gate.mul_add(
-            ctx_gate,
+            ctx_base,
             QuantumCell::Constant(F::from(2)),
             QuantumCell::Existing(odd_spread),
             QuantumCell::Existing(even_spread),
         );
-        ctx_gate.constrain_equal(&sum, &r_hi);
+        ctx_base.constrain_equal(&sum, &r_hi);
     }
 
     let r = gate.mul_add(
-        ctx_gate,
+        ctx_base,
         QuantumCell::Existing(r_hi_even),
         QuantumCell::Constant(F::from(1 << 16)),
         QuantumCell::Existing(r_lo_even),

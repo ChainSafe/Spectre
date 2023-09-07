@@ -201,7 +201,7 @@
 //                 };
 
 //                 let signing_root = sha256_chip
-//                     .digest::<128>(
+//                     .digest::<64>(
 //                         HashInput::TwoToOne(
 //                             attested_header.into(),
 //                             self.domain.to_vec().into_witness(),
