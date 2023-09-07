@@ -4,7 +4,7 @@
 // use itertools::Itertools;
 
 // use crate::{
-//     gadget::crypto::HashChip,
+//     gadget::crypto::{HashInstructions, ShaContexts, ShaThreadBuilder},
 //     util::{IntoConstant, IntoWitness},
 //     witness::{HashInput, HashInputChunk},
 // };
@@ -266,9 +266,9 @@
 // ];
 
 // pub fn ssz_merkleize_chunks<F: Field>(
-//     ctx: &mut Context<F>,
-//     region: &mut Region<'_, F>,
-//     hasher: &impl HashChip<F>,
+//     ctx_base: &mut Context<F>,
+//     ctx_sha: &mut ShaContexts<F>,
+//     hasher: &impl HashInstructions<F>,
 //     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 // ) -> Result<Vec<AssignedValue<F>>, Error> {
 //     let mut chunks = chunks.into_iter().collect_vec();
@@ -289,7 +289,7 @@
 //             .take(3)
 //             .map(|(left, right)| {
 //                 hasher
-//                     .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
+//                     .digest::<64>(ctx_base, ctx_sha, HashInput::TwoToOne(left, right), false)
 //                     .map(|res| res.output_bytes.into())
 //             })
 //             .collect::<Result<Vec<_>, _>>()?;
@@ -306,26 +306,27 @@
 // }
 
 // pub fn verify_merkle_proof<F: Field>(
-//     ctx: &mut Context<F>,
-//     region: &mut Region<'_, F>,
-//     hasher: &impl HashChip<F>,
+//     thread_pool: &ShaThreadBuilder<F>,
+//     hasher: &impl HashInstructions<F>,
 //     proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 //     leaf: HashInputChunk<QuantumCell<F>>,
 //     root: &[AssignedValue<F>],
 //     mut gindex: usize,
 // ) -> Result<(), Error> {
+//     let (sha)
 //     let mut computed_hash = leaf;
 
 //     for witness in proof.into_iter() {
 //         computed_hash = hasher
 //             .digest::<64>(
+//                 ctx_base,
+//                 ctx_sha,
 //                 if gindex % 2 == 0 {
 //                     HashInput::TwoToOne(computed_hash, witness)
 //                 } else {
 //                     HashInput::TwoToOne(witness, computed_hash)
 //                 },
-//                 ctx,
-//                 region,
+//                 false,
 //             )?
 //             .output_bytes
 //             .into();
@@ -338,7 +339,7 @@
 //     });
 
 //     computed_root.zip(root.iter()).for_each(|(a, b)| {
-//         ctx.constrain_equal(&a, b);
+//         ctx_base.constrain_equal(&a, b);
 //     });
 
 //     Ok(())

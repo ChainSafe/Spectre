@@ -29,7 +29,7 @@ use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
-use super::ShaContexts;
+use super::{ShaContexts, ShaThreadBuilder};
 use super::{
     sha256::HashInstructions,
     util::{fp2_sgn0, i2osp, strxor},
@@ -63,8 +63,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
 
     pub fn hash_to_curve<C: HashCurveExt>(
         &self,
-        ctx_base: &mut Context<F>,
-        ctx_sha: &mut ShaContexts<F>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         fp_chip: &FpChip<F, C::Fp>,
         msg: HashInput<QuantumCell<F>>,
         cache: &mut HashToCurveCache<F>,
@@ -72,8 +71,8 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
     where
         C::Fq: FieldExtConstructor<C::Fp, 2>,
     {
-        let u = self.hash_to_field::<C>(ctx_base, ctx_sha, fp_chip, msg, cache)?;
-        let p = self.map_to_curve::<C>(ctx_base, fp_chip, u, cache)?;
+        let u = self.hash_to_field::<C>(thread_pool, fp_chip, msg, cache)?;
+        let p = self.map_to_curve::<C>(thread_pool.main(), fp_chip, u, cache)?;
         Ok(p)
     }
 
@@ -87,8 +86,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
     /// - https://github.com/succinctlabs/telepathy-circuits/blob/d5c7771/circuits/hash_to_field.circom#L11
     fn hash_to_field<C: HashCurveExt>(
         &self,
-        ctx_base: &mut Context<F>,
-        ctx_sha: &mut ShaContexts<F>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         fp_chip: &FpChip<F, C::Fp>,
         msg: HashInput<QuantumCell<F>>,
         cache: &mut HashToCurveCache<F>,
@@ -99,15 +97,14 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         let safe_types = SafeTypeChip::new(range);
 
         // constants
-        let zero = ctx_base.load_zero();
-        let one = ctx_base.load_constant(F::one());
+        let zero = thread_pool.main().load_zero();
+        let one = thread_pool.main().load_constant(F::one());
 
-        let assigned_msg = msg.into_assigned(ctx_base).to_vec();
+        let assigned_msg = msg.into_assigned(thread_pool.main()).to_vec();
 
         let len_in_bytes = 2 * G2_EXT_DEGREE * L;
         let extended_msg = Self::expand_message_xmd(
-            ctx_base,
-            ctx_sha,
+            thread_pool,
             self.hash_chip,
             assigned_msg,
             len_in_bytes,
@@ -117,12 +114,12 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         let limb_bases = cache.binary_bases.get_or_insert_with(|| {
             C::limb_bytes_bases()
                 .into_iter()
-                .map(|base| ctx_base.load_constant(base))
+                .map(|base| thread_pool.main().load_constant(base))
                 .collect()
         });
 
         // 2^256
-        let two_pow_256 = fp_chip.load_constant_uint(ctx_base, BigUint::from(2u8).pow(256));
+        let two_pow_256 = fp_chip.load_constant_uint(thread_pool.main(), BigUint::from(2u8).pow(256));
         let fq_bytes = C::BYTES_COMPRESSED / 2;
 
         let mut fst = true;
@@ -141,7 +138,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
-                                ctx_base,
+                                thread_pool.main(),
                             );
 
                             buf[rem..].copy_from_slice(&tv[32..]);
@@ -149,12 +146,12 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
-                                ctx_base,
+                                thread_pool.main(),
                             );
 
-                            let lo_2_256 = fp_chip.mul_no_carry(ctx_base, lo, two_pow_256.clone());
-                            let lo_2_356_hi = fp_chip.add_no_carry(ctx_base, lo_2_256, hi);
-                            fp_chip.carry_mod(ctx_base, lo_2_356_hi)
+                            let lo_2_256 = fp_chip.mul_no_carry(thread_pool.main(), lo, two_pow_256.clone());
+                            let lo_2_356_hi = fp_chip.add_no_carry(thread_pool.main(), lo_2_256, hi);
+                            fp_chip.carry_mod(thread_pool.main(), lo_2_356_hi)
                         })
                         .collect_vec(),
                 )
@@ -200,8 +197,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
     /// - https://github.com/paulmillr/noble-curves/blob/bf70ba9/src/abstract/hash-to-curve.ts#L63
     /// - https://github.com/succinctlabs/telepathy-circuits/blob/d5c7771/circuits/hash_to_field.circom#L139
     fn expand_message_xmd(
-        ctx_base: &mut Context<F>,
-        ctx_sha: &mut ShaContexts<F>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         hash_chip: &HC,
         msg: Vec<AssignedValue<F>>,
         len_in_bytes: usize,
@@ -212,17 +208,17 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
 
         // constants
         // const MAX_INPUT_SIZE: usize = 192;
-        let zero = ctx_base.load_zero();
-        let one = ctx_base.load_constant(F::one());
+        let zero = thread_pool.main().load_zero();
+        let one = thread_pool.main().load_constant(F::one());
 
         // assign DST bytes & cache them
-        let dst_len = ctx_base.load_constant(F::from(S::DST.len() as u64));
+        let dst_len = thread_pool.main().load_constant(F::from(S::DST.len() as u64));
         let dst_prime = cache
             .dst_with_len
             .get_or_insert_with(|| {
                 S::DST
                     .iter()
-                    .map(|&b| ctx_base.load_constant(F::from(b as u64)))
+                    .map(|&b| thread_pool.main().load_constant(F::from(b as u64)))
                     .chain(iter::once(dst_len))
                     .collect()
             })
@@ -230,7 +226,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
 
         // padding and length strings
         let z_pad = i2osp(0, HC::BLOCK_SIZE, |b| zero); // TODO: cache these
-        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| ctx_base.load_constant(b));
+        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| thread_pool.main().load_constant(b));
 
         // compute blocks
         let ell = len_in_bytes.div_ceil(HC::DIGEST_SIZE);
@@ -243,15 +239,14 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
             .chain(dst_prime.clone());
 
         let b_0 = hash_chip
-            .digest::<143>(ctx_base, ctx_sha, msg_prime.into(), false)?
+            .digest::<143>(thread_pool, msg_prime.into(), false)?
             .output_bytes;
 
         b_vals.insert(
             0,
             hash_chip
                 .digest::<77>(
-                    ctx_base,
-                    ctx_sha,
+                    thread_pool,
                     b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
@@ -262,16 +257,16 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         );
 
         for i in 1..ell {
-            let preimg = strxor(b_0, b_vals[i - 1], gate, ctx_base)
+            let preimg = strxor(b_0, b_vals[i - 1], gate, thread_pool.main())
                 .into_iter()
-                .chain(iter::once(ctx_base.load_constant(F::from(i as u64 + 1))))
+                .chain(iter::once(thread_pool.main().load_constant(F::from(i as u64 + 1))))
                 .chain(dst_prime.clone())
                 .into();
 
             b_vals.insert(
                 i,
                 hash_chip
-                    .digest::<77>(ctx_base, ctx_sha, preimg, false)?
+                    .digest::<77>(thread_pool, preimg, false)?
                     .output_bytes,
             );
         }
@@ -658,7 +653,6 @@ mod test {
         let spread = SpreadChip::new(&range);
 
         let sha256 = Sha256Chip::new(&range, spread);
-        let (ctx_base, mut ctx_sha) = builder.sha_contexts_pair();
 
         let h2c_chip = HashToCurveChip::<Test, F, _>::new(&sha256);
         let fp_chip = halo2_ecc::bls12_381::FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
@@ -666,8 +660,7 @@ mod test {
         for input in input_vector {
             let mut cache = HashToCurveCache::<F>::default();
             let hp = h2c_chip.hash_to_curve::<G2>(
-                ctx_base,
-                &mut ctx_sha,
+                &mut builder,
                 &fp_chip,
                 input.clone().into_witness(),
                 &mut cache,

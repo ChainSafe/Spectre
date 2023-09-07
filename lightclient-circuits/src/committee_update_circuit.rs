@@ -12,7 +12,7 @@
 
 // use crate::{
 //     gadget::crypto::{
-//         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
+//         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, HashToCurveCache,
 //         HashToCurveChip, Sha256ChipWide, SpreadConfig,
 //     },
 //     poseidon::{g1_array_poseidon, poseidon_sponge},
@@ -187,7 +187,7 @@
 //     fn sync_committee_root_ssz<'a, I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
 //         ctx: &mut Context<F>,
 //         region: &mut Region<'_, F>,
-//         hasher: &'a impl HashChip<F>,
+//         hasher: &'a impl HashInstructions<F>,
 //         compressed_encodings: I,
 //     ) -> Result<Vec<AssignedValue<F>>, Error> {
 //         let mut pubkeys_hashes = compressed_encodings

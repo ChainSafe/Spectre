@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
 use super::{compression::SpreadU32, util::*};
 use eth_types::Field;
@@ -132,32 +133,31 @@ impl<'a, F: Field> SpreadChip<'a, F> {
     }
     pub fn spread(
         &self,
-        ctx_base: &mut Context<F>,
-        ctx_sha: &mut ShaContexts<F>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         dense: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
         let limb_bits = self.range.lookup_bits();
         let num_limbs = 16 / limb_bits;
         let limbs = decompose(dense.value(), num_limbs, limb_bits);
-        let assigned_limbs = ctx_base.assign_witnesses(limbs);
+        let assigned_limbs = thread_pool.main().assign_witnesses(limbs);
         {
-            let mut limbs_sum = ctx_base.load_zero();
+            let mut limbs_sum = thread_pool.main().load_zero();
             for (idx, limb) in assigned_limbs.iter().copied().enumerate() {
                 limbs_sum = gate.mul_add(
-                    ctx_base,
+                    thread_pool.main(),
                     QuantumCell::Existing(limb),
                     QuantumCell::Constant(F::from(1 << (limb_bits * idx))),
                     QuantumCell::Existing(limbs_sum),
                 );
             }
-            ctx_base.constrain_equal(&limbs_sum, dense);
+            thread_pool.main().constrain_equal(&limbs_sum, dense);
         }
-        let mut assigned_spread = ctx_base.load_zero();
+        let mut assigned_spread = thread_pool.main().load_zero();
         for (idx, limb) in assigned_limbs.iter().enumerate() {
-            let spread_limb = self.spread_limb(ctx_base, ctx_sha, limb)?;
+            let spread_limb = self.spread_limb(thread_pool, limb)?;
             assigned_spread = gate.mul_add(
-                ctx_base,
+                thread_pool.main(),
                 QuantumCell::Existing(spread_limb),
                 QuantumCell::Constant(F::from(1 << (2 * limb_bits * idx))),
                 QuantumCell::Existing(assigned_spread),
@@ -186,10 +186,10 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
     fn spread_limb(
         &self,
-        ctx_base: &mut Context<F>,
-        (ctx_dense, ctx_spread): &mut ShaContexts<F>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         limb: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
+        let (ctx_base, (ctx_dense, ctx_spread)) = thread_pool.sha_contexts_pair();
         let assigned_dense = ctx_dense.load_witness(*limb.value());
         ctx_base.constrain_equal(&assigned_dense, limb);
         let spread_value: F = {
@@ -203,7 +203,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
         let assigned_spread = ctx_base.load_witness(spread_value);
         let assigned_spread_vanila = ctx_spread.load_witness(*assigned_spread.value());
-        ctx_base.constrain_equal(&assigned_spread_vanila, &assigned_spread);
+        thread_pool.main().constrain_equal(&assigned_spread_vanila, &assigned_spread);
 
         Ok(assigned_spread)
     }

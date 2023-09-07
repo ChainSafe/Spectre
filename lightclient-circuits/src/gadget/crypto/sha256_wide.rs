@@ -24,7 +24,7 @@
 //     plonk::{Assigned, Error},
 // };
 
-// use super::{AssignedHashResult, HashChip};
+// use super::{AssignedHashResult, HashInstructions};
 
 // const SHA256_CONTEXT_ID: usize = usize::MAX;
 
@@ -37,7 +37,7 @@
 //     sha256_circuit_offset: RefCell<usize>,
 // }
 
-// impl<'a, F: Field> HashChip<F> for Sha256ChipWide<'a, F> {
+// impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
 //     const BLOCK_SIZE: usize = 64;
 //     const DIGEST_SIZE: usize = 32;
 
