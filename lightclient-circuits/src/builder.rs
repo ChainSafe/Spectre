@@ -15,7 +15,7 @@ use halo2_proofs::{
 };
 
 use crate::{
-    gadget::crypto::{Sha256Chip, SpreadConfig, SpreadThreadBuilder},
+    gadget::crypto::{Sha256Chip, SpreadConfig, ShaThreadBuilder},
     sha256_circuit::Sha256CircuitConfig,
 };
 
@@ -46,14 +46,14 @@ impl<F: Field> SHAConfig<F> {
 }
 
 pub struct ShaCircuitBuilder<F: Field> {
-    pub builder: RefCell<SpreadThreadBuilder<F>>,
+    pub builder: RefCell<ShaThreadBuilder<F>>,
     pub break_points: RefCell<ThreadBreakPoints>,
     pub range: RangeChip<F>,
 }
 
 impl<F: Field> ShaCircuitBuilder<F> {
     pub fn new(
-        builder: SpreadThreadBuilder<F>,
+        builder: ShaThreadBuilder<F>,
         range: RangeChip<F>,
         break_points: Option<ThreadBreakPoints>,
         // synthesize_phase1: FnPhase1,

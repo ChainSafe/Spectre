@@ -53,7 +53,8 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
 pub fn sha256_compression<'a, 'b: 'a, F: Field>(
-    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
     pre_state_words: &[AssignedValue<F>],
@@ -88,21 +89,13 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     //     .collect_vec();
     let mut message_spreads = message_u32s
         .iter()
-        .map(|dense| state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, dense))
+        .map(|dense| state_to_spread_u32(ctx_base, ctx_sha, spread_chip, dense))
         .collect::<Result<Vec<SpreadU32<F>>, Error>>()?;
     for idx in 16..64 {
         // let w_2_spread = state_to_spread_u32(ctx, range, ctx_spread, &message_u32s[idx - 2])?;
         // let w_15_spread = state_to_spread_u32(ctx, range, ctx_spread, &message_u32s[idx - 15])?;
-        let term1 = sigma_lower1(
-            (ctx_base, ctx_dense, ctx_spread),
-            spread_chip,
-            &message_spreads[idx - 2],
-        )?;
-        let term3 = sigma_lower0(
-            (ctx_base, ctx_dense, ctx_spread),
-            spread_chip,
-            &message_spreads[idx - 15],
-        )?;
+        let term1 = sigma_lower1(ctx_base, ctx_sha, spread_chip, &message_spreads[idx - 2])?;
+        let term3 = sigma_lower0(ctx_base, ctx_sha, spread_chip, &message_spreads[idx - 15])?;
         // let term1_u32 = bits2u32(ctx, gate, &term1_bits);
         // let term3_u32 = bits2u32(ctx, gate, &term3_bits);
         let new_w = {
@@ -119,8 +112,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         //     new_w.value()
         // );
         message_u32s.push(new_w);
-        let new_w_spread =
-            state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &new_w)?;
+        let new_w_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &new_w)?;
         message_spreads.push(new_w_spread);
         // if idx <= 61 {
         //     let new_w_bits = gate.num_to_bits(ctx, &new_w, 32);
@@ -139,13 +131,13 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         pre_state_words[6],
         pre_state_words[7],
     );
-    let mut a_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &a)?;
-    let mut b_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &b)?;
-    let mut c_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &c)?;
+    let mut a_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &a)?;
+    let mut b_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &b)?;
+    let mut c_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &c)?;
     // let mut d_spread = state_to_spread_u32(ctx, range, ctx_spread, &d)?;
-    let mut e_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &e)?;
-    let mut f_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &f)?;
-    let mut g_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &g)?;
+    let mut e_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &e)?;
+    let mut f_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &f)?;
+    let mut g_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &g)?;
     // let mut h_spread = state_to_spread_u32(ctx, range, ctx_spread, &h)?;
     // let mut a_bits = gate.num_to_bits(ctx, &a, 32);
     // let mut b_bits = gate.num_to_bits(ctx, &b, 32);
@@ -160,10 +152,10 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             // let e_spread = state_to_spread_u32(ctx, range, ctx_spread, &e)?;
             // let f_spread = state_to_spread_u32(ctx, range, ctx_spread, &f)?;
             // let g_spread = state_to_spread_u32(ctx, range, ctx_spread, &g)?;
-            let sigma_term =
-                sigma_upper1((ctx_base, ctx_dense, ctx_spread), spread_chip, &e_spread)?;
+            let sigma_term = sigma_upper1(ctx_base, ctx_sha, spread_chip, &e_spread)?;
             let ch_term = ch(
-                (ctx_base, ctx_dense, ctx_spread),
+                ctx_base,
+                ctx_sha,
                 spread_chip,
                 &e_spread,
                 &f_spread,
@@ -197,10 +189,10 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             // let a_spread = state_to_spread_u32(ctx, range, ctx_spread, &a)?;
             // let b_spread = state_to_spread_u32(ctx, range, ctx_spread, &b)?;
             // let c_spread = state_to_spread_u32(ctx, range, ctx_spread, &c)?;
-            let sigma_term =
-                sigma_upper0((ctx_base, ctx_dense, ctx_spread), spread_chip, &a_spread)?;
+            let sigma_term = sigma_upper0(ctx_base, ctx_sha, spread_chip, &a_spread)?;
             let maj_term = maj(
-                (ctx_base, ctx_dense, ctx_spread),
+                ctx_base,
+                ctx_sha,
                 spread_chip,
                 &a_spread,
                 &b_spread,
@@ -228,7 +220,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             );
             mod_u32(ctx_base, range, &add)
         };
-        e_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &e)?;
+        e_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &e)?;
         d = c;
         // d_spread = c_spread;
         c = b;
@@ -243,7 +235,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             );
             mod_u32(ctx_base, range, &add)
         };
-        a_spread = state_to_spread_u32((ctx_base, ctx_dense, ctx_spread), spread_chip, &a)?;
+        a_spread = state_to_spread_u32(ctx_base, ctx_sha, spread_chip, &a)?;
     }
     let new_states = vec![a, b, c, d, e, f, g, h];
     let next_state_words = new_states
@@ -265,7 +257,8 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
 }
 
 fn state_to_spread_u32<'a, F: Field>(
-    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
 ) -> Result<SpreadU32<'a, F>, Error> {
@@ -281,8 +274,8 @@ fn state_to_spread_u32<'a, F: Field>(
         QuantumCell::Existing(assigned_lo),
     );
     ctx_base.constrain_equal(x, &composed);
-    let lo_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &assigned_lo)?;
-    let hi_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &assigned_hi)?;
+    let lo_spread = spread_chip.spread(ctx_base, ctx_sha, &assigned_lo)?;
+    let hi_spread = spread_chip.spread(ctx_base, ctx_sha, &assigned_hi)?;
     Ok((lo_spread, hi_spread))
 }
 
@@ -308,7 +301,8 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 }
 
 fn ch<'a, 'b: 'a, F: Field>(
-    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -351,8 +345,8 @@ fn ch<'a, 'b: 'a, F: Field>(
     let (q_lo_even, q_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &q_lo)?;
     let (q_hi_even, q_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &q_hi)?;
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_lo_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &p_lo_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &p_lo_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -362,8 +356,8 @@ fn ch<'a, 'b: 'a, F: Field>(
         ctx_base.constrain_equal(&sum, &p_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &p_hi_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &p_hi_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &p_hi_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -373,8 +367,8 @@ fn ch<'a, 'b: 'a, F: Field>(
         ctx_base.constrain_equal(&sum, &p_hi);
     }
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_lo_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &q_lo_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &q_lo_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -384,8 +378,8 @@ fn ch<'a, 'b: 'a, F: Field>(
         ctx_base.constrain_equal(&sum, &q_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &q_hi_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &q_hi_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &q_hi_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -414,7 +408,8 @@ fn ch<'a, 'b: 'a, F: Field>(
 }
 
 fn maj<'a, 'b: 'a, F: Field>(
-    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -442,8 +437,8 @@ fn maj<'a, 'b: 'a, F: Field>(
     let (m_lo_even, m_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &m_lo)?;
     let (m_hi_even, m_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &m_hi)?;
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_lo_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &m_lo_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &m_lo_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -453,8 +448,8 @@ fn maj<'a, 'b: 'a, F: Field>(
         ctx_base.constrain_equal(&sum, &m_lo);
     }
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &m_hi_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &m_hi_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &m_hi_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -484,7 +479,8 @@ fn three_add<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper0<'a, 'b: 'a, F: Field>(
-    ctx: ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -498,7 +494,8 @@ fn sigma_upper0<'a, 'b: 'a, F: Field>(
         F::from((1u64 << 40) + (1u64 << 18) + (1u64 << 0)),
     ];
     sigma_generic(
-        ctx,
+        ctx_base,
+        ctx_sha,
         spread_chip,
         x_spread,
         &STARTS,
@@ -509,7 +506,8 @@ fn sigma_upper0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper1<'a, 'b: 'a, F: Field>(
-    ctx: ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -523,7 +521,8 @@ fn sigma_upper1<'a, 'b: 'a, F: Field>(
         F::from((1u64 << 38) + (1u64 << 28) + (1u64 << 0)),
     ];
     sigma_generic(
-        ctx,
+        ctx_base,
+        ctx_sha,
         spread_chip,
         x_spread,
         &STARTS,
@@ -534,7 +533,8 @@ fn sigma_upper1<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower0<'a, 'b: 'a, F: Field>(
-    ctx: ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -548,7 +548,8 @@ fn sigma_lower0<'a, 'b: 'a, F: Field>(
         F::from((1u64 << 30) + (1u64 << 22) + (1u64 << 0)),
     ];
     sigma_generic(
-        ctx,
+        ctx_base,
+        ctx_sha,
         spread_chip,
         x_spread,
         &STARTS,
@@ -559,7 +560,8 @@ fn sigma_lower0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower1<'a, 'b: 'a, F: Field>(
-    ctx: ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -573,7 +575,8 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
         F::from((1u64 << 18) + (1u64 << 4) + (1u64 << 0)),
     ];
     sigma_generic(
-        ctx,
+        ctx_base,
+        ctx_sha,
         spread_chip,
         x_spread,
         &STARTS,
@@ -585,7 +588,8 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
 
 #[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
-    (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+    ctx_base: &mut Context<F>,
+    ctx_sha: &mut ShaContexts<F>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
     starts: &[usize; 4],
@@ -683,8 +687,8 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
     let (r_hi_even, r_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(ctx_base, &r_hi)?;
 
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_lo_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_lo_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &r_lo_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &r_lo_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),
@@ -695,8 +699,8 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
     }
 
     {
-        let even_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_hi_even)?;
-        let odd_spread = spread_chip.spread((ctx_base, ctx_dense, ctx_spread), &r_hi_odd)?;
+        let even_spread = spread_chip.spread(ctx_base, ctx_sha, &r_hi_even)?;
+        let odd_spread = spread_chip.spread(ctx_base, ctx_sha, &r_hi_odd)?;
         let sum = gate.mul_add(
             ctx_base,
             QuantumCell::Constant(F::from(2)),

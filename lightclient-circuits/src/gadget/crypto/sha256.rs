@@ -3,7 +3,7 @@ mod compression;
 mod spread;
 mod util;
 
-pub use builder::SpreadThreadBuilder;
+pub use builder::ShaThreadBuilder;
 pub use spread::SpreadConfig;
 
 use eth_types::Field;
@@ -34,8 +34,8 @@ use halo2_proofs::{
     plonk::{Assigned, Error},
 };
 
-use self::builder::ShaContexts;
-use self::spread::SpreadChip;
+pub use self::builder::ShaContexts;
+pub use self::spread::SpreadChip;
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 
@@ -48,7 +48,8 @@ pub trait HashInstructions<F: Field> {
     /// `strict` flag indicates whether to perform range check on input bytes.
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
-        ctx: ShaContexts<F>,
+        ctx_base: &mut Context<F>,
+        ctx_sha: &mut ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
         strict: bool,
     ) -> Result<AssignedHashResult<F>, Error>;
@@ -76,7 +77,8 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
-        (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+        ctx_base: &mut Context<F>,
+        ctx_sha: &mut ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
         strict: bool,
     ) -> Result<AssignedHashResult<F>, Error> {
@@ -154,7 +156,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             let assigned_input_word_at_round =
                 &assigned_input_bytes[num_processed_input..(num_processed_input + one_round_size)];
             let new_assigned_hs_out = sha256_compression(
-                (ctx_base, ctx_dense, ctx_spread),
+                ctx_base, ctx_sha,
                 &self.spread,
                 assigned_input_word_at_round,
                 assigned_last_state_vec.last().unwrap(),
@@ -259,27 +261,26 @@ mod test {
 
     fn get_circuit<F: Field>(
         k: usize,
-        mut builder: SpreadThreadBuilder<F>,
+        mut builder: ShaThreadBuilder<F>,
         input_vector: &[Vec<u8>],
-    ) -> ShaCircuitBuilder<F> {
+    ) -> Result<ShaCircuitBuilder<F>, Error> {
         let range = RangeChip::default(8);
         let spread = SpreadChip::new(&range);
 
         let sha256 = Sha256Chip::new(&range, spread);
-        let (ctx_base, ctx_dense, ctx_spread) = builder.main();
+        let (ctx_base, mut ctx_sha) = builder.sha_contexts_pair();
 
         for input in input_vector {
             let _ = sha256
                 .digest::<64>(
-                    (ctx_base, ctx_dense, ctx_spread),
+                    ctx_base, &mut ctx_sha,
                     input.as_slice().into_witness(),
                     false,
-                )
-                .unwrap();
+                )?;
         }
 
-        builder.config(k, Some(0));
-        ShaCircuitBuilder::new(builder, range, None)
+        builder.config(k, None);
+        Ok(ShaCircuitBuilder::new(builder, range, None))
     }
 
     #[test]
@@ -288,10 +289,10 @@ mod test {
 
         let test_input = vec![0u8; 64];
 
-        let builder = SpreadThreadBuilder::<Fr>::new(false);
+        let builder = ShaThreadBuilder::<Fr>::new(false);
 
         let circuit = get_circuit(k, builder, &[test_input]);
-        let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(k as u32, &circuit.unwrap(), vec![]).unwrap();
 
         prover.assert_satisfied_par();
     }

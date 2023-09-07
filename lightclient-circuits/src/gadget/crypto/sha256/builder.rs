@@ -22,7 +22,7 @@ use super::SpreadConfig;
 pub const SPREAD_PHASE: usize = 0;
 
 #[derive(Clone, Debug, Default)]
-pub struct SpreadThreadBuilder<F: ScalarField> {
+pub struct ShaThreadBuilder<F: ScalarField> {
     /// Threads for spread table assignment.
     pub threads_dense: Vec<Context<F>>,
     /// Threads for spread table assignment.
@@ -31,9 +31,9 @@ pub struct SpreadThreadBuilder<F: ScalarField> {
     pub gate_builder: GateThreadBuilder<F>,
 }
 
-pub type ShaContexts<'a, F> = (&'a mut Context<F>, &'a mut Context<F>, &'a mut Context<F>);
+pub type ShaContexts<'a, F> = (&'a mut Context<F>, &'a mut Context<F>);
 
-impl<F: Field> SpreadThreadBuilder<F> {
+impl<F: Field> ShaThreadBuilder<F> {
     // re-expose some methods from [`GateThreadBuilder`] for convenience
     #[allow(unused_mut)]
     pub fn new(mut witness_gen_only: bool) -> Self {
@@ -65,7 +65,11 @@ impl<F: Field> SpreadThreadBuilder<F> {
         self
     }
 
-    pub fn main(&mut self) -> ShaContexts<F> {
+    pub fn main(&mut self) -> &mut Context<F> {
+        self.gate_builder.main(SPREAD_PHASE)
+    }
+
+    pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, ShaContexts<F>) {
         if self.threads_dense.is_empty() {
             self.new_thread_dense();
         }
@@ -74,8 +78,10 @@ impl<F: Field> SpreadThreadBuilder<F> {
         }
         (
             self.gate_builder.main(SPREAD_PHASE),
-            self.threads_dense.last_mut().unwrap(),
-            self.threads_spread.last_mut().unwrap(),
+            (
+                self.threads_dense.last_mut().unwrap(),
+                self.threads_spread.last_mut().unwrap(),
+            ),
         )
     }
 

@@ -132,7 +132,8 @@ impl<'a, F: Field> SpreadChip<'a, F> {
     }
     pub fn spread(
         &self,
-        (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+        ctx_base: &mut Context<F>,
+        ctx_sha: &mut ShaContexts<F>,
         dense: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
@@ -154,7 +155,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
         }
         let mut assigned_spread = ctx_base.load_zero();
         for (idx, limb) in assigned_limbs.iter().enumerate() {
-            let spread_limb = self.spread_limb((ctx_base, ctx_dense, ctx_spread), limb)?;
+            let spread_limb = self.spread_limb(ctx_base, ctx_sha, limb)?;
             assigned_spread = gate.mul_add(
                 ctx_base,
                 QuantumCell::Existing(spread_limb),
@@ -185,7 +186,8 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
     fn spread_limb(
         &self,
-        (ctx_base, ctx_dense, ctx_spread): ShaContexts<F>,
+        ctx_base: &mut Context<F>,
+        (ctx_dense, ctx_spread): &mut ShaContexts<F>,
         limb: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let assigned_dense = ctx_dense.load_witness(*limb.value());
@@ -202,7 +204,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
         let assigned_spread = ctx_base.load_witness(spread_value);
         let assigned_spread_vanila = ctx_spread.load_witness(*assigned_spread.value());
         ctx_base.constrain_equal(&assigned_spread_vanila, &assigned_spread);
-        
+
         Ok(assigned_spread)
     }
 
