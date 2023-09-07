@@ -19,7 +19,7 @@ use itertools::Itertools;
 
 use super::SpreadConfig;
 
-pub const SPREAD_PHASE: usize = 1;
+pub const SPREAD_PHASE: usize = 0;
 
 #[derive(Clone, Debug, Default)]
 pub struct SpreadThreadBuilder<F: ScalarField> {
@@ -66,6 +66,9 @@ impl<F: Field> SpreadThreadBuilder<F> {
     }
 
     pub fn main(&mut self) -> ShaContexts<F> {
+        if self.threads_dense.is_empty() {
+            self.new_thread_dense();
+        }
         if self.threads_spread.is_empty() {
             self.new_thread_spread();
         }
@@ -90,6 +93,13 @@ impl<F: Field> SpreadThreadBuilder<F> {
 
     pub fn get_new_thread_id(&mut self) -> usize {
         self.gate_builder.get_new_thread_id()
+    }
+
+    pub fn new_thread_dense(&mut self) -> &mut Context<F> {
+        let thread_id = self.get_new_thread_id();
+        self.threads_dense
+            .push(Context::new(self.witness_gen_only(), thread_id));
+        self.threads_dense.last_mut().unwrap()
     }
 
     pub fn new_thread_spread(&mut self) -> &mut Context<F> {
@@ -128,7 +138,8 @@ impl<F: Field> SpreadThreadBuilder<F> {
         let mut gate_index = 0;
         let mut num_limb_sum = 0;
         let mut row_offset = 0;
-        for (ctx_dense, ctx_spread) in self.threads_dense.iter().zip_eq(self.threads_spread.iter()) {
+        for (ctx_dense, ctx_spread) in self.threads_dense.iter().zip_eq(self.threads_spread.iter())
+        {
             for (i, (&advice_dense, &advice_spread)) in ctx_dense
                 .advice
                 .iter()
@@ -141,8 +152,14 @@ impl<F: Field> SpreadThreadBuilder<F> {
                 } else {
                     Value::known(advice_dense)
                 };
+
                 let cell_dense = region
-                    .assign_advice(|| "dense", spread.denses[column_idx], row_offset, || value_dense)
+                    .assign_advice(
+                        || "dense",
+                        spread.denses[column_idx],
+                        row_offset,
+                        || value_dense,
+                    )
                     .unwrap()
                     .cell();
                 assigned_advices.insert((ctx_dense.context_id, i), (cell_dense, row_offset));
@@ -152,11 +169,17 @@ impl<F: Field> SpreadThreadBuilder<F> {
                 } else {
                     Value::known(advice_spread)
                 };
+
                 let cell_spread = region
-                    .assign_advice(|| "spread", spread.spreads[column_idx], row_offset, || value_spread)
+                    .assign_advice(
+                        || "spread",
+                        spread.spreads[column_idx],
+                        row_offset,
+                        || value_spread,
+                    )
                     .unwrap()
                     .cell();
-                assigned_advices.insert((ctx_spread.context_id, i), (cell_dense, row_offset));
+                assigned_advices.insert((ctx_spread.context_id, i), (cell_spread, row_offset));
 
                 // if (q && row_offset + 3 > max_rows) || row_offset >= max_rows - 1 {
                 //     break_points.rlc.push(row_offset);
@@ -191,10 +214,14 @@ impl<F: Field> SpreadThreadBuilder<F> {
                 row_offset += 1;
             }
         }
-        // in order to constrain equalities and assign constants, we copy the RLC equality constraints into the gate builder (it doesn't matter which context the equalities are in), so `GateThreadBuilder::assign_all` can take care of it
+        // in order to constrain equalities and assign constants, we copy the Spread/Dense equality constraints into the gate builder (it doesn't matter which context the equalities are in), so `GateThreadBuilder::assign_all` can take care of it
         // the phase doesn't matter for equality constraints, so we use phase 0 since we're sure there's a main context there
         let main_ctx = self.gate_builder.main(0);
-        for ctx in self.threads_spread.iter_mut() {
+        for ctx in self
+            .threads_spread
+            .iter_mut()
+            .chain(self.threads_dense.iter_mut())
+        {
             main_ctx
                 .advice_equality_constraints
                 .append(&mut ctx.advice_equality_constraints);

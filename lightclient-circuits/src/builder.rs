@@ -37,7 +37,7 @@ impl<F: Field> SHAConfig<F> {
             params.k - 1,
             degree,
         );
-        let spread = SpreadConfig::configure(meta, range.lookup_bits(), 2); // TODO configure num_advice_columns
+        let spread = SpreadConfig::configure(meta, 8, 2); // TODO configure num_advice_columns
         set_var("UNUSABLE_ROWS", meta.minimum_rows().to_string());
 
         range.gate.max_rows = (1 << degree) - meta.minimum_rows();
@@ -48,14 +48,12 @@ impl<F: Field> SHAConfig<F> {
 pub struct ShaCircuitBuilder<F: Field> {
     pub builder: RefCell<SpreadThreadBuilder<F>>,
     pub break_points: RefCell<ThreadBreakPoints>,
-    // pub sha256: RefCell<Sha256Chip<'a, F>>,
     pub range: RangeChip<F>,
 }
 
 impl<F: Field> ShaCircuitBuilder<F> {
     pub fn new(
         builder: SpreadThreadBuilder<F>,
-        // sha256: RefCell<Sha256Chip<'a, F>>,
         range: RangeChip<F>,
         break_points: Option<ThreadBreakPoints>,
         // synthesize_phase1: FnPhase1,
@@ -63,7 +61,6 @@ impl<F: Field> ShaCircuitBuilder<F> {
         Self {
             builder: RefCell::new(builder),
             break_points: RefCell::new(break_points.unwrap_or_default()),
-            // sha256,
             range,
             // synthesize_phase1: RefCell::new(Some(synthesize_phase1)),
         }
@@ -76,11 +73,12 @@ impl<F: Field> ShaCircuitBuilder<F> {
     }
 
     // re-usable function for synthesize
+    #[allow(clippy::type_complexity)]
     pub fn sub_synthesize(
         &self,
         config: &SHAConfig<F>,
         layouter: &mut impl Layouter<F>,
-    ) -> HashMap<(usize, usize), (circuit::Cell, usize)> {
+    ) -> Result<HashMap<(usize, usize), (circuit::Cell, usize)>, Error> {
         config
             .range
             .load_lookup_table(layouter)
@@ -90,6 +88,8 @@ impl<F: Field> ShaCircuitBuilder<F> {
         let witness_gen_only = self.builder.borrow().witness_gen_only();
 
         let mut assigned_advices = HashMap::new();
+
+        config.spread.load(layouter)?;
 
         layouter
             .assign_region(
@@ -101,14 +101,11 @@ impl<F: Field> ShaCircuitBuilder<F> {
                     }
                     if !witness_gen_only {
                         let mut builder = self.builder.borrow().clone();
-                        // let mut sha256 = self.sha256.borrow().clone();
-
-                        // Do any custom synthesize functions in SecondPhase
+                  
                         let mut assignments = KeygenAssignments {
                             ..Default::default()
                         };
-                        // let rlp_chip = RlpChip::new(&self.range, Some(&rlc_chip));
-                        // f(&mut builder, rlp_chip, keccak_rlcs);
+                    
                         assignments = builder.assign_all(
                             &config.range.gate,
                             &config.range.lookup_advice,
@@ -124,9 +121,8 @@ impl<F: Field> ShaCircuitBuilder<F> {
                     }
                     Ok(())
                 },
-            )
-            .unwrap();
-        assigned_advices
+            )?;
+        Ok(assigned_advices)
     }
 }
 

@@ -36,7 +36,11 @@ pub struct SpreadConfig<F: Field> {
 }
 
 impl<F: Field> SpreadConfig<F> {
-    pub fn configure(meta: &mut ConstraintSystem<F>, num_bits_lookup: usize, num_advice_columns: usize) -> Self {
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        num_bits_lookup: usize,
+        num_advice_columns: usize,
+    ) -> Self {
         debug_assert_eq!(16 % num_bits_lookup, 0);
 
         let denses = (0..num_advice_columns)
@@ -124,9 +128,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
         debug_assert_eq!(16 % range.lookup_bits(), 0);
 
-        Self {
-            range,
-        }
+        Self { range }
     }
     pub fn spread(
         &self,
@@ -151,9 +153,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
             ctx_gate.constrain_equal(&limbs_sum, dense);
         }
         let mut assigned_spread = ctx_gate.load_zero();
-        // println!("dense: {:?}", dense.value());
         for (idx, limb) in assigned_limbs.iter().enumerate() {
-            // println!("idx {}, limb {:?}", idx, limb.value());
             let spread_limb = self.spread_limb((ctx_gate, ctx_dense, ctx_spread), limb)?;
             assigned_spread = gate.mul_add(
                 ctx_gate,
@@ -164,7 +164,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
         }
         Ok(assigned_spread)
     }
-    
+
     pub fn decompose_even_and_odd_unchecked(
         &self,
         ctx: &mut Context<F>,
@@ -188,13 +188,6 @@ impl<'a, F: Field> SpreadChip<'a, F> {
         (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
         limb: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
-        // let column_idx = self.num_limb_sum % self.num_advice_columns;
-        // let assigned_dense_cell = region.assign_advice(
-        //     || format!("dense at offset {}", self.row_offset),
-        //     self.denses[column_idx],
-        //     self.row_offset,
-        //     || Value::known(*limb.value()),
-        // )?;
         let assigned_dense = ctx_dense.load_witness(*limb.value());
         ctx_gate.constrain_equal(&assigned_dense, limb);
         let spread_value: F = {
@@ -205,22 +198,15 @@ impl<'a, F: Field> SpreadChip<'a, F> {
             }
             bits_le_to_fe(&spread_bits)
         };
-        // let assigned_spread_cell = region.assign_advice(
-        //     || format!("spread at offset {}", self.row_offset),
-        //     self.spreads[column_idx],
-        //     self.row_offset,
-        //     || Value::known(spread_value),
-        // )?;
-        let assigned_spread_value = ctx_spread.load_witness(spread_value);
-        // ctx.constrain_equal(&assigned_spread_cell, &assigned_spread)?;
-        // self.num_limb_sum += 1;
-        // if column_idx == self.num_advice_columns - 1 {
-        //     self.row_offset += 1;
-        // }
-        Ok(assigned_spread_value)
+
+        let assigned_spread = ctx_gate.load_witness(spread_value);
+        let assigned_spread_vanila = ctx_spread.load_witness(*assigned_spread.value());
+        ctx_gate.constrain_equal(&assigned_spread_vanila, &assigned_spread);
+        
+        Ok(assigned_spread)
     }
 
     pub fn range(&self) -> &RangeChip<F> {
         self.range
-    } 
+    }
 }
