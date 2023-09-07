@@ -43,13 +43,15 @@ pub trait HashInstructions<F: Field> {
     const BLOCK_SIZE: usize;
     const DIGEST_SIZE: usize;
 
+    /// Digests input using hash function and returns finilized output.
+    /// `MAX_INPUT_SIZE` is the maximum size of input that can be processed by the hash function.
+    /// `strict` flag indicates whether to perform range check on input bytes.
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
         ctx: ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
+        strict: bool,
     ) -> Result<AssignedHashResult<F>, Error>;
-
-    // fn take_extra_assignments(&self) -> KeygenAssignments<F>;
 
     fn range(&self) -> &RangeChip<F>;
 }
@@ -76,11 +78,10 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         &self,
         (ctx_gate, ctx_dense, ctx_spread): ShaContexts<F>,
         input: HashInput<QuantumCell<F>>,
+        strict: bool,
     ) -> Result<AssignedHashResult<F>, Error> {
         let assigned_input = input.into_assigned(ctx_gate);
 
-        // let mut extra_assignment = self.extra_assignments.borrow_mut();
-        // let assigned_advices = &mut extra_assignment.assigned_advices;
         let mut assigned_input_bytes = assigned_input.to_vec();
         let input_byte_size = assigned_input_bytes.len();
         let input_byte_size_with_9 = input_byte_size + 9;
@@ -125,10 +126,12 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         //     assigned_input_bytes.push(assign_byte(0u8));
         // }
         assert_eq!(assigned_input_bytes.len(), MAX_INPUT_SIZE);
-        // todo: only check for no already assigned
-        // for &assigned in assigned_input_bytes.iter() {
-        //     range.range_check(ctx, assigned, 8);
-        // }
+
+        if strict {
+            for &assigned in assigned_input_bytes.iter() {
+                range.range_check(ctx_gate, assigned, 8);
+            }
+        }
 
         let assigned_num_round = ctx_gate.load_witness(F::from(num_round as u64));
 
@@ -147,7 +150,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             let new_assigned_hs_out = sha256_compression(
                 (ctx_gate, ctx_dense, ctx_spread),
                 &self.spread,
-                // &mut self.spread_config.borrow_mut(),
                 assigned_input_word_at_round,
                 assigned_last_state_vec.last().unwrap(),
             )?;
@@ -312,113 +314,11 @@ mod test {
         challenges: Challenges<Value<F>>,
     }
 
-    // #[derive(Debug, Clone)]
-    // struct TestCircuit<F: Field> {
-    //     builder: RefCell<ShaThreadBuilder<F>>,
-    //     range: RangeChip<F>,
-    //     test_input: HashInput<QuantumCell<F>>,
-    //     test_output: [u8; 32],
-    //     _f: PhantomData<F>,
-    // }
-
-    // impl<F: Field> Circuit<F> for TestCircuit<F>
-    // where
-    //     [(); Self::MAX_BYTE_SIZE]:,
-    // {
-    //     type Config = TestConfig<F>;
-    //     type FloorPlanner = SimpleFloorPlanner;
-
-    //     fn without_witnesses(&self) -> Self {
-    //         unimplemented!()
-    //     }
-
-    //     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-    //         let spread_config = SpreadConfig::<F>::configure(meta, 8, 2);
-    //         let range = RangeConfig::configure(
-    //             meta,
-    //             RangeStrategy::Vertical,
-    //             &[Self::NUM_ADVICE],
-    //             &[Self::NUM_LOOKUP_ADVICE],
-    //             Self::NUM_FIXED,
-    //             Self::LOOKUP_BITS,
-    //             Self::K,
-    //         );
-    //         Self::Config {
-    //             spread_config,
-    //             range,
-    //             challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
-    //         }
-    //     }
-
-    //     fn synthesize(
-    //         &self,
-    //         config: Self::Config,
-    //         mut layouter: impl Layouter<F>,
-    //     ) -> Result<(), Error> {
-    //         config.range.load_lookup_table(&mut layouter)?;
-    //         let mut first_pass = SKIP_FIRST_PASS;
-    //         let sha256 = Sha256Chip::new(RefCell::new(config.spread_config), &self.range, None);
-
-    //         let mut builder = self.builder.borrow().clone();
-
-    //         layouter.assign_region(
-    //             || "sha2 test",
-    //             |mut region| {
-    //                 if first_pass {
-    //                     first_pass = false;
-    //                     return Ok(());
-    //                 }
-
-    //                 sha256
-    //                     .spread_config
-    //                     .borrow()
-    //                     .annotate_columns_in_region(&mut region);
-
-    //                 let assigned_hash = result.output_bytes;
-    //                 println!(
-    //                     "assigned hash: {:?}",
-    //                     assigned_hash.map(|e| e.value().get_lower_32())
-    //                 );
-
-    //                 let correct_output = self
-    //                     .test_output
-    //                     .map(|b| ctx.load_witness(F::from(b as u64)));
-
-    //                 for (hash, check) in assigned_hash.iter().zip(correct_output.iter()) {
-    //                     ctx.constrain_equal(hash, check);
-    //                 }
-
-    //                 let extra_assignments = sha256.take_extra_assignments();
-
-    //                 builder.config(TestCircuit::<F>::K, Some(0));
-    //                 let params: FlexGateConfigParams =
-    //                     serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-    //                 println!("params: {:?}", params);
-
-    //                 let _ = builder.assign_all(
-    //                     &config.range.gate,
-    //                     &config.range.lookup_advice,
-    //                     &config.range.q_lookup,
-    //                     &mut region,
-    //                     extra_assignments,
-    //                 );
-
-    //                 Ok(())
-    //             },
-    //         )
-    //     }
-    // }
-
-    // impl<F: Field> TestCircuit<F> {
-    //     const MAX_BYTE_SIZE: usize = 128;
-    //     const NUM_ADVICE: usize = 700;
-    //     const NUM_FIXED: usize = 1;
-    //     const NUM_LOOKUP_ADVICE: usize = 55;
-    //     const LOOKUP_BITS: usize = 8;
-    //     const K: usize = 18;
-    // }
-
-    fn get_circuit<F: Field>(k: usize, mut builder: SpreadThreadBuilder<F>, input_vector: &[Vec<u8>]) -> ShaCircuitBuilder<F> {
+    fn get_circuit<F: Field>(
+        k: usize,
+        mut builder: SpreadThreadBuilder<F>,
+        input_vector: &[Vec<u8>],
+    ) -> ShaCircuitBuilder<F> {
         let range = RangeChip::default(8);
         let spread = SpreadChip::new(&range);
 
@@ -426,7 +326,13 @@ mod test {
         let (ctx_gate, ctx_dense, ctx_spread) = builder.main();
 
         for input in input_vector {
-            let _ = sha256.digest::<128>((ctx_gate, ctx_dense, ctx_spread), input.as_slice().into_witness()).unwrap();
+            let _ = sha256
+                .digest::<128>(
+                    (ctx_gate, ctx_dense, ctx_spread),
+                    input.as_slice().into_witness(),
+                    false
+                )
+                .unwrap();
         }
 
         builder.config(k, Some(0));
@@ -438,9 +344,9 @@ mod test {
         let k = 15;
 
         let test_input = vec![0u8; 64];
-      
+
         let builder = SpreadThreadBuilder::<Fr>::new(false);
-        
+
         let circuit = get_circuit(k, builder, &[test_input]);
         let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();
 
