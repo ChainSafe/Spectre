@@ -238,7 +238,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     self.finality_merkle_branch
                         .iter()
                         .map(|w| w.clone().into_witness()),
-                    finalized_header.into(),
+                    finalized_header.clone().into(),
                     &beacon_state_root,
                     S::FINALIZED_HEADER_INDEX,
                 )?;
@@ -266,17 +266,8 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     &mut region,
                 )?;
 
-                let finalized_header_root = self
-                    .finalized_block
-                    .clone()
-                    .hash_tree_root()
-                    .map_err(|e| Error::Synthesis)?
-                    .as_ref()
-                    .iter()
-                    .map(|&b| ctx.load_witness(F::from(b as u64)))
-                    .collect_vec();
                 let h = sha256_chip.digest::<128>(
-                    HashInput::TwoToOne(h.output_bytes.into(), finalized_header_root.into()),
+                    HashInput::TwoToOne(h.output_bytes.into(), finalized_header.into()),
                     ctx,
                     &mut region,
                 )?;
@@ -428,7 +419,54 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
 impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
     fn instances(&self) -> Vec<Vec<F>> {
-        vec![]
+        let mut input: [u8; 64] = [0; 64];
+
+        let mut attested_slot = self.attested_block.slot.to_le_bytes().to_vec();
+        let mut finalized_slot = self.finalized_block.slot.to_le_bytes().to_vec();
+        attested_slot.resize(32, 0);
+        finalized_slot.resize(32, 0);
+
+        input[..32].copy_from_slice(&attested_slot);
+        input[32..].copy_from_slice(&finalized_slot);
+        let h = sha2::Sha256::digest(&input).to_vec();
+
+        let finalized_header_root: [u8; 32] = self
+            .finalized_block
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_bytes()
+            .try_into()
+            .unwrap();
+
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&finalized_header_root);
+        let h = sha2::Sha256::digest(&input).to_vec();
+
+        let mut participation = self
+            .participation_bits
+            .iter()
+            .map(|v| *v as u64)
+            .sum::<u64>()
+            .to_le_bytes()
+            .to_vec();
+        participation.resize(32, 0);
+
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&participation);
+        let h = sha2::Sha256::digest(&input).to_vec();
+
+        let execution_state_root = &self.execution_state_root;
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(execution_state_root);
+
+        let public_input_commitment = sha2::Sha256::digest(&input).to_vec();
+        // TODO: Also hash the poseidon commitment
+
+        vec![public_input_commitment
+            .into_iter()
+            .map(|b| F::from(b as u64))
+            .collect_vec()]
     }
 
     fn num_instance(&self) -> Vec<usize> {
@@ -633,55 +671,10 @@ mod tests {
     fn get_circuit_with_data(
         k: usize,
         config_path: &str,
-    ) -> (SyncStepCircuit<Test, Fr>, FlexGateConfigParams, Vec<u8>) {
+    ) -> (SyncStepCircuit<Test, Fr>, FlexGateConfigParams) {
         let builder = GateThreadBuilder::new(false);
         let state: SyncState =
             serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
-
-        let mut input: [u8; 64] = [0; 64];
-
-        let mut attested_slot = state.attested_block.slot.to_le_bytes().to_vec();
-        let mut finalized_slot = state.finalized_block.slot.to_le_bytes().to_vec();
-        attested_slot.resize(32, 0);
-        finalized_slot.resize(32, 0);
-
-        input[..32].copy_from_slice(&attested_slot);
-        input[32..].copy_from_slice(&finalized_slot);
-        let h = sha2::Sha256::digest(&input).to_vec();
-
-        let finalized_header_root: [u8; 32] = state
-            .finalized_block
-            .clone()
-            .hash_tree_root()
-            .unwrap()
-            .as_bytes()
-            .try_into()
-            .unwrap();
-
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&finalized_header_root);
-        let h = sha2::Sha256::digest(&input).to_vec();
-
-        let mut participation = state
-            .sync_committee
-            .iter()
-            .cloned()
-            .map(|v| v.is_attested as u64)
-            .sum::<u64>()
-            .to_le_bytes()
-            .to_vec();
-        participation.resize(32, 0);
-
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&participation);
-        let h = sha2::Sha256::digest(&input).to_vec();
-
-        let execution_state_root = state.execution_state_root.clone();
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&execution_state_root);
-
-        let public_input_commitment = sha2::Sha256::digest(&input).to_vec();
-        // TODO: Also hash the poseidon commitment
 
         let config = if let Ok(f) = fs::read(config_path) {
             serde_json::from_slice(&f).expect("read config file")
@@ -697,23 +690,15 @@ mod tests {
         println!("config used: {:?}", config);
 
         let builder = RefCell::from(builder);
-        (
-            SyncStepCircuit::new_from_state(builder, &state),
-            config,
-            public_input_commitment,
-        )
+        (SyncStepCircuit::new_from_state(builder, &state), config)
     }
 
     #[test]
     fn test_sync_circuit() {
         let k = 20;
-        let (circuit, _, instance) = get_circuit_with_data(k, "./config/sync_step_k20.json");
-        let pi = instance
-            .into_iter()
-            .map(|b| Fr::from(b as u64))
-            .collect_vec();
+        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20.json");
         let timer = start_timer!(|| "sync circuit mock prover");
-        let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![pi]).unwrap();
+        let prover = MockProver::<Fr>::run(k as u32, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied();
         end_timer!(timer);
     }
@@ -721,7 +706,7 @@ mod tests {
     #[test]
     fn test_sync_proofgen() {
         let k = 20;
-        let (circuit, _, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
+        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
 
         let params = gen_srs(k as u32);
 
@@ -736,7 +721,7 @@ mod tests {
     #[test]
     fn test_sync_evm_verify() {
         let k = 20;
-        let (circuit, config, _) = get_circuit_with_data(k, "./config/sync_step_k21.json");
+        let (circuit, config) = get_circuit_with_data(k, "./config/sync_step_k21.json");
 
         let (params, pk) = SyncStepCircuit::<Test, Fr>::setup(&config, None);
 
