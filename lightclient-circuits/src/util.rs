@@ -67,15 +67,13 @@ pub(crate) fn query_expression<F: Field, T>(
     expr.unwrap()
 }
 
-pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
-    fn new_from_state(builder: RefCell<GateThreadBuilder<F>>, state: &witness::SyncState) -> Self;
-
-    fn parametrize(k: usize) -> FlexGateConfigParams;
-
+pub trait AppCircuitExt<F: Field>: Default {
     fn setup(
         config: &FlexGateConfigParams,
         out: Option<&Path>,
     ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>);
+
+    fn parametrize(k: usize) -> FlexGateConfigParams;
 }
 
 /// Randomness used in circuits.

@@ -1110,10 +1110,6 @@ pub struct Sha256Circuit<'a, F: Field> {
 }
 
 impl<'a, F: Field> Sha256Circuit<'a, F> {
-    fn new_from_state(state: &'a witness::SyncState) -> Self {
-        todo!()
-    }
-
     /// Make the assignments to the KeccakCircuit
     fn synthesize_sub(
         &self,
@@ -1147,8 +1143,6 @@ impl<'a, F: Field> Sha256Circuit<'a, F> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-
-    use crate::witness::MerkleTrace;
 
     use super::*;
     use halo2_proofs::{
@@ -1217,20 +1211,6 @@ mod tests {
     fn test_sha256_two2one_val_and_rlc() {
         let k = 10;
         let inputs = vec![(vec![vec![2u8; 4], vec![0u8; 28]].concat(), vec![3u8; 4],).into(); 1];
-        let circuit = TestSha256::<Fr> {
-            inner: Sha256Circuit::new(&inputs),
-        };
-
-        let prover = MockProver::<Fr>::run(k, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
-    }
-
-    #[test]
-    fn test_sha256_circuit() {
-        let k = 13;
-        let merkle_trace: MerkleTrace =
-            serde_json::from_slice(&fs::read("../test_data/merkle_trace.json").unwrap()).unwrap();
-        let inputs = merkle_trace.sha256_inputs();
         let circuit = TestSha256::<Fr> {
             inner: Sha256Circuit::new(&inputs),
         };

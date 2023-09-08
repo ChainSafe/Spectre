@@ -10,8 +10,11 @@ use halo2_ecc::{
     ecc::{EcPoint, EccChip},
     fields::{fp2, vector::FieldVector, FieldExtConstructor},
 };
-// pub use hash2curve::{HashToCurveCache, HashToCurveChip};
-pub use sha256::{AssignedHashResult, HashInstructions, Sha256Chip, SpreadConfig, ShaThreadBuilder, ShaContexts};
+pub use hash2curve::{HashToCurveCache, HashToCurveChip};
+pub use sha256::{
+    AssignedHashResult, HashInstructions, Sha256Chip, ShaContexts, ShaThreadBuilder, SpreadChip,
+    SpreadConfig,
+};
 pub use sha256_wide::*;
 pub type FpPoint<F> = ProperCrtUint<F>;
 pub type Fp2Point<F> = FieldVector<FpPoint<F>>;

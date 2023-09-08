@@ -65,7 +65,6 @@ pub struct AssignedHashResult<F: Field> {
 
 #[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: Field> {
-    range: &'a RangeChip<F>,
     spread: SpreadChip<'a, F>,
     // extra_assignments: RefCell<KeygenAssignments<F>>,
 }
@@ -95,7 +94,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         let input_byte_size = assigned_input_bytes.len();
         let input_byte_size_with_9 = input_byte_size + 9;
         assert!(input_byte_size <= MAX_INPUT_SIZE);
-        let range = self.range;
+        let range = self.spread.range();
         let gate = &range.gate;
 
         let one_round_size = Self::BLOCK_SIZE;
@@ -173,8 +172,12 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
                 assigned_num_round,
             );
             for i in 0..8 {
-                output_h_out[i] =
-                    gate.select(thread_pool.main(), assigned_state[i], output_h_out[i], selector)
+                output_h_out[i] = gate.select(
+                    thread_pool.main(),
+                    assigned_state[i],
+                    output_h_out[i],
+                    selector,
+                )
             }
         }
         let output_digest_bytes = output_h_out
@@ -183,7 +186,9 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
                 let be_bytes = assigned_word.value().get_lower_32().to_be_bytes().to_vec();
                 let assigned_bytes = (0..4)
                     .map(|idx| {
-                        let assigned = thread_pool.main().load_witness(F::from(be_bytes[idx] as u64));
+                        let assigned = thread_pool
+                            .main()
+                            .load_witness(F::from(be_bytes[idx] as u64));
                         range.range_check(thread_pool.main(), assigned, 8);
                         assigned
                     })
@@ -212,13 +217,15 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
     }
 
     fn range(&self) -> &RangeChip<F> {
-        self.range
+        self.spread.range()
     }
 }
 
 impl<'a, F: Field> Sha256Chip<'a, F> {
-    pub fn new(range: &'a RangeChip<F>, spread: SpreadChip<'a, F>) -> Self {
-        Self { range, spread }
+    pub fn new(range: &'a RangeChip<F>) -> Self {
+        Self {
+            spread: SpreadChip::new(range),
+        }
     }
 }
 
@@ -263,16 +270,10 @@ mod test {
         input_vector: &[Vec<u8>],
     ) -> Result<ShaCircuitBuilder<F>, Error> {
         let range = RangeChip::default(8);
-        let spread = SpreadChip::new(&range);
-
-        let sha256 = Sha256Chip::new(&range, spread);
+        let sha256 = Sha256Chip::new(&range);
 
         for input in input_vector {
-            let _ = sha256.digest::<64>(
-                &mut builder,
-                input.as_slice().into_witness(),
-                false,
-            )?;
+            let _ = sha256.digest::<64>(&mut builder, input.as_slice().into_witness(), false)?;
         }
 
         builder.config(k, None);

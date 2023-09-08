@@ -650,9 +650,7 @@ mod test {
         input_vector: &[Vec<u8>],
     ) -> Result<ShaCircuitBuilder<F>, Error> {
         let range = RangeChip::default(8);
-        let spread = SpreadChip::new(&range);
-
-        let sha256 = Sha256Chip::new(&range, spread);
+        let sha256 = Sha256Chip::new(&range);
 
         let h2c_chip = HashToCurveChip::<Test, F, _>::new(&sha256);
         let fp_chip = halo2_ecc::bls12_381::FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
