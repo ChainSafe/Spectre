@@ -172,7 +172,7 @@ let input = {
     domain: Array.from(domain),
     attestedBlock: attestedBlockJson,
     finalizedBlock: finilizedBlockJson,
-    syncSignature: syncSigBytes,
+    signatureCompressed: syncSigBytes,
     executionMerkleBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
     executionStateRoot: beaconBlockBody.executionPayload.stateRoot,
     finalityMerkleBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),

@@ -35,6 +35,7 @@ use halo2_proofs::{
 };
 
 pub use self::builder::ShaContexts;
+pub(super) use self::builder::{FIRST_PHASE, assign_threads_sha};
 pub use self::spread::SpreadChip;
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
@@ -235,7 +236,7 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::builder::ShaCircuitBuilder;
+    use crate::gadget::crypto::ShaCircuitBuilder;
     use crate::table::Sha256Table;
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
@@ -264,7 +265,7 @@ mod test {
         challenges: Challenges<Value<F>>,
     }
 
-    fn get_circuit<F: Field>(
+    fn test_circuit<F: Field>(
         k: usize,
         mut builder: ShaThreadBuilder<F>,
         input_vector: &[Vec<u8>],
@@ -277,7 +278,7 @@ mod test {
         }
 
         builder.config(k, None);
-        Ok(ShaCircuitBuilder::new(builder, range, None))
+        Ok(ShaCircuitBuilder::mock(builder))
     }
 
     #[test]
@@ -286,9 +287,9 @@ mod test {
 
         let test_input = vec![0u8; 64];
 
-        let builder = ShaThreadBuilder::<Fr>::new(false);
+        let builder = ShaThreadBuilder::<Fr>::mock();
 
-        let circuit = get_circuit(k, builder, &[test_input]);
+        let circuit = test_circuit(k, builder, &[test_input]);
         let prover = MockProver::run(k as u32, &circuit.unwrap(), vec![]).unwrap();
 
         prover.assert_satisfied_par();

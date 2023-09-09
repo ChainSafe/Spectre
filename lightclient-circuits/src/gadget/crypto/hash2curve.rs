@@ -29,12 +29,12 @@ use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
-use super::{ShaContexts, ShaThreadBuilder};
 use super::{
     sha256::HashInstructions,
     util::{fp2_sgn0, i2osp, strxor},
     Fp2Point, G1Point, G2Point,
 };
+use super::{ShaContexts, ShaThreadBuilder};
 
 const G2_EXT_DEGREE: usize = 2;
 
@@ -119,7 +119,8 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         });
 
         // 2^256
-        let two_pow_256 = fp_chip.load_constant_uint(thread_pool.main(), BigUint::from(2u8).pow(256));
+        let two_pow_256 =
+            fp_chip.load_constant_uint(thread_pool.main(), BigUint::from(2u8).pow(256));
         let fq_bytes = C::BYTES_COMPRESSED / 2;
 
         let mut fst = true;
@@ -149,8 +150,10 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
                                 thread_pool.main(),
                             );
 
-                            let lo_2_256 = fp_chip.mul_no_carry(thread_pool.main(), lo, two_pow_256.clone());
-                            let lo_2_356_hi = fp_chip.add_no_carry(thread_pool.main(), lo_2_256, hi);
+                            let lo_2_256 =
+                                fp_chip.mul_no_carry(thread_pool.main(), lo, two_pow_256.clone());
+                            let lo_2_356_hi =
+                                fp_chip.add_no_carry(thread_pool.main(), lo_2_256, hi);
                             fp_chip.carry_mod(thread_pool.main(), lo_2_356_hi)
                         })
                         .collect_vec(),
@@ -212,7 +215,9 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         let one = thread_pool.main().load_constant(F::one());
 
         // assign DST bytes & cache them
-        let dst_len = thread_pool.main().load_constant(F::from(S::DST.len() as u64));
+        let dst_len = thread_pool
+            .main()
+            .load_constant(F::from(S::DST.len() as u64));
         let dst_prime = cache
             .dst_with_len
             .get_or_insert_with(|| {
@@ -226,7 +231,9 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
 
         // padding and length strings
         let z_pad = i2osp(0, HC::BLOCK_SIZE, |b| zero); // TODO: cache these
-        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| thread_pool.main().load_constant(b));
+        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| {
+            thread_pool.main().load_constant(b)
+        });
 
         // compute blocks
         let ell = len_in_bytes.div_ceil(HC::DIGEST_SIZE);
@@ -259,7 +266,9 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         for i in 1..ell {
             let preimg = strxor(b_0, b_vals[i - 1], gate, thread_pool.main())
                 .into_iter()
-                .chain(iter::once(thread_pool.main().load_constant(F::from(i as u64 + 1))))
+                .chain(iter::once(
+                    thread_pool.main().load_constant(F::from(i as u64 + 1)),
+                ))
                 .chain(dst_prime.clone())
                 .into();
 
@@ -617,8 +626,8 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::builder::ShaCircuitBuilder;
     use crate::gadget::crypto::sha256::{SpreadChip, SpreadConfig};
+    use crate::gadget::crypto::ShaCircuitBuilder;
     use crate::gadget::crypto::{Sha256Chip, ShaThreadBuilder};
     use crate::sha256_circuit::Sha256CircuitConfig;
     use crate::table::Sha256Table;
@@ -669,7 +678,7 @@ mod test {
         }
 
         builder.config(k, None);
-        Ok(ShaCircuitBuilder::new(builder, range, None))
+        Ok(ShaCircuitBuilder::mock(builder))
     }
 
     #[test]
@@ -677,7 +686,7 @@ mod test {
         let k = 17;
 
         let test_input = vec![0u8; 32];
-        let builder = ShaThreadBuilder::<Fr>::new(false);
+        let builder = ShaThreadBuilder::<Fr>::mock();
         let circuit = get_circuit(k, builder, &[test_input]).unwrap();
 
         let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();

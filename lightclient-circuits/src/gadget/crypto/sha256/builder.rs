@@ -1,10 +1,11 @@
-use std::{cell::RefCell, iter};
+use std::{cell::RefCell, collections::HashMap, iter};
 
 use eth_types::Field;
 use halo2_base::{
     gates::{
         builder::{
             CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder, KeygenAssignments,
+            ThreadBreakPoints,
         },
         flex_gate::FlexGateConfig,
     },
@@ -12,14 +13,14 @@ use halo2_base::{
     Context,
 };
 use halo2_proofs::{
-    circuit::{Region, Value},
+    circuit::{self, Region, Value},
     plonk::{Advice, Column, Selector},
 };
 use itertools::Itertools;
 
 use super::SpreadConfig;
 
-pub const SPREAD_PHASE: usize = 0;
+pub const FIRST_PHASE: usize = 0;
 
 #[derive(Clone, Debug, Default)]
 pub struct ShaThreadBuilder<F: ScalarField> {
@@ -66,7 +67,7 @@ impl<F: Field> ShaThreadBuilder<F> {
     }
 
     pub fn main(&mut self) -> &mut Context<F> {
-        self.gate_builder.main(SPREAD_PHASE)
+        self.gate_builder.main(FIRST_PHASE)
     }
 
     pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, ShaContexts<F>) {
@@ -77,7 +78,7 @@ impl<F: Field> ShaThreadBuilder<F> {
             self.new_thread_spread();
         }
         (
-            self.gate_builder.main(SPREAD_PHASE),
+            self.gate_builder.main(FIRST_PHASE),
             (
                 self.threads_dense.last_mut().unwrap(),
                 self.threads_spread.last_mut().unwrap(),
@@ -137,89 +138,14 @@ impl<F: Field> ShaThreadBuilder<F> {
     ) -> KeygenAssignments<F> {
         assert!(!self.witness_gen_only());
 
-        let use_unknown = self.use_unknown();
-        let max_rows = gate.max_rows;
-
-        // first we assign all RLC contexts, basically copying gate::builder::assign_all except that the length of the RLC vertical gate is 3 instead of 4 (which was length of basic gate)
-        let mut gate_index = 0;
-        let mut num_limb_sum = 0;
-        let mut row_offset = 0;
-        for (ctx_dense, ctx_spread) in self.threads_dense.iter().zip_eq(self.threads_spread.iter())
-        {
-            for (i, (&advice_dense, &advice_spread)) in ctx_dense
-                .advice
-                .iter()
-                .zip_eq(ctx_spread.advice.iter())
-                .enumerate()
-            {
-                let column_idx = num_limb_sum % spread.num_advice_columns;
-                let value_dense = if use_unknown {
-                    Value::unknown()
-                } else {
-                    Value::known(advice_dense)
-                };
-
-                let cell_dense = region
-                    .assign_advice(
-                        || "dense",
-                        spread.denses[column_idx],
-                        row_offset,
-                        || value_dense,
-                    )
-                    .unwrap()
-                    .cell();
-                assigned_advices.insert((ctx_dense.context_id, i), (cell_dense, row_offset));
-
-                let value_spread = if use_unknown {
-                    Value::unknown()
-                } else {
-                    Value::known(advice_spread)
-                };
-
-                let cell_spread = region
-                    .assign_advice(
-                        || "spread",
-                        spread.spreads[column_idx],
-                        row_offset,
-                        || value_spread,
-                    )
-                    .unwrap()
-                    .cell();
-                assigned_advices.insert((ctx_spread.context_id, i), (cell_spread, row_offset));
-
-                // if (q && row_offset + 3 > max_rows) || row_offset >= max_rows - 1 {
-                //     break_points.rlc.push(row_offset);
-                //     row_offset = 0;
-                //     gate_index += 1;
-                //     // when there is a break point, because we may have two gates that overlap at the current cell, we must copy the current cell to the next column for safety
-                //     basic_gate = *spread
-                //         .basic_gates
-                //         .get(gate_index)
-                //         .unwrap_or_else(|| panic!("NOT ENOUGH RLC ADVICE COLUMNS. Perhaps blinding factors were not taken into account. The max non-poisoned rows is {max_rows}"));
-                //     (column, q_rlc) = basic_gate;
-
-                //     #[cfg(feature = "halo2-axiom")]
-                //     {
-                //         let ncell = region.assign_advice(column, row_offset, value);
-                //         region.constrain_equal(ncell.cell(), &cell);
-                //     }
-                //     #[cfg(not(feature = "halo2-axiom"))]
-                //     {
-                //         let ncell = region
-                //             .assign_advice(|| "", column, row_offset, || value)
-                //             .unwrap()
-                //             .cell();
-                //         region.constrain_equal(ncell, cell).unwrap();
-                //     }
-                // }
-
-                num_limb_sum += 1;
-                if column_idx == spread.num_advice_columns - 1 {
-                    row_offset += 1;
-                }
-                row_offset += 1;
-            }
-        }
+        assign_threads_sha(
+            &self.threads_dense,
+            &self.threads_spread,
+            spread,
+            region,
+            self.use_unknown(),
+            Some(&mut assigned_advices),
+        );
         // in order to constrain equalities and assign constants, we copy the Spread/Dense equality constraints into the gate builder (it doesn't matter which context the equalities are in), so `GateThreadBuilder::assign_all` can take care of it
         // the phase doesn't matter for equality constraints, so we use phase 0 since we're sure there's a main context there
         let main_ctx = self.gate_builder.main(0);
@@ -247,5 +173,75 @@ impl<F: Field> ShaThreadBuilder<F> {
                 break_points,
             },
         )
+    }
+}
+
+/// Pure advice witness assignment in a single phase. Uses preprocessed `break_points` to determine when
+/// to split a thread into a new column.
+#[allow(clippy::type_complexity)]
+pub fn assign_threads_sha<F: Field>(
+    threads_dense: &[Context<F>],
+    threads_spread: &[Context<F>],
+    spread: &SpreadConfig<F>,
+    region: &mut Region<F>,
+    use_unknown: bool,
+    mut assigned_advices: Option<&mut HashMap<(usize, usize), (circuit::Cell, usize)>>,
+) {
+    let mut num_limb_sum = 0;
+    let mut row_offset = 0;
+    for (ctx_dense, ctx_spread) in threads_dense.iter().zip_eq(threads_spread.iter()) {
+        for (i, (&advice_dense, &advice_spread)) in ctx_dense
+            .advice
+            .iter()
+            .zip_eq(ctx_spread.advice.iter())
+            .enumerate()
+        {
+            let column_idx = num_limb_sum % spread.num_advice_columns;
+            let value_dense = if use_unknown {
+                Value::unknown()
+            } else {
+                Value::known(advice_dense)
+            };
+
+            let cell_dense = region
+                .assign_advice(
+                    || "dense",
+                    spread.denses[column_idx],
+                    row_offset,
+                    || value_dense,
+                )
+                .unwrap()
+                .cell();
+
+            if let Some(assigned_advices) = assigned_advices.as_mut() {
+                assigned_advices.insert((ctx_dense.context_id, i), (cell_dense, row_offset));
+            }
+
+            let value_spread = if use_unknown {
+                Value::unknown()
+            } else {
+                Value::known(advice_spread)
+            };
+
+            let cell_spread = region
+                .assign_advice(
+                    || "spread",
+                    spread.spreads[column_idx],
+                    row_offset,
+                    || Value::known(advice_spread),
+                )
+                .unwrap()
+                .cell();
+
+            if let Some(assigned_advices) = assigned_advices.as_mut() {
+                assigned_advices.insert((ctx_spread.context_id, i), (cell_spread, row_offset));
+            }
+
+            num_limb_sum += 1;
+            if column_idx == spread.num_advice_columns - 1 {
+                row_offset += 1;
+            }
+            row_offset += 1;
+        }
     }
 }

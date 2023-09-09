@@ -37,6 +37,7 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub beacon_state_root: Vec<u8>,
 
+    #[serde(skip)]
     _spec: PhantomData<S>,
 }
 

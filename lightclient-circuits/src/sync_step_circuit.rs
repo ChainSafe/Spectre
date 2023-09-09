@@ -11,10 +11,10 @@ use std::{
 };
 
 use crate::{
-    builder::ShaCircuitBuilder,
+    builder::Eth2CircuitBuilder,
     gadget::crypto::{
         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, HashToCurveCache,
-        HashToCurveChip, Sha256Chip, ShaThreadBuilder, SpreadChip, SpreadConfig,
+        HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
@@ -31,7 +31,10 @@ use ff::PrimeField;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
-        builder::{FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder},
+        builder::{
+            FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints,
+            RangeCircuitBuilder,
+        },
         flex_gate::GateStrategy,
         range::{RangeConfig, RangeStrategy},
     },
@@ -64,13 +67,6 @@ use sha2::{Digest, Sha256};
 use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
 use ssz_rs::{GeneralizedIndex, Merkleized, Node};
 
-#[derive(Clone, Debug)]
-pub struct SyncStepCircuitConfig<F: Field> {
-    range: RangeConfig<F>,
-    sha256_config: RefCell<SpreadConfig<F>>,
-    challenges: Challenges<Value<F>>,
-}
-
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
 pub struct SyncStepCircuit<S: Spec, F: Field> {
@@ -84,12 +80,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         thread_pool: &mut ShaThreadBuilder<F>,
         range: &RangeChip<F>,
         args: &witness::SyncStepArgs<S>,
-    ) -> Result<(), Error> {
-        // config
-        //     .range
-        //     .load_lookup_table(&mut layouter)
-        //     .expect("load range lookup table");
-
+    ) -> Result<Vec<AssignedValue<F>>, Error> {
         assert!(
             !args.signature_compressed.is_empty(),
             "no attestations supplied"
@@ -141,7 +132,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         };
         let mut h2c_cache = HashToCurveCache::<F>::default();
 
-        // Verify attestted header
+        // // Verify attestted header
         let attested_header = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
@@ -225,7 +216,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             S::EXECUTION_STATE_ROOT_INDEX,
         )?;
 
-        Ok(())
+        let instances = vec![];
+
+        Ok(instances)
     }
 }
 
@@ -315,41 +308,30 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
 impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
     fn setup(
-        config: &FlexGateConfigParams,
+        k: usize,
         out: Option<&Path>,
-    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>) {
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        MultiPhaseThreadBreakPoints,
+    ) {
         let args = witness::SyncStepArgs::<S>::default();
         let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
         let mut thread_pool = ShaThreadBuilder::keygen();
 
-        circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
+        let assigned_instances = circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
+        let config = thread_pool.config(k, Some(109));
 
-        set_var("LOOKUP_BITS", (config.k - 1).to_string());
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&config).unwrap(),
-        );
+        let params = gen_srs(k as u32);
 
-        let params = gen_srs(config.k as u32);
+        let circuit = Eth2CircuitBuilder::keygen(assigned_instances, thread_pool);
 
-        let builder = ShaCircuitBuilder::new(thread_pool, range, None);
+        let pk = gen_pkey(|| "sync_step", &params, out, &circuit).unwrap();
 
-        let pk = gen_pkey(|| "sync_step", &params, out, builder).unwrap();
+        let break_points = circuit.break_points();
 
-        (params, pk)
-    }
-
-    fn parametrize(k: usize) -> FlexGateConfigParams {
-        let args = witness::SyncStepArgs::<S>::default();
-        let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
-        let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-        let mut thread_pool = ShaThreadBuilder::keygen();
-
-        circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
-        let params = thread_pool.config(k, None);
-        std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
-        params
+        (params, pk, break_points)
     }
 }
 
@@ -361,6 +343,7 @@ mod tests {
     };
 
     use crate::{
+        builder::Eth2CircuitBuilder,
         table::Sha256Table,
         util::{full_prover, full_verifier, gen_pkey},
         witness::{SyncStepArgs, Validator},
@@ -396,86 +379,78 @@ mod tests {
         CircuitExt, SHPLONK,
     };
 
-    fn get_circuit_with_data(
+    fn load_circuit_with_data(
+        thread_pool: &mut ShaThreadBuilder<Fr>,
         k: usize,
-        config_path: &str,
-    ) -> (ShaCircuitBuilder<Fr>, FlexGateConfigParams) {
+    ) -> Vec<AssignedValue<Fr>> {
         let args: SyncStepArgs<Test> =
             serde_json::from_slice(&fs::read("../test_data/sync_step.json").unwrap()).unwrap();
         let circuit = SyncStepCircuit::<Test, bn256::Fr>::default();
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-        let mut thread_pool = ShaThreadBuilder::prover();
 
-        circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
+        circuit.synthesize(thread_pool, &range, &args).unwrap();
+
         let config = thread_pool.config(k, None);
-
-        // let config = if let Ok(f) = fs::read(config_path) {
-        //     serde_json::from_slice(&f).expect("read config file")
-        // } else {
-        //     SyncStepCircuit::<Test, Fr>::parametrize(k)
-        // };
-
-        // set_var(
-        //     "FLEX_GATE_CONFIG_PARAMS",
-        //     serde_json::to_string(&config).unwrap(),
-        // );
-        // set_var("LOOKUP_BITS", (config.k - 1).to_string());
+        set_var("LOOKUP_BITS", (config.k - 1).to_string());
         println!("params used: {:?}", config);
-        // set_var(
-        //     "FLEX_GATE_CONFIG_PARAMS",
-        //     serde_json::to_string(&config).unwrap(),
-        // );
 
-        let params = gen_srs(config.k as u32);
+        let instance = vec![];
 
-        let builder = ShaCircuitBuilder::new(thread_pool, range, None);
-
-        (builder, config)
+        instance
     }
 
     #[test]
     fn test_sync_circuit() {
-        let k = 20;
-        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20.json");
+        const K: usize = 20;
+        
+        let mut builder = ShaThreadBuilder::mock();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+
+        let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
 
         let timer = start_timer!(|| "sync circuit mock prover");
-        let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
+        let prover = MockProver::<Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
-    // #[test]
-    // fn test_sync_proofgen() {
-    //     let k = 20;
-    //     let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
+    #[test]
+    fn test_sync_proofgen() {
+        const K: usize = 20;
 
-    //     let params = gen_srs(k as u32);
+        let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
 
-    //     let pkey = gen_pkey(|| "sync_step", &params, None, circuit.clone()).unwrap();
+        let mut builder = ShaThreadBuilder::prover();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
-    //     let public_inputs = circuit.instances();
-    //     let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
+        let instances = circuit.instances();
+        let proof = full_prover(&params, &pk, circuit, instances.clone());
 
-    //     assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
-    // }
+        assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+    }
 
-    // #[test]
-    // fn test_sync_evm_verify() {
-    //     let k = 20;
-    //     let (circuit, config) = get_circuit_with_data(k, "./config/sync_step_k21.json");
+    #[test]
+    fn test_sync_evm_verify() {
+        const K: usize = 21;
 
-    //     let (params, pk) = SyncStepCircuit::<Test, Fr>::setup(&config, None);
+        let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
 
-    //     let instances = circuit.instances();
-    //     let num_instance = circuit.num_instance();
-    //     let deployment_code = gen_evm_verifier_shplonk::<SyncStepCircuit<Test, Fr>>(
-    //         &params,
-    //         pk.get_vk(),
-    //         num_instance,
-    //         None,
-    //     );
-    //     let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
+        let mut builder = ShaThreadBuilder::prover();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
-    //     evm_verify(deployment_code, instances, proof);
-    // }
+        let num_instance = circuit.num_instance();
+        let deployment_code = gen_evm_verifier_shplonk::<Eth2CircuitBuilder<Fr>>(
+            &params,
+            pk.get_vk(),
+            num_instance,
+            None,
+        );
+
+        let instances = circuit.instances();
+        let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
+
+        evm_verify(deployment_code, instances, proof);
+    }
 }

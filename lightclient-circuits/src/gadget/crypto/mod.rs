@@ -2,6 +2,7 @@ mod hash2curve;
 mod sha256;
 mod sha256_wide;
 mod util;
+mod builder;
 
 use eth_types::{AppCurveExt, HashCurveExt};
 use halo2_ecc::{
@@ -12,9 +13,9 @@ use halo2_ecc::{
 };
 pub use hash2curve::{HashToCurveCache, HashToCurveChip};
 pub use sha256::{
-    AssignedHashResult, HashInstructions, Sha256Chip, ShaContexts, ShaThreadBuilder, SpreadChip,
-    SpreadConfig,
+    AssignedHashResult, HashInstructions, Sha256Chip, ShaContexts, ShaThreadBuilder,
 };
+pub use builder::{SHAConfig, ShaCircuitBuilder};
 pub use sha256_wide::*;
 pub type FpPoint<F> = ProperCrtUint<F>;
 pub type Fp2Point<F> = FieldVector<FpPoint<F>>;

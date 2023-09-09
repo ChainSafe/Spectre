@@ -55,7 +55,7 @@ pub fn gen_pkey<C: Circuit<Fr>>(
     name: impl Fn() -> &'static str,
     params: &ParamsKZG<Bn256>,
     dir_path: Option<&Path>,
-    circuit: C,
+    circuit: &C,
 ) -> Result<ProvingKey<G1Affine>, &'static str> {
     if let Some(path) = &dir_path {
         fs::create_dir_all(path).expect("Failed to create directory");
@@ -74,7 +74,7 @@ pub fn gen_pkey<C: Circuit<Fr>>(
             ),
             Err(_) => {
                 let timer = start_timer!(|| "Creating and writting vkey");
-                let vk = keygen_vk(params, &circuit).expect("vk generation should not fail");
+                let vk = keygen_vk(params, circuit).expect("vk generation should not fail");
                 let mut file = File::create(vkey_path).expect("couldn't create vkey file");
                 vk.write(&mut file, halo2_proofs::SerdeFormat::RawBytesUnchecked)
                     .expect("Failed to write vkey");
@@ -84,13 +84,13 @@ pub fn gen_pkey<C: Circuit<Fr>>(
     } else {
         (
             start_timer!(|| "Loading vkey"),
-            keygen_vk(params, &circuit).expect("vk generation should not fail"),
+            keygen_vk(params, circuit).expect("vk generation should not fail"),
         )
     };
     end_timer!(timer);
 
     let timer = start_timer!(|| "Generating pkey");
-    let pkey = keygen_pk(params, vkey, &circuit).expect("pk generation should not fail");
+    let pkey = keygen_pk(params, vkey, circuit).expect("pk generation should not fail");
     end_timer!(timer);
 
     Ok(pkey)

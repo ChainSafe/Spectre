@@ -16,7 +16,7 @@ use halo2curves::bn256;
 pub use proof::*;
 
 use halo2_base::{
-    gates::builder::{FlexGateConfigParams, GateThreadBuilder},
+    gates::builder::{FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints},
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
@@ -69,11 +69,9 @@ pub(crate) fn query_expression<F: Field, T>(
 
 pub trait AppCircuitExt<F: Field>: Default {
     fn setup(
-        config: &FlexGateConfigParams,
+        k: usize,
         out: Option<&Path>,
-    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>);
-
-    fn parametrize(k: usize) -> FlexGateConfigParams;
+    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>, MultiPhaseThreadBreakPoints);
 }
 
 /// Randomness used in circuits.

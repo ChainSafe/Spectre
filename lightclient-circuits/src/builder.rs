@@ -1,143 +1,88 @@
-use std::{cell::RefCell, collections::HashMap, env::set_var};
-
 use eth_types::Field;
 use halo2_base::{
-    gates::{
-        builder::{FlexGateConfigParams, KeygenAssignments, ThreadBreakPoints},
-        range::{RangeConfig, RangeStrategy},
-    },
-    safe_types::RangeChip,
-    SKIP_FIRST_PASS,
+    gates::builder::{FlexGateConfigParams, MultiPhaseThreadBreakPoints},
+    AssignedValue,
 };
 use halo2_proofs::{
-    circuit::{self, Layouter, SimpleFloorPlanner},
-    plonk::{Circuit, ConstraintSystem, Error},
+    circuit::{Layouter, SimpleFloorPlanner},
+    plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
-use crate::{
-    gadget::crypto::{Sha256Chip, SpreadConfig, ShaThreadBuilder},
-    sha256_circuit::Sha256CircuitConfig,
-};
+use crate::gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder};
 
-#[derive(Debug, Clone)]
-pub struct SHAConfig<F: Field> {
-    pub spread: SpreadConfig<F>,
-    pub range: RangeConfig<F>,
+#[derive(Clone, Debug)]
+/// Config shared for block header and storage proof circuits
+pub struct Eth2Config<F: Field> {
+    sha: SHAConfig<F>,
+    pub instance: Column<Instance>,
 }
 
-impl<F: Field> SHAConfig<F> {
-    pub fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
-        let degree = params.k;
-        let mut range = RangeConfig::configure(
-            meta,
-            RangeStrategy::Vertical,
-            &params.num_advice_per_phase,
-            &params.num_lookup_advice_per_phase,
-            params.num_fixed,
-            params.k - 1,
-            degree,
-        );
-        let spread = SpreadConfig::configure(meta, 8, 2); // TODO configure num_advice_columns
-        set_var("UNUSABLE_ROWS", meta.minimum_rows().to_string());
+/// This is an extension of [`ShaCircuitBuilder`] that adds support for public instances (aka public inputs+outputs)
+pub struct Eth2CircuitBuilder<F: Field> {
+    pub inner: ShaCircuitBuilder<F>,
+    pub assigned_instances: Vec<AssignedValue<F>>,
+}
 
-        range.gate.max_rows = (1 << degree) - meta.minimum_rows();
-        Self { range, spread }
+impl<F: Field> Eth2CircuitBuilder<F> {
+    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
+    pub fn keygen(assigned_instances: Vec<AssignedValue<F>>, builder: ShaThreadBuilder<F>) -> Self {
+        Self {
+            assigned_instances,
+            inner: ShaCircuitBuilder::keygen(builder),
+        }
     }
-}
 
-pub struct ShaCircuitBuilder<F: Field> {
-    pub builder: RefCell<ShaThreadBuilder<F>>,
-    pub break_points: RefCell<ThreadBreakPoints>,
-    pub range: RangeChip<F>,
-}
+    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
+    pub fn mock(assigned_instances: Vec<AssignedValue<F>>, builder: ShaThreadBuilder<F>) -> Self {
+        Self {
+            assigned_instances,
+            inner: ShaCircuitBuilder::mock(builder),
+        }
+    }
 
-impl<F: Field> ShaCircuitBuilder<F> {
-    pub fn new(
+    /// Creates a new [Eth2CircuitBuilder].
+    pub fn prover(
+        assigned_instances: Vec<AssignedValue<F>>,
         builder: ShaThreadBuilder<F>,
-        range: RangeChip<F>,
-        break_points: Option<ThreadBreakPoints>,
-        // synthesize_phase1: FnPhase1,
+        break_points: MultiPhaseThreadBreakPoints,
     ) -> Self {
         Self {
-            builder: RefCell::new(builder),
-            break_points: RefCell::new(break_points.unwrap_or_default()),
-            range,
-            // synthesize_phase1: RefCell::new(Some(synthesize_phase1)),
+            assigned_instances,
+            inner: ShaCircuitBuilder::prover(builder, break_points),
         }
     }
 
     pub fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
-        // clone everything so we don't alter the circuit in any way for later calls
-        let mut builder = self.builder.borrow().clone();
-        builder.config(k, minimum_rows)
+        self.inner.config(k, minimum_rows)
     }
 
-    // re-usable function for synthesize
-    #[allow(clippy::type_complexity)]
-    pub fn sub_synthesize(
-        &self,
-        config: &SHAConfig<F>,
-        layouter: &mut impl Layouter<F>,
-    ) -> Result<HashMap<(usize, usize), (circuit::Cell, usize)>, Error> {
-        config
-            .range
-            .load_lookup_table(layouter)
-            .expect("load range lookup table");
+    pub fn break_points(&self) -> MultiPhaseThreadBreakPoints {
+        self.inner.break_points.borrow().clone()
+    }
 
-        let mut first_pass = SKIP_FIRST_PASS;
-        let witness_gen_only = self.builder.borrow().witness_gen_only();
+    pub fn instance_count(&self) -> usize {
+        self.assigned_instances.len()
+    }
 
-        let mut assigned_advices = HashMap::new();
-
-        config.spread.load(layouter)?;
-
-        layouter
-            .assign_region(
-                || "ShaCircuitBuilder generated circuit",
-                |mut region| {
-                    if first_pass {
-                        first_pass = false;
-                        return Ok(());
-                    }
-                    if !witness_gen_only {
-                        let mut builder = self.builder.borrow().clone();
-                  
-                        let mut assignments = KeygenAssignments {
-                            ..Default::default()
-                        };
-                    
-                        assignments = builder.assign_all(
-                            &config.range.gate,
-                            &config.range.lookup_advice,
-                            &config.range.q_lookup,
-                            &config.spread,
-                            &mut region,
-                            assignments,
-                        );
-                        *self.break_points.borrow_mut() = assignments.break_points[0].clone();
-                        assigned_advices = assignments.assigned_advices;
-                    } else {
-                        unimplemented!()
-                    }
-                    Ok(())
-                },
-            )?;
-        Ok(assigned_advices)
+    pub fn instance(&self) -> Vec<F> {
+        self.assigned_instances.iter().map(|v| *v.value()).collect()
     }
 }
 
-impl<F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuilder<F> {
-    type Config = SHAConfig<F>;
+impl<F: Field> Circuit<F> for Eth2CircuitBuilder<F> {
+    type Config = Eth2Config<F>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F> {
-        let params: FlexGateConfigParams =
-            serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-        SHAConfig::configure(meta, params)
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
+        let sha = ShaCircuitBuilder::configure(meta);
+        let instance = meta.instance_column();
+        meta.enable_equality(instance);
+
+        Eth2Config { sha, instance }
     }
 
     fn synthesize(
@@ -145,7 +90,30 @@ impl<F: Field /*, FnPhase1: FnSynthesize<F>*/> Circuit<F> for ShaCircuitBuilder<
         config: Self::Config,
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-        self.sub_synthesize(&config, &mut layouter);
+        // we later `take` the builder, so we need to save this value
+        let witness_gen_only = self.inner.builder.borrow().witness_gen_only();
+        let assigned_advices = self.inner.sub_synthesize(&config.sha, &mut layouter)?;
+
+        if !witness_gen_only {
+            // expose public instances
+            let mut layouter = layouter.namespace(|| "expose");
+            for (i, instance) in self.assigned_instances.iter().enumerate() {
+                let cell = instance.cell.unwrap();
+                let (cell, _) = assigned_advices
+                    .get(&(cell.context_id, cell.offset))
+                    .expect("instance not assigned");
+                layouter.constrain_instance(*cell, config.instance, i);
+            }
+        }
         Ok(())
+    }
+}
+
+impl<F: Field> snark_verifier_sdk::CircuitExt<F> for Eth2CircuitBuilder<F> {
+    fn num_instance(&self) -> Vec<usize> {
+        vec![self.instance_count()]
+    }
+    fn instances(&self) -> Vec<Vec<F>> {
+        vec![self.instance()]
     }
 }
