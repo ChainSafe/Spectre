@@ -13,7 +13,7 @@
 // use crate::{
 //     gadget::crypto::{
 //         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, HashToCurveCache,
-//         HashToCurveChip, Sha256ChipWide, SpreadConfig,
+//         HashToCurveChip, Sha256ChipWide,
 //     },
 //     poseidon::{g1_array_poseidon, poseidon_sponge},
 //     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},

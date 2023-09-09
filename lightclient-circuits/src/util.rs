@@ -35,7 +35,6 @@ use crate::{
         crypto::{Fp2Point, FpPoint},
         Expr,
     },
-    sha256_circuit::Sha256CircuitConfig,
     witness,
 };
 use eth_types::*;
@@ -71,7 +70,11 @@ pub trait AppCircuitExt<F: Field>: Default {
     fn setup(
         k: usize,
         out: Option<&Path>,
-    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>, MultiPhaseThreadBreakPoints);
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        MultiPhaseThreadBreakPoints,
+    );
 }
 
 /// Randomness used in circuits.

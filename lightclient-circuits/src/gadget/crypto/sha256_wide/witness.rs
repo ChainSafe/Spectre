@@ -17,30 +17,11 @@ pub struct ShaRow<F> {
     pub(crate) is_paddings: [bool; ABSORB_WIDTH_PER_ROW_BYTES],
     pub(crate) intermediary_data_rlcs: [F; ABSORB_WIDTH_PER_ROW_BYTES],
     pub(crate) final_hash_bytes: [F; NUM_BYTES_FINAL_HASH],
-    // feature: [multi input lookups]
-    pub(crate) chunks_rlc: [F; 2],
-    pub(crate) rnd_pow: F,
-    // feature: [lookups by value]
-    pub(crate) u8_pow: [F; 2],
-    pub(crate) chunks_val: [F; 2],
-    pub(crate) is_rlc: [bool; 2],
-    // end
 }
 
 pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, is_rlc: [bool; 2]) {
     // Prepare inputs RLCs in advance
     let mut inputs_rlc = inputs.map(|input| rlc::value(input, rnd));
-
-    // feature: [lookups by value]
-    let two = F::from(2);
-    let f256 = two.pow_const(8);
-    let mut inputs_vals = [F::zero(), F::zero()];
-    for (idx, _) in inputs.iter().enumerate() {
-        for (i, &byte) in inputs[idx].iter().take(32).enumerate() {
-            inputs_vals[idx] += F::from(byte as u64) * two.pow_const(i * 8);
-        }
-    }
-    // end
 
     let left_bits = into_bits(inputs[0]);
     let right_bits = into_bits(inputs[1]);
@@ -83,13 +64,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                            hash_rlc,
                            is_paddings,
                            intermediary_data_rlcs,
-                           final_hash_bytes,
-                           // feature: [multi input lookups]
-                           chunks_rlc,
-                           rnd_pow: F,
-                           // feature: [lookups by value]
-                           u8_pow: [F; 2],
-                           chunks_val: [F; 2]| {
+                           final_hash_bytes| {
             let word_to_bits = |value: u64, num_bits: usize| {
                 into_bits(&value.to_be_bytes())[64 - num_bits..64]
                     .iter()
@@ -109,11 +84,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 is_paddings,
                 intermediary_data_rlcs,
                 final_hash_bytes,
-                chunks_rlc,
-                rnd_pow,
-                u8_pow,
-                chunks_val,
-                is_rlc,
             });
         };
 
@@ -138,10 +108,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 [false, false, false, in_padding],
                 [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
                 [F::zero(); NUM_BYTES_FINAL_HASH],
-                [F::zero(); 2],
-                rnd_pow,
-                u8_pow,
-                data_vals,
             )
         };
         add_row_start(d, h, idx == 0);
@@ -172,27 +138,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 {
                     if !*padding {
                         data_rlc = data_rlc * rnd + F::from(*byte as u64);
-                        // feature: [multi input lookups]
-                        if length == inputs[0].len() {
-                            rnd_pow = F::one();
-                            u8_pow[1] = F::one();
-                        }
-                        if length > inputs[0].len() {
-                            is_right = true;
-                            rnd_pow *= rnd;
-                            u8_pow[0] = F::zero();
-                        }
-                        // end
-                        // feature: [lookups by value]
-                        if length <= input_len {
-                            data_vals[0] += u8_pow[0] * F::from(*byte as u64);
-                            data_vals[1] += u8_pow[1] * F::from(*byte as u64);
-                            u8_pow[0] *= f256;
-                            if length - 4 + idx >= inputs[0].len() {
-                                u8_pow[1] *= f256;
-                            }
-                        }
-                        // end
                     }
                     if idx < inter_data_rlcs.len() - 1 {
                         inter_data_rlcs[idx + 1] = data_rlc;
@@ -255,10 +200,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 is_paddings,
                 inter_data_rlcs,
                 [F::zero(); NUM_BYTES_FINAL_HASH],
-                [F::zero(); 2],
-                rnd_pow,
-                u8_pow,
-                data_vals,
             );
 
             // Truncate the newly calculated values
@@ -314,10 +255,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 [false; ABSORB_WIDTH_PER_ROW_BYTES],
                 [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
                 [F::zero(); NUM_BYTES_FINAL_HASH],
-                [F::zero(); 2],
-                rnd_pow,
-                u8_pow,
-                [F::zero(); 2],
             )
         };
         add_row_end(hs[3], hs[7]);
@@ -336,10 +273,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
             [false, false, false, in_padding],
             [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
             final_hash_bytes,
-            inputs_rlc,
-            rnd_pow,
-            u8_pow,
-            data_vals,
         );
 
         // Now truncate the results

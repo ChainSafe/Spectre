@@ -18,10 +18,7 @@ use halo2_proofs::{
 };
 use snark_verifier_sdk::CircuitExt;
 
-use crate::{
-    gadget::crypto::{Sha256Chip, ShaThreadBuilder},
-    sha256_circuit::Sha256CircuitConfig,
-};
+use crate::gadget::crypto::{Sha256Chip, ShaThreadBuilder};
 
 use super::sha256::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 

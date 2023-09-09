@@ -1,8 +1,6 @@
 use std::iter;
 use std::marker::PhantomData;
 
-use crate::sha256_circuit::Sha256CircuitConfig;
-
 use super::{HashInput, Validator};
 use eth_types::{Field, Spec};
 use ethereum_consensus::bellatrix::mainnet;

@@ -30,11 +30,10 @@ use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
 use super::{
-    sha256::HashInstructions,
     util::{fp2_sgn0, i2osp, strxor},
-    Fp2Point, G1Point, G2Point,
+    Fp2Point, G1Point, G2Point, HashInstructions,
 };
-use super::{ShaContexts, ShaThreadBuilder};
+use super::{ShaContexts, ShaThreadBuilder, AssignedHashResult};
 
 const G2_EXT_DEGREE: usize = 2;
 
@@ -629,8 +628,6 @@ mod test {
     use crate::gadget::crypto::sha256::{SpreadChip, SpreadConfig};
     use crate::gadget::crypto::ShaCircuitBuilder;
     use crate::gadget::crypto::{Sha256Chip, ShaThreadBuilder};
-    use crate::sha256_circuit::Sha256CircuitConfig;
-    use crate::table::Sha256Table;
     use crate::util::{print_fq2_dev, Challenges, IntoWitness};
 
     use super::*;

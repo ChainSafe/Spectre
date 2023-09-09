@@ -18,10 +18,7 @@ use std::{cell::RefCell, char::MAX};
 
 use crate::gadget::crypto::sha256::compression::{sha256_compression, INIT_STATE};
 use crate::util::AssignedValueCell;
-use crate::{
-    sha256_circuit::{util::Sha256AssignedRows, Sha256CircuitConfig},
-    witness::HashInput,
-};
+use crate::witness::HashInput;
 use halo2_base::safe_types::RangeChip;
 use halo2_base::QuantumCell;
 use halo2_base::{
@@ -38,36 +35,13 @@ pub use self::builder::ShaContexts;
 pub(super) use self::builder::{assign_threads_sha, FIRST_PHASE};
 pub use self::spread::SpreadChip;
 
+use super::{HashInstructions, AssignedHashResult};
+
 const SHA256_CONTEXT_ID: usize = usize::MAX;
-
-pub trait HashInstructions<F: Field> {
-    const BLOCK_SIZE: usize;
-    const DIGEST_SIZE: usize;
-
-    /// Digests input using hash function and returns finilized output.
-    /// `MAX_INPUT_SIZE` is the maximum size of input that can be processed by the hash function.
-    /// `strict` flag indicates whether to perform range check on input bytes.
-    fn digest<const MAX_INPUT_SIZE: usize>(
-        &self,
-        thread_pool: &mut ShaThreadBuilder<F>,
-        input: HashInput<QuantumCell<F>>,
-        strict: bool,
-    ) -> Result<AssignedHashResult<F>, Error>;
-
-    fn range(&self) -> &RangeChip<F>;
-}
-
-#[derive(Debug, Clone)]
-pub struct AssignedHashResult<F: Field> {
-    // pub input_len: AssignedValue<F>,
-    pub input_bytes: Vec<AssignedValue<F>>,
-    pub output_bytes: [AssignedValue<F>; 32],
-}
 
 #[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: Field> {
     spread: SpreadChip<'a, F>,
-    // extra_assignments: RefCell<KeygenAssignments<F>>,
 }
 
 impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
@@ -237,7 +211,6 @@ mod test {
     use std::{cell::RefCell, marker::PhantomData};
 
     use crate::gadget::crypto::ShaCircuitBuilder;
-    use crate::table::Sha256Table;
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
     use super::*;

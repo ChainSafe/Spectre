@@ -17,9 +17,7 @@ use crate::{
         HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
     poseidon::{g1_array_poseidon, poseidon_sponge},
-    sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
-    table::Sha256Table,
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
     },
@@ -344,7 +342,6 @@ mod tests {
 
     use crate::{
         builder::Eth2CircuitBuilder,
-        table::Sha256Table,
         util::{full_prover, full_verifier, gen_pkey},
         witness::{SyncStepArgs, Validator},
     };

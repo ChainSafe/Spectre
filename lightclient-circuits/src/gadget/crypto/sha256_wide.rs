@@ -1,3 +1,7 @@
+mod config;
+mod witness;
+mod util;
+
 use eth_types::Field;
 use ff::PrimeField;
 use halo2_base::gates::builder::KeygenAssignments;
@@ -6,12 +10,11 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::{cell::RefCell, char::MAX};
 
+use crate::gadget::crypto::sha256_wide::util::Sha256AssignedRows;
 use crate::gadget::rlc;
 use crate::util::AssignedValueCell;
-use crate::{
-    sha256_circuit::{util::Sha256AssignedRows, Sha256CircuitConfig},
-    witness::HashInput,
-};
+use crate::witness::HashInput;
+
 use halo2_base::safe_types::RangeChip;
 use halo2_base::QuantumCell;
 use halo2_base::{
@@ -24,13 +27,15 @@ use halo2_proofs::{
     plonk::{Assigned, Error},
 };
 
+use self::config::Sha256WideConfig;
+
 use super::{AssignedHashResult, HashInstructions};
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 
 #[derive(Debug)]
 pub struct Sha256ChipWide<'a, F: Field> {
-    config: &'a Sha256CircuitConfig<F>,
+    config: &'a Sha256WideConfig<F>,
     range: &'a RangeChip<F>,
     randomness: F,
     extra_assignments: RefCell<KeygenAssignments<F>>,
@@ -172,9 +177,8 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
         }
 
         Ok(AssignedHashResult {
-            // input_len: full_input_len,
             input_bytes: vec![],
-            output_bytes: assigned_output,
+            output_bytes: assigned_output.try_into().unwrap(),
         })
     }
 
@@ -193,7 +197,7 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
 
 impl<'a, F: Field> Sha256ChipWide<'a, F> {
     pub fn new(
-        config: &'a Sha256CircuitConfig<F>,
+        config: &'a Sha256WideConfig<F>,
         range: &'a RangeChip<F>,
         randomness: Value<F>,
         extra_assignments: Option<KeygenAssignments<F>>,
@@ -260,7 +264,6 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::table::Sha256Table;
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
     use super::*;
@@ -282,7 +285,7 @@ mod test {
 
     #[derive(Debug, Clone)]
     struct TestConfig<F: Field> {
-        sha256_config: Sha256CircuitConfig<F>,
+        sha256_config: Sha256WideConfig<F>,
         pub max_byte_size: usize,
         range: RangeConfig<F>,
         challenges: Challenges<Value<F>>,
@@ -309,8 +312,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha_table = Sha256Table::construct(meta);
-            let sha256_configs = Sha256CircuitConfig::<F>::new::<Test>(meta, sha_table);
+            let sha256_configs = Sha256WideConfig::<F>::new::<Test>(meta);
             let range = RangeConfig::configure(
                 meta,
                 RangeStrategy::Vertical,
@@ -324,7 +326,7 @@ mod test {
                 sha256_config: sha256_configs,
                 max_byte_size: Self::MAX_BYTE_SIZE,
                 range,
-                challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
+                challenges: Challenges::mock(Value::known(Sha256WideConfig::fixed_challenge())),
             }
         }
 
