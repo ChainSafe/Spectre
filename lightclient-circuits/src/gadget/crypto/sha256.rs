@@ -35,7 +35,7 @@ use halo2_proofs::{
 };
 
 pub use self::builder::ShaContexts;
-pub(super) use self::builder::{FIRST_PHASE, assign_threads_sha};
+pub(super) use self::builder::{assign_threads_sha, FIRST_PHASE};
 pub use self::spread::SpreadChip;
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
@@ -295,55 +295,38 @@ mod test {
         prover.assert_satisfied_par();
     }
 
-    // #[test]
-    // fn test_sha256_params_gen() {
-    //     let k = TestCircuit::<Fr>::K as u32;
-    //     let test_input = vec![0u8; 128];
-    //     let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-    //     let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-    //     let builder = GateThreadBuilder::keygen();
-    //     let circuit = TestCircuit::<Fr> {
-    //         builder: RefCell::new(builder),
-    //         range,
-    //         test_input: test_input.into_witness(),
-    //         test_output,
-    //         _f: PhantomData,
-    //     };
-    //     let params = gen_srs(k);
-    //     let pkey = gen_pkey(|| "sha256_chip", &params, None, circuit).unwrap();
-    // }
+    #[test]
+    fn test_sha256_params_gen() {
+        let k = 15;
+        let test_input = vec![0u8; 64];
+        let builder = ShaThreadBuilder::<Fr>::keygen();
 
-    // #[test]
-    // fn test_sha256_proof_gen() {
-    //     let k = TestCircuit::<Fr>::K as u32;
-    //     let test_input = vec![2u8; 32];
-    //     let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-    //     let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-    //     let builder = GateThreadBuilder::keygen();
-    //     let circuit = TestCircuit::<Fr> {
-    //         builder: RefCell::new(builder),
-    //         range,
-    //         test_input: HashInput::TwoToOne(
-    //             test_input.clone().into_witness(),
-    //             test_input.into_witness(),
-    //         ),
-    //         test_output,
-    //         _f: PhantomData,
-    //     };
-    //     let pf_time = start_timer!(|| "mock prover");
+        let circuit = test_circuit(k, builder, &[test_input]).unwrap();
 
-    //     let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-    //     prover.assert_satisfied();
-    //     prover.verify().unwrap();
-    //     end_timer!(pf_time);
+        let params = gen_srs(k as u32);
+        let pk = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
+    }
 
-    //     let params = gen_srs(k);
+    #[test]
+    fn test_sha256_proof_gen() {
+        let k = 15;
+        let test_input = vec![0u8; 64];
+        let builder = ShaThreadBuilder::<Fr>::keygen();
 
-    //     let pkey = gen_pkey(|| "sha256_chip", &params, None, circuit.clone()).unwrap();
+        let circuit = test_circuit(k, builder, &[test_input.clone()]).unwrap();
 
-    //     let proof = full_prover(&params, &pkey, circuit, vec![]);
+        let params = gen_srs(k as u32);
+        let pk = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
 
-    //     let is_valid = full_verifier(&params, pkey.get_vk(), proof, vec![]);
-    //     assert!(is_valid);
-    // }
+        let break_points = circuit.break_points.take();
+
+        let builder = ShaThreadBuilder::<Fr>::prover();
+
+        let circuit = test_circuit(k, builder, &[test_input]).unwrap();
+
+        let proof = full_prover(&params, &pk, circuit, vec![]);
+
+        let is_valid = full_verifier(&params, pk.get_vk(), proof, vec![]);
+        assert!(is_valid);
+    }
 }
