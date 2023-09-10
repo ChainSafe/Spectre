@@ -99,34 +99,6 @@ impl<F: Field> ShaBitThreadBuilder<F> {
     }
 
     pub fn sha_contexts(&mut self) -> &mut Sha256BitContexts<F> {
-        // Sha256BitContexts{
-        //     q_enable: &mut self.sha_contexts.q_enable,
-        //     q_first: &mut self.sha_contexts.q_first,
-        //     q_extend: &mut self.sha_contexts.q_extend,
-        //     q_start: &mut self.sha_contexts.q_start,
-        //     q_compression: &mut self.sha_contexts.q_compression,
-        //     q_end: &mut self.sha_contexts.q_end,
-        //     q_padding: &mut self.sha_contexts.q_padding,
-        //     q_padding_last: &mut self.sha_contexts.q_padding_last,
-        //     q_squeeze: &mut self.sha_contexts.q_squeeze,
-        //     q_final_word: &mut self.sha_contexts.q_final_word,
-        //     word_w: self.sha_contexts.word_w.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     word_a: self.sha_contexts.word_a.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     word_e: self.sha_contexts.word_e.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     is_final: &mut self.sha_contexts.is_final,
-        //     is_paddings: self.sha_contexts.is_paddings.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     data_rlcs: self.sha_contexts.data_rlcs.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     round_cst: &mut self.sha_contexts.round_cst,
-        //     h_a: &mut self.sha_contexts.h_a,
-        //     h_e: &mut self.sha_contexts.h_e,
-        //     is_enabled: &mut self.sha_contexts.is_enabled,
-        //     input_rlc: &mut self.sha_contexts.input_rlc,
-        //     input_len: &mut self.sha_contexts.input_len,
-        //     hash_rlc: &mut self.sha_contexts.hash_rlc,
-        //     final_hash_bytes: self.sha_contexts.final_hash_bytes.iter_mut().collect::<Vec<&mut _>>().try_into().unwrap(),
-        //     _f: std::marker::PhantomData,
-        //     offset: &mut self.sha_offset
-        // }
         &mut self.sha_contexts
     }
 

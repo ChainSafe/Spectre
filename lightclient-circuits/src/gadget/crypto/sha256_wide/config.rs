@@ -3,6 +3,7 @@
 //! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::iter;
 use std::marker::PhantomData;
@@ -15,11 +16,13 @@ use crate::{
 };
 use eth_types::{Field, Spec};
 use halo2_base::{AssignedValue, Context, ContextCell, QuantumCell};
+use halo2_proofs::circuit;
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
     poly::Rotation,
 };
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 use super::util::*;
 use itertools::Itertools;
@@ -652,200 +655,6 @@ impl<F: Field> Sha256BitConfig<F> {
         annotations
     }
 
-    // fn set_row(
-    //     &self,
-    //     region: &mut Region<'_, F>,
-    //     row: &ShaRow<F>,
-    //     assigned_rows: &mut Sha256AssignedRows<F>,
-    // ) -> Result<Vec<AssignedValueCell<F>>, Error> {
-    //     let offset = assigned_rows.offset;
-    //     assigned_rows.offset += 1;
-    //     let round = offset % (NUM_ROUNDS + 8);
-    //     // Fixed values
-    //     for (name, column, value) in &[
-    //         ("q_enable", self.q_enable, F::from(true)),
-    //         ("q_first", self.q_first, F::from(offset == 0)),
-    //         (
-    //             "q_extend",
-    //             self.q_extend,
-    //             F::from((4 + 16..4 + NUM_ROUNDS).contains(&round)),
-    //         ),
-    //         ("q_start", self.q_start, F::from(round < 4)),
-    //         (
-    //             "q_compression",
-    //             self.q_compression,
-    //             F::from((4..NUM_ROUNDS + 4).contains(&round)),
-    //         ),
-    //         ("q_end", self.q_end, F::from(round >= NUM_ROUNDS + 4)),
-    //         (
-    //             "q_padding",
-    //             self.q_padding,
-    //             F::from((4..20).contains(&round)),
-    //         ),
-    //         ("q_padding_last", self.q_padding_last, F::from(round == 19)),
-    //         (
-    //             "q_squeeze",
-    //             self.q_squeeze,
-    //             F::from(round == NUM_ROUNDS + 7),
-    //         ),
-    //         (
-    //             "q_final_word",
-    //             self.q_final_word,
-    //             F::from(row.is_final && round == NUM_ROUNDS + 7),
-    //         ),
-    //         (
-    //             "round_cst",
-    //             self.round_cst,
-    //             F::from(if (4..NUM_ROUNDS + 4).contains(&round) {
-    //                 ROUND_CST[round - 4] as u64
-    //             } else {
-    //                 0
-    //             }),
-    //         ),
-    //         (
-    //             "Ha",
-    //             self.h_a,
-    //             F::from(if round < 4 { H[3 - round] } else { 0 }),
-    //         ),
-    //         (
-    //             "He",
-    //             self.h_e,
-    //             F::from(if round < 4 { H[7 - round] } else { 0 }),
-    //         ),
-    //     ] {
-    //         region.assign_fixed(
-    //             || format!("assign {} {}", name, offset),
-    //             *column,
-    //             offset,
-    //             || Value::known(*value),
-    //         )?;
-    //     }
-
-    //     // Advice values
-    //     for (name, columns, values) in [
-    //         ("w bits", self.word_w.as_slice(), row.w.as_slice()),
-    //         ("a bits", self.word_a.as_slice(), row.a.as_slice()),
-    //         ("e bits", self.word_e.as_slice(), row.e.as_slice()),
-    //         (
-    //             "is_final",
-    //             [self.is_final].as_slice(),
-    //             [row.is_final].as_slice(),
-    //         ),
-    //     ] {
-    //         for (idx, (value, column)) in values.iter().zip(columns.iter()).enumerate() {
-    //             region.assign_advice(
-    //                 || format!("assign {} {} {}", name, idx, offset),
-    //                 *column,
-    //                 offset,
-    //                 || Value::known(F::from(*value)),
-    //             )?;
-    //         }
-    //     }
-
-    //     let padding_selectors = self
-    //         .is_paddings
-    //         .iter()
-    //         .zip(row.is_paddings.iter())
-    //         .enumerate()
-    //         .map(|(idx, (&col, &val))| {
-    //             let cell = region.assign_advice(
-    //                 || format!("assign {} {} {}", "padding selector", idx, offset),
-    //                 col,
-    //                 offset,
-    //                 || Value::known(F::from(val)),
-    //             );
-
-    //             cell.map(|cell| AssignedValueCell {
-    //                 cell: cell.cell(),
-    //                 value: F::from(val),
-    //             })
-    //         })
-    //         .collect::<Result<Vec<_>, _>>()?
-    //         .try_into()
-    //         .unwrap();
-
-    //     // Intermediary data rlcs
-    //     for (idx, (data_rlc, column)) in row
-    //         .intermediary_data_rlcs
-    //         .iter()
-    //         .zip(self.data_rlcs.iter())
-    //         .enumerate()
-    //     {
-    //         region.assign_advice(
-    //             || format!("assign data rlcs {} {}", idx, offset),
-    //             *column,
-    //             offset,
-    //             || Value::known(*data_rlc),
-    //         )?;
-    //     }
-
-    //     // Hash data
-    //     let [is_final, input_rlc, input_len, output_rlc] = [
-    //         (
-    //             self.is_enabled,
-    //             F::from(row.is_final && round == NUM_ROUNDS + 7),
-    //         ),
-    //         (self.input_rlc, row.data_rlc),
-    //         (self.input_len, F::from(row.length as u64)),
-    //         (self.hash_rlc, row.hash_rlc),
-    //     ]
-    //     .map(|(column, value)| {
-    //         let cell = region.assign_advice(
-    //             || format!("assign {}", offset),
-    //             column,
-    //             offset,
-    //             || Value::known(value),
-    //         );
-    //         cell.map(|cell| AssignedValueCell {
-    //             cell: cell.cell(),
-    //             value,
-    //         })
-    //         .unwrap()
-    //     });
-
-    //     if (4..20).contains(&round) {
-    //         assigned_rows.padding_selectors.push(padding_selectors);
-    //         assigned_rows.input_rlc.push(input_rlc);
-    //     }
-
-    //     if row.is_final && round == NUM_ROUNDS + 7 {
-    //         assigned_rows.output_rlc.push(output_rlc);
-    //     }
-
-    //     if round == NUM_ROUNDS + 7 {
-    //         assigned_rows.is_final.push(is_final);
-    //         assigned_rows.input_len.push(input_len);
-    //     }
-
-    //     let mut hash_cells = Vec::with_capacity(NUM_BYTES_FINAL_HASH);
-    //     if !row.is_final || round != NUM_ROUNDS + 7 {
-    //         for idx in 0..(NUM_BYTES_FINAL_HASH) {
-    //             region.assign_advice(
-    //                 || format!("final hash word at {}", idx),
-    //                 self.final_hash_bytes[idx],
-    //                 offset,
-    //                 || Value::known(F::from(0u64)),
-    //             )?;
-    //         }
-    //     } else {
-    //         for (idx, byte) in row.final_hash_bytes.iter().enumerate() {
-    //             let cell = region.assign_advice(
-    //                 || format!("final hash word at {}", idx),
-    //                 self.final_hash_bytes[idx],
-    //                 offset,
-    //                 || Value::known(*byte),
-    //             )?;
-
-    //             hash_cells.push(AssignedValueCell {
-    //                 cell: cell.cell(),
-    //                 value: *byte,
-    //             });
-    //         }
-    //     }
-
-    //     Ok(hash_cells)
-    // }
-
     pub fn fixed_challenge() -> F {
         F::from_u128(0xca9d6022267d3bd658bf)
     }
@@ -979,5 +788,103 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             .collect_vec();
 
         Ok(assigned_hash_bytes)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn assign_in_region(
+        &self,
+        region: &mut Region<F>,
+        config: &Sha256BitConfig<F>,
+        use_unknown: bool,
+        mut assigned_advices: Option<&mut HashMap<(usize, usize), (circuit::Cell, usize)>>,
+    ) {
+        // Fixed values
+        for (name, column, ctx) in [
+            ("q_enable", &config.q_enable, &self.q_enable),
+            ("q_first", &config.q_first, &self.q_first),
+            ("q_extend", &config.q_extend, &self.q_extend),
+            ("q_start", &config.q_start, &self.q_start),
+            ("q_compression", &config.q_compression, &self.q_compression),
+            ("q_end", &config.q_end, &self.q_end),
+            ("q_padding", &config.q_padding, &self.q_padding),
+            (
+                "q_padding_last",
+                &config.q_padding_last,
+                &self.q_padding_last,
+            ),
+            ("q_squeeze", &config.q_squeeze, &self.q_squeeze),
+            ("q_final_word", &config.q_final_word, &self.q_final_word),
+            ("round_cst", &config.round_cst, &self.round_cst),
+            ("h_a", &config.h_a, &self.h_a),
+            ("h_e", &config.h_e, &self.h_e),
+        ] {
+            for (offset, &val) in ctx.advice.iter().enumerate() {
+                let value = if use_unknown {
+                    Value::unknown()
+                } else {
+                    Value::known(val)
+                };
+                region.assign_fixed(|| name, *column, offset, || value);
+            }
+        }
+
+        // Advice values
+
+        for (name, column, ctx) in [
+            ("is_enabled", &config.is_enabled, &self.is_enabled),
+            ("input_len", &config.input_len, &self.input_len),
+            ("input_rlc", &config.input_rlc, &self.input_rlc),
+            ("hash_rlc", &config.hash_rlc, &self.hash_rlc),
+        ] {
+            for (offset, &val) in ctx.advice.iter().enumerate() {
+                let value = if use_unknown {
+                    Value::unknown()
+                } else {
+                    Value::known(val)
+                };
+                region.assign_advice(|| name, *column, offset, || value);
+            }
+        }
+
+        itertools::multizip((
+            config.is_paddings.iter(),
+            self.is_paddings.iter(),
+            iter::repeat("is_paddings"),
+        ))
+        .chain(itertools::multizip((
+            config.data_rlcs.iter(),
+            self.data_rlcs.iter(),
+            iter::repeat("data_rlcs"),
+        )))
+        .chain(itertools::multizip((
+            config.word_w.iter(),
+            self.word_w.iter(),
+            iter::repeat("w word"),
+        )))
+        .chain(itertools::multizip((
+            config.word_a.iter(),
+            self.word_a.iter(),
+            iter::repeat("a word"),
+        )))
+        .chain(itertools::multizip((
+            config.word_e.iter(),
+            self.word_e.iter(),
+            iter::repeat("e word"),
+        )))
+        .chain(itertools::multizip((
+            config.final_hash_bytes.iter(),
+            self.final_hash_bytes.iter(),
+            iter::repeat("final hash bytes"),
+        )))
+        .for_each(|(column, ctx, name)| {
+            for (offset, &val) in ctx.advice.iter().enumerate() {
+                let value = if use_unknown {
+                    Value::unknown()
+                } else {
+                    Value::known(val)
+                };
+                region.assign_advice(|| name, *column, offset, || value);
+            }
+        });
     }
 }
