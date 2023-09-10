@@ -1,5 +1,7 @@
 use std::cell::RefMut;
 
+use crate::util::BaseThreadBuilder;
+
 use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
 use super::spread::{self, SpreadChip, SpreadConfig};

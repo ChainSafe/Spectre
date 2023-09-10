@@ -19,7 +19,7 @@ use crate::{
     poseidon::{g1_array_poseidon, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{
-        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
+        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness, BaseThreadBuilder,
     },
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
 };

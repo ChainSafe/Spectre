@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::{cell::RefCell, char::MAX};
 
 use crate::gadget::crypto::sha256::compression::{sha256_compression, INIT_STATE};
-use crate::util::AssignedValueCell;
+use crate::util::{AssignedValueCell, BaseThreadBuilder};
 use crate::witness::HashInput;
 use halo2_base::safe_types::RangeChip;
 use halo2_base::QuantumCell;
@@ -44,7 +44,7 @@ pub struct Sha256Chip<'a, F: Field> {
     spread: SpreadChip<'a, F>,
 }
 
-impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
+impl<'a, F: Field> HashInstructions<F, ShaThreadBuilder<F>> for Sha256Chip<'a, F> {
     const BLOCK_SIZE: usize = 64;
     const DIGEST_SIZE: usize = 32;
 

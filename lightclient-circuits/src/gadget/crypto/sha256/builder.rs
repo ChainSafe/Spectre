@@ -18,6 +18,8 @@ use halo2_proofs::{
 };
 use itertools::Itertools;
 
+use crate::util::BaseThreadBuilder;
+
 use super::SpreadConfig;
 
 pub const FIRST_PHASE: usize = 0;
@@ -65,11 +67,7 @@ impl<F: Field> ShaThreadBuilder<F> {
         self.gate_builder = self.gate_builder.unknown(use_unknown);
         self
     }
-
-    pub fn main(&mut self) -> &mut Context<F> {
-        self.gate_builder.main(FIRST_PHASE)
-    }
-
+    
     pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, ShaContexts<F>) {
         if self.threads_dense.is_empty() {
             self.new_thread_dense();
@@ -84,22 +82,6 @@ impl<F: Field> ShaThreadBuilder<F> {
                 self.threads_spread.last_mut().unwrap(),
             ),
         )
-    }
-
-    pub fn witness_gen_only(&self) -> bool {
-        self.gate_builder.witness_gen_only()
-    }
-
-    pub fn use_unknown(&self) -> bool {
-        self.gate_builder.use_unknown()
-    }
-
-    pub fn thread_count(&self) -> usize {
-        self.gate_builder.thread_count()
-    }
-
-    pub fn get_new_thread_id(&mut self) -> usize {
-        self.gate_builder.get_new_thread_id()
     }
 
     pub fn new_thread_dense(&mut self) -> &mut Context<F> {
@@ -173,6 +155,28 @@ impl<F: Field> ShaThreadBuilder<F> {
                 break_points,
             },
         )
+    }
+}
+
+impl<F: Field> BaseThreadBuilder<F> for ShaThreadBuilder<F> {
+    fn main(&mut self) -> &mut Context<F> {
+        self.gate_builder.main(FIRST_PHASE)
+    }
+
+    fn witness_gen_only(&self) -> bool {
+        self.gate_builder.witness_gen_only()
+    }
+
+    fn use_unknown(&self) -> bool {
+        self.gate_builder.use_unknown()
+    }
+
+    fn thread_count(&self) -> usize {
+        self.gate_builder.thread_count()
+    }
+
+    fn get_new_thread_id(&mut self) -> usize {
+        self.gate_builder.get_new_thread_id()
     }
 }
 

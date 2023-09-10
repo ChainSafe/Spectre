@@ -4,7 +4,7 @@
 use std::ops::Deref;
 use std::{cell::RefCell, iter, marker::PhantomData};
 
-use crate::util::AsBits;
+use crate::util::{AsBits, BaseThreadBuilder};
 use crate::{
     util::{bigint_to_le_bytes, decode_into_field, decode_into_field_be},
     witness::HashInput,

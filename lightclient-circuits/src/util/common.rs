@@ -1,5 +1,6 @@
 use crate::gadget::Expr;
 use eth_types::*;
+use halo2_base::Context;
 use halo2_proofs::{
     circuit::{AssignedCell, Region, Value},
     plonk::{Advice, Assigned, Column, Error, Expression, VirtualCells},
@@ -121,4 +122,21 @@ impl<F: Field> AssignedValueCell<F> {
     pub fn value(&self) -> F {
         self.value
     }
+}
+
+pub trait BaseThreadBuilder<F: Field> {
+     /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
+    /// * `phase`: The challenge phase (as an index) of the gate thread.
+    fn main(&mut self) -> &mut Context<F>;
+
+    fn witness_gen_only(&self) -> bool;
+
+    /// Returns the `use_unknown` flag.
+    fn use_unknown(&self) -> bool;
+
+    /// Returns the current number of threads in the [GateThreadBuilder].
+    fn thread_count(&self) -> usize;
+
+    /// Creates a new thread id by incrementing the `thread count`
+    fn get_new_thread_id(&mut self) -> usize;
 }

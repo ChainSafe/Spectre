@@ -2,7 +2,9 @@
 //! This implementation is based on:
 //! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
 
+use std::cell::RefCell;
 use std::hash::Hash;
+use std::iter;
 use std::marker::PhantomData;
 
 use crate::gadget::{and, not, rlc, select, sum, xor, Expr};
@@ -12,7 +14,7 @@ use crate::{
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
-use halo2_base::{AssignedValue, ContextCell};
+use halo2_base::{AssignedValue, Context, ContextCell, QuantumCell};
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
     plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
@@ -27,47 +29,50 @@ use super::witness::{multi_sha256, ShaRow};
 
 /// Configuration for [`Sha256WideChip`].
 #[derive(Clone, Debug)]
-pub struct Sha256WideConfig<F> {
-    q_enable: Column<Fixed>,
-    q_first: Column<Fixed>,
-    q_extend: Column<Fixed>,
-    q_start: Column<Fixed>,
-    q_compression: Column<Fixed>,
-    q_end: Column<Fixed>,
-    q_padding: Column<Fixed>,
-    q_padding_last: Column<Fixed>,
-    q_squeeze: Column<Fixed>,
-    q_final_word: Column<Fixed>,
-    word_w: [Column<Advice>; NUM_BITS_PER_WORD_W],
-    word_a: [Column<Advice>; NUM_BITS_PER_WORD_EXT],
-    word_e: [Column<Advice>; NUM_BITS_PER_WORD_EXT],
-    is_final: Column<Advice>,
-    is_paddings: [Column<Advice>; ABSORB_WIDTH_PER_ROW_BYTES],
-    data_rlcs: [Column<Advice>; ABSORB_WIDTH_PER_ROW_BYTES],
-    round_cst: Column<Fixed>,
-    h_a: Column<Fixed>,
-    h_e: Column<Fixed>,
+pub struct Sha256BitConfig<F: Field, CF = Column<Fixed>, CA = Column<Advice>> {
+    pub q_enable: CF,
+    pub q_first: CF,
+    pub q_extend: CF,
+    pub q_start: CF,
+    pub q_compression: CF,
+    pub q_end: CF,
+    pub q_padding: CF,
+    pub q_padding_last: CF,
+    pub q_squeeze: CF,
+    pub q_final_word: CF,
+    pub word_w: [CA; NUM_BITS_PER_WORD_W],
+    pub word_a: [CA; NUM_BITS_PER_WORD_EXT],
+    pub word_e: [CA; NUM_BITS_PER_WORD_EXT],
+    pub is_final: CA,
+    pub is_paddings: [CA; ABSORB_WIDTH_PER_ROW_BYTES],
+    pub data_rlcs: [CA; ABSORB_WIDTH_PER_ROW_BYTES],
+    pub round_cst: CF,
+    pub h_a: CF,
+    pub h_e: CF,
 
     // True when the row is enabled
-    pub is_enabled: Column<Advice>,
+    pub is_enabled: CA,
     // The columns for bytes of hash results
-    pub input_rlc: Column<Advice>,
+    pub input_rlc: CA,
     // Length of first+second inputs
-    pub input_len: Column<Advice>,
+    pub input_len: CA,
     // RLC of the hash result
-    pub hash_rlc: Column<Advice>,
+    pub hash_rlc: CA,
     // Output bytes
-    pub final_hash_bytes: [Column<Advice>; NUM_BYTES_FINAL_HASH],
-    _marker: PhantomData<F>,
+    pub final_hash_bytes: [CA; NUM_BYTES_FINAL_HASH],
+
+    pub _f: PhantomData<F>,
+
+    pub offset: usize,
 }
 
-impl<F: Field> Sha256WideConfig<F> {
+impl<F: Field> Sha256BitConfig<F> {
     pub fn new<S: Spec>(meta: &mut ConstraintSystem<F>) -> Self {
         // consts
         let two = F::from(2);
         let f256 = two.pow_const(8);
 
-        let r: F = Sha256WideConfig::fixed_challenge();
+        let r: F = Sha256BitConfig::fixed_challenge();
         let q_enable = meta.fixed_column();
         let q_first = meta.fixed_column();
         let q_extend = meta.fixed_column();
@@ -87,7 +92,7 @@ impl<F: Field> Sha256WideConfig<F> {
         is_paddings
             .iter()
             .for_each(|&col| meta.enable_equality(col));
-        let data_rlcs: [Column<Advice>; 4] = array_init::array_init(|_| meta.advice_column());
+        let data_rlcs = array_init::array_init(|_| meta.advice_column());
 
         let round_cst = meta.fixed_column();
         let h_a = meta.fixed_column();
@@ -414,10 +419,6 @@ impl<F: Field> Sha256WideConfig<F> {
             cb.gate(1.expr())
         });
 
-        // feature: [multi input lookups]
-        // TODO: constraint is_right == 1 when leanth >= right_len
-        // end
-
         // Length and input data rlc
         meta.create_gate("length and data rlc", |meta| {
             let mut cb = BaseConstraintBuilder::new(MAX_DEGREE);
@@ -482,7 +483,7 @@ impl<F: Field> Sha256WideConfig<F> {
             let start_new_hash = start_new_hash(meta);
             let to_const =
                 |value: &String| -> &'static str { Box::leak(value.clone().into_boxed_str()) };
-            let mut add = |name: &'static str, column: Column<Advice>| {
+            let mut add = |name: &'static str, column| {
                 let last_rot =
                     Rotation(-((NUM_END_ROWS + NUM_ROUNDS - NUM_WORDS_TO_ABSORB) as i32));
                 let value_to_copy = meta.query_advice(column, last_rot);
@@ -569,7 +570,7 @@ impl<F: Field> Sha256WideConfig<F> {
         debug!("sha256 circuit degree: {}", meta.degree());
         debug!("minimum rows: {}", meta.minimum_rows());
 
-        Sha256WideConfig {
+        Sha256BitConfig {
             q_enable,
             q_first,
             q_extend,
@@ -594,7 +595,8 @@ impl<F: Field> Sha256WideConfig<F> {
             input_rlc,
             hash_rlc,
             final_hash_bytes,
-            _marker: PhantomData,
+            _f: PhantomData,
+            offset: Default::default(),
         }
     }
 
@@ -605,233 +607,7 @@ impl<F: Field> Sha256WideConfig<F> {
     }
 }
 
-impl<F: Field> Sha256WideConfig<F> {
-    pub fn digest_with_region(
-        &self,
-        region: &mut Region<'_, F>,
-        input: HashInput<u8>,
-        assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<[AssignedValueCell<F>; NUM_BYTES_FINAL_HASH], Error> {
-        let witness = multi_sha256(&[input], Sha256WideConfig::fixed_challenge());
-        let mut hashes = self.assign_with_region(region, &witness, assigned_rows)?;
-        assert_eq!(hashes.len(), 1);
-        Ok(hashes.pop().unwrap().try_into().unwrap())
-    }
-
-    pub fn assign_with_region(
-        &self,
-        region: &mut Region<'_, F>,
-        witness: &[ShaRow<F>],
-        assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<Vec<[AssignedValueCell<F>; NUM_BYTES_FINAL_HASH]>, Error> {
-        self.annotate_columns_in_region(region);
-        let vec_vecs = witness
-            .iter()
-            .map(|sha256_row| self.set_row(region, sha256_row, assigned_rows))
-            .collect::<Result<Vec<_>, Error>>()?;
-        let filtered = vec_vecs
-            .into_iter()
-            .filter_map(|hash_bytes| {
-                (!hash_bytes.is_empty()).then(|| hash_bytes.try_into().unwrap())
-            })
-            .collect_vec();
-        Ok(filtered)
-    }
-
-    fn set_row(
-        &self,
-        region: &mut Region<'_, F>,
-        row: &ShaRow<F>,
-        assigned_rows: &mut Sha256AssignedRows<F>,
-    ) -> Result<Vec<AssignedValueCell<F>>, Error> {
-        let offset = assigned_rows.offset;
-        assigned_rows.offset += 1;
-        let round = offset % (NUM_ROUNDS + 8);
-        // Fixed values
-        for (name, column, value) in &[
-            ("q_enable", self.q_enable, F::from(true)),
-            ("q_first", self.q_first, F::from(offset == 0)),
-            (
-                "q_extend",
-                self.q_extend,
-                F::from((4 + 16..4 + NUM_ROUNDS).contains(&round)),
-            ),
-            ("q_start", self.q_start, F::from(round < 4)),
-            (
-                "q_compression",
-                self.q_compression,
-                F::from((4..NUM_ROUNDS + 4).contains(&round)),
-            ),
-            ("q_end", self.q_end, F::from(round >= NUM_ROUNDS + 4)),
-            (
-                "q_padding",
-                self.q_padding,
-                F::from((4..20).contains(&round)),
-            ),
-            ("q_padding_last", self.q_padding_last, F::from(round == 19)),
-            (
-                "q_squeeze",
-                self.q_squeeze,
-                F::from(round == NUM_ROUNDS + 7),
-            ),
-            (
-                "q_final_word",
-                self.q_final_word,
-                F::from(row.is_final && round == NUM_ROUNDS + 7),
-            ),
-            (
-                "round_cst",
-                self.round_cst,
-                F::from(if (4..NUM_ROUNDS + 4).contains(&round) {
-                    ROUND_CST[round - 4] as u64
-                } else {
-                    0
-                }),
-            ),
-            (
-                "Ha",
-                self.h_a,
-                F::from(if round < 4 { H[3 - round] } else { 0 }),
-            ),
-            (
-                "He",
-                self.h_e,
-                F::from(if round < 4 { H[7 - round] } else { 0 }),
-            ),
-        ] {
-            region.assign_fixed(
-                || format!("assign {} {}", name, offset),
-                *column,
-                offset,
-                || Value::known(*value),
-            )?;
-        }
-
-        // Advice values
-        for (name, columns, values) in [
-            ("w bits", self.word_w.as_slice(), row.w.as_slice()),
-            ("a bits", self.word_a.as_slice(), row.a.as_slice()),
-            ("e bits", self.word_e.as_slice(), row.e.as_slice()),
-            (
-                "is_final",
-                [self.is_final].as_slice(),
-                [row.is_final].as_slice(),
-            ),
-        ] {
-            for (idx, (value, column)) in values.iter().zip(columns.iter()).enumerate() {
-                region.assign_advice(
-                    || format!("assign {} {} {}", name, idx, offset),
-                    *column,
-                    offset,
-                    || Value::known(F::from(*value)),
-                )?;
-            }
-        }
-
-        let padding_selectors = self
-            .is_paddings
-            .iter()
-            .zip(row.is_paddings.iter())
-            .enumerate()
-            .map(|(idx, (&col, &val))| {
-                let cell = region.assign_advice(
-                    || format!("assign {} {} {}", "padding selector", idx, offset),
-                    col,
-                    offset,
-                    || Value::known(F::from(val)),
-                );
-
-                cell.map(|cell| AssignedValueCell {
-                    cell: cell.cell(),
-                    value: F::from(val),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .try_into()
-            .unwrap();
-
-        // Intermediary data rlcs
-        for (idx, (data_rlc, column)) in row
-            .intermediary_data_rlcs
-            .iter()
-            .zip(self.data_rlcs.iter())
-            .enumerate()
-        {
-            region.assign_advice(
-                || format!("assign data rlcs {} {}", idx, offset),
-                *column,
-                offset,
-                || Value::known(*data_rlc),
-            )?;
-        }
-
-        // Hash data
-        let [is_final, input_rlc, input_len, output_rlc] = [
-            (
-                self.is_enabled,
-                F::from(row.is_final && round == NUM_ROUNDS + 7),
-            ),
-            (self.input_rlc, row.data_rlc),
-            (self.input_len, F::from(row.length as u64)),
-            (self.hash_rlc, row.hash_rlc),
-        ]
-        .map(|(column, value)| {
-            let cell = region.assign_advice(
-                || format!("assign {}", offset),
-                column,
-                offset,
-                || Value::known(value),
-            );
-            cell.map(|cell| AssignedValueCell {
-                cell: cell.cell(),
-                value,
-            })
-            .unwrap()
-        });
-
-        if (4..20).contains(&round) {
-            assigned_rows.padding_selectors.push(padding_selectors);
-            assigned_rows.input_rlc.push(input_rlc);
-        }
-
-        if row.is_final && round == NUM_ROUNDS + 7 {
-            assigned_rows.output_rlc.push(output_rlc);
-        }
-
-        if round == NUM_ROUNDS + 7 {
-            assigned_rows.is_final.push(is_final);
-            assigned_rows.input_len.push(input_len);
-        }
-
-        let mut hash_cells = Vec::with_capacity(NUM_BYTES_FINAL_HASH);
-        if !row.is_final || round != NUM_ROUNDS + 7 {
-            for idx in 0..(NUM_BYTES_FINAL_HASH) {
-                region.assign_advice(
-                    || format!("final hash word at {}", idx),
-                    self.final_hash_bytes[idx],
-                    offset,
-                    || Value::known(F::from(0u64)),
-                )?;
-            }
-        } else {
-            for (idx, byte) in row.final_hash_bytes.iter().enumerate() {
-                let cell = region.assign_advice(
-                    || format!("final hash word at {}", idx),
-                    self.final_hash_bytes[idx],
-                    offset,
-                    || Value::known(*byte),
-                )?;
-
-                hash_cells.push(AssignedValueCell {
-                    cell: cell.cell(),
-                    value: *byte,
-                });
-            }
-        }
-
-        Ok(hash_cells)
-    }
-
+impl<F: Field> Sha256BitConfig<F> {
     pub fn annotations(&self) -> Vec<(Column<Any>, String)> {
         let mut annotations = vec![
             (self.q_enable.into(), "q_enabled".to_string()),
@@ -876,7 +652,332 @@ impl<F: Field> Sha256WideConfig<F> {
         annotations
     }
 
+    // fn set_row(
+    //     &self,
+    //     region: &mut Region<'_, F>,
+    //     row: &ShaRow<F>,
+    //     assigned_rows: &mut Sha256AssignedRows<F>,
+    // ) -> Result<Vec<AssignedValueCell<F>>, Error> {
+    //     let offset = assigned_rows.offset;
+    //     assigned_rows.offset += 1;
+    //     let round = offset % (NUM_ROUNDS + 8);
+    //     // Fixed values
+    //     for (name, column, value) in &[
+    //         ("q_enable", self.q_enable, F::from(true)),
+    //         ("q_first", self.q_first, F::from(offset == 0)),
+    //         (
+    //             "q_extend",
+    //             self.q_extend,
+    //             F::from((4 + 16..4 + NUM_ROUNDS).contains(&round)),
+    //         ),
+    //         ("q_start", self.q_start, F::from(round < 4)),
+    //         (
+    //             "q_compression",
+    //             self.q_compression,
+    //             F::from((4..NUM_ROUNDS + 4).contains(&round)),
+    //         ),
+    //         ("q_end", self.q_end, F::from(round >= NUM_ROUNDS + 4)),
+    //         (
+    //             "q_padding",
+    //             self.q_padding,
+    //             F::from((4..20).contains(&round)),
+    //         ),
+    //         ("q_padding_last", self.q_padding_last, F::from(round == 19)),
+    //         (
+    //             "q_squeeze",
+    //             self.q_squeeze,
+    //             F::from(round == NUM_ROUNDS + 7),
+    //         ),
+    //         (
+    //             "q_final_word",
+    //             self.q_final_word,
+    //             F::from(row.is_final && round == NUM_ROUNDS + 7),
+    //         ),
+    //         (
+    //             "round_cst",
+    //             self.round_cst,
+    //             F::from(if (4..NUM_ROUNDS + 4).contains(&round) {
+    //                 ROUND_CST[round - 4] as u64
+    //             } else {
+    //                 0
+    //             }),
+    //         ),
+    //         (
+    //             "Ha",
+    //             self.h_a,
+    //             F::from(if round < 4 { H[3 - round] } else { 0 }),
+    //         ),
+    //         (
+    //             "He",
+    //             self.h_e,
+    //             F::from(if round < 4 { H[7 - round] } else { 0 }),
+    //         ),
+    //     ] {
+    //         region.assign_fixed(
+    //             || format!("assign {} {}", name, offset),
+    //             *column,
+    //             offset,
+    //             || Value::known(*value),
+    //         )?;
+    //     }
+
+    //     // Advice values
+    //     for (name, columns, values) in [
+    //         ("w bits", self.word_w.as_slice(), row.w.as_slice()),
+    //         ("a bits", self.word_a.as_slice(), row.a.as_slice()),
+    //         ("e bits", self.word_e.as_slice(), row.e.as_slice()),
+    //         (
+    //             "is_final",
+    //             [self.is_final].as_slice(),
+    //             [row.is_final].as_slice(),
+    //         ),
+    //     ] {
+    //         for (idx, (value, column)) in values.iter().zip(columns.iter()).enumerate() {
+    //             region.assign_advice(
+    //                 || format!("assign {} {} {}", name, idx, offset),
+    //                 *column,
+    //                 offset,
+    //                 || Value::known(F::from(*value)),
+    //             )?;
+    //         }
+    //     }
+
+    //     let padding_selectors = self
+    //         .is_paddings
+    //         .iter()
+    //         .zip(row.is_paddings.iter())
+    //         .enumerate()
+    //         .map(|(idx, (&col, &val))| {
+    //             let cell = region.assign_advice(
+    //                 || format!("assign {} {} {}", "padding selector", idx, offset),
+    //                 col,
+    //                 offset,
+    //                 || Value::known(F::from(val)),
+    //             );
+
+    //             cell.map(|cell| AssignedValueCell {
+    //                 cell: cell.cell(),
+    //                 value: F::from(val),
+    //             })
+    //         })
+    //         .collect::<Result<Vec<_>, _>>()?
+    //         .try_into()
+    //         .unwrap();
+
+    //     // Intermediary data rlcs
+    //     for (idx, (data_rlc, column)) in row
+    //         .intermediary_data_rlcs
+    //         .iter()
+    //         .zip(self.data_rlcs.iter())
+    //         .enumerate()
+    //     {
+    //         region.assign_advice(
+    //             || format!("assign data rlcs {} {}", idx, offset),
+    //             *column,
+    //             offset,
+    //             || Value::known(*data_rlc),
+    //         )?;
+    //     }
+
+    //     // Hash data
+    //     let [is_final, input_rlc, input_len, output_rlc] = [
+    //         (
+    //             self.is_enabled,
+    //             F::from(row.is_final && round == NUM_ROUNDS + 7),
+    //         ),
+    //         (self.input_rlc, row.data_rlc),
+    //         (self.input_len, F::from(row.length as u64)),
+    //         (self.hash_rlc, row.hash_rlc),
+    //     ]
+    //     .map(|(column, value)| {
+    //         let cell = region.assign_advice(
+    //             || format!("assign {}", offset),
+    //             column,
+    //             offset,
+    //             || Value::known(value),
+    //         );
+    //         cell.map(|cell| AssignedValueCell {
+    //             cell: cell.cell(),
+    //             value,
+    //         })
+    //         .unwrap()
+    //     });
+
+    //     if (4..20).contains(&round) {
+    //         assigned_rows.padding_selectors.push(padding_selectors);
+    //         assigned_rows.input_rlc.push(input_rlc);
+    //     }
+
+    //     if row.is_final && round == NUM_ROUNDS + 7 {
+    //         assigned_rows.output_rlc.push(output_rlc);
+    //     }
+
+    //     if round == NUM_ROUNDS + 7 {
+    //         assigned_rows.is_final.push(is_final);
+    //         assigned_rows.input_len.push(input_len);
+    //     }
+
+    //     let mut hash_cells = Vec::with_capacity(NUM_BYTES_FINAL_HASH);
+    //     if !row.is_final || round != NUM_ROUNDS + 7 {
+    //         for idx in 0..(NUM_BYTES_FINAL_HASH) {
+    //             region.assign_advice(
+    //                 || format!("final hash word at {}", idx),
+    //                 self.final_hash_bytes[idx],
+    //                 offset,
+    //                 || Value::known(F::from(0u64)),
+    //             )?;
+    //         }
+    //     } else {
+    //         for (idx, byte) in row.final_hash_bytes.iter().enumerate() {
+    //             let cell = region.assign_advice(
+    //                 || format!("final hash word at {}", idx),
+    //                 self.final_hash_bytes[idx],
+    //                 offset,
+    //                 || Value::known(*byte),
+    //             )?;
+
+    //             hash_cells.push(AssignedValueCell {
+    //                 cell: cell.cell(),
+    //                 value: *byte,
+    //             });
+    //         }
+    //     }
+
+    //     Ok(hash_cells)
+    // }
+
     pub fn fixed_challenge() -> F {
         F::from_u128(0xca9d6022267d3bd658bf)
+    }
+}
+
+impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
+    pub fn load_sha256_row(
+        &mut self,
+        row: &ShaRow<F>,
+        assigned_rows: &mut Sha256AssignedRows<F>,
+    ) -> Result<Vec<AssignedValue<F>>, Error> {
+        let offset = self.offset;
+        self.offset += 1;
+        let round = offset % (NUM_ROUNDS + 8);
+        // Fixed values
+        for (ctx, value) in [
+            (&mut self.q_enable, F::from(true)),
+            (&mut self.q_first, F::from(offset == 0)),
+            (
+                &mut self.q_extend,
+                F::from((4 + 16..4 + NUM_ROUNDS).contains(&round)),
+            ),
+            (&mut self.q_start, F::from(round < 4)),
+            (
+                &mut self.q_compression,
+                F::from((4..NUM_ROUNDS + 4).contains(&round)),
+            ),
+            (&mut self.q_end, F::from(round >= NUM_ROUNDS + 4)),
+            (&mut self.q_padding, F::from((4..20).contains(&round))),
+            (&mut self.q_padding_last, F::from(round == 19)),
+            (&mut self.q_squeeze, F::from(round == NUM_ROUNDS + 7)),
+            (
+                &mut self.q_final_word,
+                F::from(row.is_final && round == NUM_ROUNDS + 7),
+            ),
+            (
+                &mut self.round_cst,
+                F::from(if (4..NUM_ROUNDS + 4).contains(&round) {
+                    ROUND_CST[round - 4] as u64
+                } else {
+                    0
+                }),
+            ),
+            (
+                &mut self.h_a,
+                F::from(if round < 4 { H[3 - round] } else { 0 }),
+            ),
+            (
+                &mut self.h_e,
+                F::from(if round < 4 { H[7 - round] } else { 0 }),
+            ),
+        ] {
+            ctx.assign_cell(QuantumCell::Constant(value));
+        }
+
+        // Advice values
+        for (ctxs, values) in [
+            (
+                self.word_w.iter_mut().collect::<Vec<&mut _>>(),
+                row.w.as_slice(),
+            ),
+            (
+                self.word_a.iter_mut().collect::<Vec<&mut _>>(),
+                row.a.as_slice(),
+            ),
+            (
+                self.word_e.iter_mut().collect::<Vec<&mut _>>(),
+                row.e.as_slice(),
+            ),
+            (vec![&mut self.is_final], [row.is_final].as_slice()),
+        ] {
+            for (value, ctx) in values.iter().zip(ctxs) {
+                ctx.assign_cell(QuantumCell::Witness(F::from(*value)));
+            }
+        }
+
+        let padding_selectors = self
+            .is_paddings
+            .iter_mut()
+            .zip(row.is_paddings)
+            .map(|(mut ctx, val)| ctx.load_witness(F::from(val)))
+            .collect_vec();
+
+        // Intermediary data rlcs
+        for ((ctx, data_rlc)) in self.data_rlcs.iter_mut().zip(row.intermediary_data_rlcs) {
+            ctx.assign_cell(QuantumCell::Witness(data_rlc));
+        }
+
+        // Hash data
+        let [is_final, input_rlc, input_len, output_rlc] = [
+            (
+                &mut self.is_enabled,
+                F::from(row.is_final && round == NUM_ROUNDS + 7),
+            ),
+            (&mut self.input_rlc, row.data_rlc),
+            (&mut self.input_len, F::from(row.length as u64)),
+            (&mut self.hash_rlc, row.hash_rlc),
+        ]
+        .map(|(mut ctx, value)| ctx.load_witness(value));
+
+        if (4..20).contains(&round) {
+            // assigned_rows.padding_selectors.push(padding_selectors);
+            assigned_rows.input_rlc.push(input_rlc);
+        }
+
+        if row.is_final && round == NUM_ROUNDS + 7 {
+            assigned_rows.output_rlc.push(output_rlc);
+        }
+
+        if round == NUM_ROUNDS + 7 {
+            assigned_rows.is_final.push(is_final);
+            assigned_rows.input_len.push(input_len);
+        }
+
+        if !row.is_final || round != NUM_ROUNDS + 7 {
+            self.final_hash_bytes
+                .iter_mut()
+                .zip(iter::repeat(F::from(0u64)))
+                .for_each(|(ctx, byte)| {
+                    ctx.assign_cell(QuantumCell::Witness(byte));
+                });
+
+            return Ok(vec![]);
+        }
+
+        let assigned_hash_bytes = self
+            .final_hash_bytes
+            .iter_mut()
+            .zip(row.final_hash_bytes)
+            .map(|(ctx, byte)| ctx.load_witness(byte))
+            .collect_vec();
+
+        Ok(assigned_hash_bytes)
     }
 }

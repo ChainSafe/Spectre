@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::util::BaseThreadBuilder;
+
 use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
 use super::{compression::SpreadU32, util::*};

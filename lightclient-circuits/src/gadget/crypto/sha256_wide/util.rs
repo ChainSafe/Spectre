@@ -1,5 +1,5 @@
 use eth_types::Field;
-use halo2_base::utils::{biguint_to_fe, fe_to_biguint};
+use halo2_base::{utils::{biguint_to_fe, fe_to_biguint}, AssignedValue};
 use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -41,24 +41,25 @@ pub const H: [u64; 8] = [
 /// Assigned values for each row.
 #[derive(Clone, Debug, Default)]
 pub struct Sha256AssignedRows<F: Field> {
-    /// Offset of the row.
-    pub offset: usize,
+    // /// Offset of the row.
+    // pub offset: usize,
     /// Input length at the row.
-    pub input_len: Vec<AssignedValueCell<F>>,
+    pub input_len: Vec<AssignedValue<F>>,
     /// Input words at the row.
-    pub input_rlc: Vec<AssignedValueCell<F>>,
+    pub input_rlc: Vec<AssignedValue<F>>,
     /// Whether the output word is enabled at the row.
-    pub is_final: Vec<AssignedValueCell<F>>,
+    pub is_final: Vec<AssignedValue<F>>,
     /// Whether the row is padding.
-    pub padding_selectors: Vec<[AssignedValueCell<F>; 4]>,
+    pub padding_selectors: Vec<[AssignedValue<F>; 4]>,
     /// Output words at the row.
-    pub output_rlc: Vec<AssignedValueCell<F>>,
+    pub output_rlc: Vec<AssignedValue<F>>,
 }
 
+
+
 impl<F: Field> Sha256AssignedRows<F> {
-    pub fn new(offset: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            offset,
             ..Default::default()
         }
     }

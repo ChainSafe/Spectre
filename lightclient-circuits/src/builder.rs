@@ -8,7 +8,7 @@ use halo2_proofs::{
     plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
-use crate::gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder};
+use crate::{gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder}, util::BaseThreadBuilder};
 
 #[derive(Clone, Debug)]
 /// Config shared for block header and storage proof circuits

@@ -18,7 +18,7 @@ pub use hash2curve::{HashToCurveCache, HashToCurveChip};
 pub use sha256::{Sha256Chip, ShaContexts, ShaThreadBuilder};
 pub use sha256_wide::*;
 
-use crate::witness::HashInput;
+use crate::{witness::HashInput, util::BaseThreadBuilder};
 pub type FpPoint<F> = ProperCrtUint<F>;
 pub type Fp2Point<F> = FieldVector<FpPoint<F>>;
 pub type G1Point<F> = EcPoint<F, ProperCrtUint<F>>;
@@ -30,7 +30,7 @@ pub type G1Chip<'chip, F> = EccChip<'chip, F, FpChip<'chip, F>>;
 #[allow(type_alias_bounds)]
 pub type G2Chip<'chip, F> = EccChip<'chip, F, Fp2Chip<'chip, F>>;
 
-pub trait HashInstructions<F: Field> {
+pub trait HashInstructions<F: Field, ThreadBuilder: BaseThreadBuilder<F> = ShaThreadBuilder<F>> {
     const BLOCK_SIZE: usize;
     const DIGEST_SIZE: usize;
 
@@ -39,7 +39,7 @@ pub trait HashInstructions<F: Field> {
     /// `strict` flag indicates whether to perform range check on input bytes.
     fn digest<const MAX_INPUT_SIZE: usize>(
         &self,
-        thread_pool: &mut ShaThreadBuilder<F>,
+        thread_pool: &mut ThreadBuilder,
         input: HashInput<QuantumCell<F>>,
         strict: bool,
     ) -> Result<AssignedHashResult<F>, Error>;

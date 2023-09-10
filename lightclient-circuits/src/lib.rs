@@ -3,6 +3,7 @@
 #![feature(associated_type_bounds)]
 #![feature(generic_const_exprs)]
 #![feature(const_cmp)]
+#![feature(array_zip)]
 #![feature(stmt_expr_attributes)]
 #![feature(trait_alias)]
 #![feature(generic_arg_infer)]
