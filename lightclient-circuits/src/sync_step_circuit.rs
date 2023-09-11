@@ -13,13 +13,14 @@ use std::{
 use crate::{
     builder::Eth2CircuitBuilder,
     gadget::crypto::{
-        Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, HashToCurveCache,
-        HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
+        calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
+        HashToCurveCache, HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
-    poseidon::{g1_array_poseidon, poseidon_sponge},
+    poseidon::{fq_array_poseidon, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{
-        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness, BaseThreadBuilder,
+        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
+        ThreadBuilderBase,
     },
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
 };
@@ -121,8 +122,11 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             &args.pariticipation_bits,
             &mut assigned_affines,
         );
-        let poseidon_commit =
-            g1_array_poseidon(thread_pool.main(), range.gate(), assigned_affines)?;
+        let poseidon_commit = fq_array_poseidon(
+            thread_pool.main(),
+            range.gate(),
+            assigned_affines.iter().map(|p| &p.x),
+        )?;
 
         let fp12_one = {
             use ff::Field;
@@ -262,7 +266,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             // Square y coordinate
             let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
             // Calculate y^2 using the elliptic curve equation
-            let ysq_calc = Self::calculate_ysquared::<G1>(ctx, fp_chip, assigned_pk.x.clone());
+            let ysq_calc = calculate_ysquared::<F, G1>(ctx, fp_chip, assigned_pk.x.clone());
             // Constrain witness y^2 to be equal to calculated y^2
             fp_chip.assert_equal(ctx, ysq, ysq_calc);
 
@@ -288,19 +292,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let participation_sum = gate.sum(ctx, participation_bits);
 
         (agg_pubkey, participation_sum)
-    }
-
-    // Calculates y^2 = x^3 + 4 (the curve equation)
-    fn calculate_ysquared<C: AppCurveExt>(
-        ctx: &mut Context<F>,
-        field_chip: &FpChip<'_, F>,
-        x: ProperCrtUint<F>,
-    ) -> ProperCrtUint<F> {
-        let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
-        let x_cubed = field_chip.mul(ctx, x_squared, x);
-
-        let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, C::B.into());
-        field_chip.carry_mod(ctx, plus_b)
     }
 }
 
@@ -399,7 +390,7 @@ mod tests {
     #[test]
     fn test_sync_circuit() {
         const K: usize = 20;
-        
+
         let mut builder = ShaThreadBuilder::mock();
         let assigned_instances = load_circuit_with_data(&mut builder, K);
 
@@ -438,12 +429,9 @@ mod tests {
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
         let num_instance = circuit.num_instance();
-        let deployment_code = gen_evm_verifier_shplonk::<Eth2CircuitBuilder<Fr>>(
-            &params,
-            pk.get_vk(),
-            num_instance,
-            None,
-        );
+        let deployment_code = gen_evm_verifier_shplonk::<
+            Eth2CircuitBuilder<Fr, ShaThreadBuilder<Fr>>,
+        >(&params, pk.get_vk(), num_instance, None);
 
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());

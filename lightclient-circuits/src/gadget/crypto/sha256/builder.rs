@@ -1,24 +1,25 @@
-use std::{cell::RefCell, collections::HashMap, iter};
+use std::{cell::RefCell, collections::HashMap, iter, mem};
 
 use eth_types::Field;
 use halo2_base::{
     gates::{
         builder::{
-            CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder, KeygenAssignments,
-            ThreadBreakPoints,
+            assign_threads_in, CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder,
+            KeygenAssignments, MultiPhaseThreadBreakPoints, ThreadBreakPoints,
         },
         flex_gate::FlexGateConfig,
+        range,
     },
     utils::ScalarField,
     Context,
 };
 use halo2_proofs::{
     circuit::{self, Region, Value},
-    plonk::{Advice, Column, Selector},
+    plonk::{Advice, Column, Selector, Error},
 };
 use itertools::Itertools;
 
-use crate::util::BaseThreadBuilder;
+use crate::util::ThreadBuilderBase;
 
 use super::SpreadConfig;
 
@@ -36,10 +37,10 @@ pub struct ShaThreadBuilder<F: ScalarField> {
 
 pub type ShaContexts<'a, F> = (&'a mut Context<F>, &'a mut Context<F>);
 
-impl<F: Field> ShaThreadBuilder<F> {
-    // re-expose some methods from [`GateThreadBuilder`] for convenience
-    #[allow(unused_mut)]
-    pub fn new(mut witness_gen_only: bool) -> Self {
+impl<F: Field> ThreadBuilderBase<F> for ShaThreadBuilder<F> {
+    type Config = SpreadConfig<F>;
+
+    fn new(mut witness_gen_only: bool) -> Self {
         Self {
             threads_spread: Vec::new(),
             threads_dense: Vec::new(),
@@ -47,27 +48,120 @@ impl<F: Field> ShaThreadBuilder<F> {
         }
     }
 
-    pub fn from_stage(stage: CircuitBuilderStage) -> Self {
-        Self::new(stage == CircuitBuilderStage::Prover)
-    }
-
-    pub fn mock() -> Self {
-        Self::new(false)
-    }
-
-    pub fn keygen() -> Self {
-        Self::new(false).unknown(true)
-    }
-
-    pub fn prover() -> Self {
-        Self::new(true)
-    }
-
-    pub fn unknown(mut self, use_unknown: bool) -> Self {
+    fn unknown(mut self, use_unknown: bool) -> Self {
         self.gate_builder = self.gate_builder.unknown(use_unknown);
         self
     }
-    
+
+    fn main(&mut self) -> &mut Context<F> {
+        self.gate_builder.main(FIRST_PHASE)
+    }
+
+    fn witness_gen_only(&self) -> bool {
+        self.gate_builder.witness_gen_only()
+    }
+
+    fn use_unknown(&self) -> bool {
+        self.gate_builder.use_unknown()
+    }
+
+    fn thread_count(&self) -> usize {
+        self.gate_builder.thread_count()
+    }
+
+    fn get_new_thread_id(&mut self) -> usize {
+        self.gate_builder.get_new_thread_id()
+    }
+
+    fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
+        self.gate_builder.config(k, minimum_rows)
+    }
+
+    fn assign_all(
+        &mut self,
+        gate: &FlexGateConfig<F>,
+        lookup_advice: &[Vec<Column<Advice>>],
+        q_lookup: &[Option<Selector>],
+        spread: &SpreadConfig<F>,
+        region: &mut Region<F>,
+        KeygenAssignments {
+            mut assigned_advices,
+            assigned_constants,
+            mut break_points,
+        }: KeygenAssignments<F>,
+    ) -> Result<KeygenAssignments<F>, Error> {
+        assert!(!self.witness_gen_only());
+
+        assign_threads_sha(
+            &self.threads_dense,
+            &self.threads_spread,
+            spread,
+            region,
+            self.use_unknown(),
+            Some(&mut assigned_advices),
+        );
+        // in order to constrain equalities and assign constants, we copy the Spread/Dense equality constraints into the gate builder (it doesn't matter which context the equalities are in), so `GateThreadBuilder::assign_all` can take care of it
+        // the phase doesn't matter for equality constraints, so we use phase 0 since we're sure there's a main context there
+        let main_ctx = self.gate_builder.main(0);
+        for ctx in self
+            .threads_spread
+            .iter_mut()
+            .chain(self.threads_dense.iter_mut())
+        {
+            main_ctx
+                .advice_equality_constraints
+                .append(&mut ctx.advice_equality_constraints);
+            main_ctx
+                .constant_equality_constraints
+                .append(&mut ctx.constant_equality_constraints);
+        }
+
+        Ok(self.gate_builder.assign_all(
+            gate,
+            lookup_advice,
+            q_lookup,
+            region,
+            KeygenAssignments {
+                assigned_advices,
+                assigned_constants,
+                break_points,
+            },
+        ))
+    }
+
+    fn assign_witnesses(
+        &mut self,
+        gate: &FlexGateConfig<F>,
+        lookup_advice: &[Vec<Column<Advice>>],
+        spread: &SpreadConfig<F>,
+        region: &mut Region<F>,
+        break_points: &mut MultiPhaseThreadBreakPoints,
+    ) -> Result<(), Error> {
+        let break_points_gate = mem::take(&mut break_points[FIRST_PHASE]);
+        // warning: we currently take all contexts from phase 0, which means you can't read the values
+        // from these contexts later in phase 1. If we want to read, should clone here
+        let threads = mem::take(&mut self.gate_builder.threads[FIRST_PHASE]);
+
+        assign_threads_in(
+            FIRST_PHASE,
+            threads,
+            gate,
+            &lookup_advice[FIRST_PHASE],
+            region,
+            break_points_gate,
+        );
+
+        let threads_dense = mem::take(&mut self.threads_dense);
+        let threads_spread = mem::take(&mut self.threads_spread);
+
+        assign_threads_sha(&threads_dense, &threads_spread, spread, region, false, None);
+
+        Ok(())
+    }
+}
+
+
+impl<F: Field> ShaThreadBuilder<F> {
     pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, ShaContexts<F>) {
         if self.threads_dense.is_empty() {
             self.new_thread_dense();
@@ -96,87 +190,6 @@ impl<F: Field> ShaThreadBuilder<F> {
         self.threads_spread
             .push(Context::new(self.witness_gen_only(), thread_id));
         self.threads_spread.last_mut().unwrap()
-    }
-
-    /// Auto-calculate configuration parameters for the circuit
-    pub fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
-        self.gate_builder.config(k, minimum_rows)
-    }
-
-    /// Assigns all advice and fixed cells, turns on selectors, imposes equality constraints.
-    /// This should only be called during keygen.
-    pub fn assign_all(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        q_lookup: &[Option<Selector>],
-        spread: &SpreadConfig<F>,
-        region: &mut Region<F>,
-        KeygenAssignments {
-            mut assigned_advices,
-            assigned_constants,
-            mut break_points,
-        }: KeygenAssignments<F>,
-    ) -> KeygenAssignments<F> {
-        assert!(!self.witness_gen_only());
-
-        assign_threads_sha(
-            &self.threads_dense,
-            &self.threads_spread,
-            spread,
-            region,
-            self.use_unknown(),
-            Some(&mut assigned_advices),
-        );
-        // in order to constrain equalities and assign constants, we copy the Spread/Dense equality constraints into the gate builder (it doesn't matter which context the equalities are in), so `GateThreadBuilder::assign_all` can take care of it
-        // the phase doesn't matter for equality constraints, so we use phase 0 since we're sure there's a main context there
-        let main_ctx = self.gate_builder.main(0);
-        for ctx in self
-            .threads_spread
-            .iter_mut()
-            .chain(self.threads_dense.iter_mut())
-        {
-            main_ctx
-                .advice_equality_constraints
-                .append(&mut ctx.advice_equality_constraints);
-            main_ctx
-                .constant_equality_constraints
-                .append(&mut ctx.constant_equality_constraints);
-        }
-
-        self.gate_builder.assign_all(
-            gate,
-            lookup_advice,
-            q_lookup,
-            region,
-            KeygenAssignments {
-                assigned_advices,
-                assigned_constants,
-                break_points,
-            },
-        )
-    }
-}
-
-impl<F: Field> BaseThreadBuilder<F> for ShaThreadBuilder<F> {
-    fn main(&mut self) -> &mut Context<F> {
-        self.gate_builder.main(FIRST_PHASE)
-    }
-
-    fn witness_gen_only(&self) -> bool {
-        self.gate_builder.witness_gen_only()
-    }
-
-    fn use_unknown(&self) -> bool {
-        self.gate_builder.use_unknown()
-    }
-
-    fn thread_count(&self) -> usize {
-        self.gate_builder.thread_count()
-    }
-
-    fn get_new_thread_id(&mut self) -> usize {
-        self.gate_builder.get_new_thread_id()
     }
 }
 

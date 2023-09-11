@@ -8,13 +8,16 @@ use std::hash::Hash;
 use std::iter;
 use std::marker::PhantomData;
 
+use crate::gadget::crypto::constant_randomness;
 use crate::gadget::{and, not, rlc, select, sum, xor, Expr};
+use crate::util::ThreadBuilderConfigBase;
 use crate::witness::HashInputChunk;
 use crate::{
     util::{AssignedValueCell, BaseConstraintBuilder, Challenges},
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
+use halo2_base::gates::builder::FlexGateConfigParams;
 use halo2_base::{AssignedValue, Context, ContextCell, QuantumCell};
 use halo2_proofs::circuit;
 use halo2_proofs::{
@@ -69,13 +72,13 @@ pub struct Sha256BitConfig<F: Field, CF = Column<Fixed>, CA = Column<Advice>> {
     pub offset: usize,
 }
 
-impl<F: Field> Sha256BitConfig<F> {
-    pub fn new<S: Spec>(meta: &mut ConstraintSystem<F>) -> Self {
+impl<F: Field> ThreadBuilderConfigBase<F> for Sha256BitConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>, _params: FlexGateConfigParams) -> Self {
         // consts
         let two = F::from(2);
         let f256 = two.pow_const(8);
 
-        let r: F = Sha256BitConfig::fixed_challenge();
+        let r: F = constant_randomness(); // TODO: use challenges API
         let q_enable = meta.fixed_column();
         let q_first = meta.fixed_column();
         let q_extend = meta.fixed_column();
@@ -603,10 +606,14 @@ impl<F: Field> Sha256BitConfig<F> {
         }
     }
 
-    pub fn annotate_columns_in_region(&self, region: &mut Region<F>) {
+    fn annotate_columns_in_region(&self, region: &mut Region<F>) {
         self.annotations().iter().for_each(|(column, name)| {
             region.name_column(|| name, *column);
         });
+    }
+
+    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        Ok(())
     }
 }
 
@@ -653,10 +660,6 @@ impl<F: Field> Sha256BitConfig<F> {
         }
 
         annotations
-    }
-
-    pub fn fixed_challenge() -> F {
-        F::from_u128(0xca9d6022267d3bd658bf)
     }
 }
 
@@ -736,7 +739,9 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             .iter_mut()
             .zip(row.is_paddings)
             .map(|(mut ctx, val)| ctx.load_witness(F::from(val)))
-            .collect_vec();
+            .collect_vec()
+            .try_into()
+            .unwrap();
 
         // Intermediary data rlcs
         for ((ctx, data_rlc)) in self.data_rlcs.iter_mut().zip(row.intermediary_data_rlcs) {
@@ -744,7 +749,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         }
 
         // Hash data
-        let [is_final, input_rlc, input_len, output_rlc] = [
+        let [is_enabled, input_rlc, input_len, output_rlc] = [
             (
                 &mut self.is_enabled,
                 F::from(row.is_final && round == NUM_ROUNDS + 7),
@@ -756,7 +761,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         .map(|(mut ctx, value)| ctx.load_witness(value));
 
         if (4..20).contains(&round) {
-            // assigned_rows.padding_selectors.push(padding_selectors);
+            assigned_rows.padding_selectors.push(padding_selectors);
             assigned_rows.input_rlc.push(input_rlc);
         }
 
@@ -765,7 +770,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         }
 
         if round == NUM_ROUNDS + 7 {
-            assigned_rows.is_final.push(is_final);
+            assigned_rows.is_final.push(is_enabled);
             assigned_rows.input_len.push(input_len);
         }
 
@@ -797,7 +802,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         config: &Sha256BitConfig<F>,
         use_unknown: bool,
         mut assigned_advices: Option<&mut HashMap<(usize, usize), (circuit::Cell, usize)>>,
-    ) {
+    ) -> Result<(), Error> {
         // Fixed values
         for (name, column, ctx) in [
             ("q_enable", &config.q_enable, &self.q_enable),
@@ -824,7 +829,13 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                 } else {
                     Value::known(val)
                 };
-                region.assign_fixed(|| name, *column, offset, || value);
+                let cell = region
+                    .assign_fixed(|| name, *column, offset, || value)?
+                    .cell();
+
+                if let Some(assigned_advices) = assigned_advices.as_mut() {
+                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                }
             }
         }
 
@@ -842,11 +853,17 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                 } else {
                     Value::known(val)
                 };
-                region.assign_advice(|| name, *column, offset, || value);
+                let cell = region
+                    .assign_advice(|| name, *column, offset, || value)?
+                    .cell();
+
+                if let Some(assigned_advices) = assigned_advices.as_mut() {
+                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                }
             }
         }
 
-        itertools::multizip((
+        let _ = itertools::multizip((
             config.is_paddings.iter(),
             self.is_paddings.iter(),
             iter::repeat("is_paddings"),
@@ -871,20 +888,35 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             self.word_e.iter(),
             iter::repeat("e word"),
         )))
+        .chain(iter::once((&config.is_final, &self.is_final, "is final")))
         .chain(itertools::multizip((
             config.final_hash_bytes.iter(),
             self.final_hash_bytes.iter(),
             iter::repeat("final hash bytes"),
         )))
-        .for_each(|(column, ctx, name)| {
+        .map(|(column, ctx, name)| {
             for (offset, &val) in ctx.advice.iter().enumerate() {
                 let value = if use_unknown {
                     Value::unknown()
                 } else {
                     Value::known(val)
                 };
-                region.assign_advice(|| name, *column, offset, || value);
+
+                let cell = match region.assign_advice(|| name, *column, offset, || value) {
+                    Ok(cell) => cell,
+                    Err(e) => return Err(e),
+                }
+                .cell();
+
+                if let Some(assigned_advices) = assigned_advices.as_mut() {
+                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                }
             }
-        });
+
+            Ok(())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(())
     }
 }

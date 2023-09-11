@@ -7,11 +7,11 @@ use itertools::Itertools;
 
 use crate::{
     gadget::crypto::{HashInstructions, ShaContexts, ShaThreadBuilder},
-    util::{IntoConstant, IntoWitness, BaseThreadBuilder},
+    util::{IntoConstant, IntoWitness, ThreadBuilderBase},
     witness::{HashInput, HashInputChunk},
 };
 
-pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: BaseThreadBuilder<F>>(
+pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     thread_pool: &mut ThreadBuilder,
     hasher: &impl HashInstructions<F, ThreadBuilder>,
     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
@@ -50,7 +50,7 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: BaseThreadBuilder<F>>(
     Ok(root.bytes)
 }
 
-pub fn verify_merkle_proof<F: Field, ThreadBuilder: BaseThreadBuilder<F>>(
+pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     thread_pool: &mut ThreadBuilder,
     hasher: &impl HashInstructions<F, ThreadBuilder>,
     proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,

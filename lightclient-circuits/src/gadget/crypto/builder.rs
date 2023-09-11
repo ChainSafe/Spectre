@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, env::set_var, mem};
+use std::{cell::RefCell, collections::HashMap, env::set_var, marker::PhantomData, mem};
 
 use eth_types::Field;
 use halo2_base::{
@@ -18,17 +18,20 @@ use halo2_proofs::{
 };
 use snark_verifier_sdk::CircuitExt;
 
-use crate::{gadget::crypto::{Sha256Chip, ShaThreadBuilder}, util::BaseThreadBuilder};
+use crate::{
+    gadget::crypto::{Sha256Chip, ShaThreadBuilder},
+    util::{ThreadBuilderBase, ThreadBuilderConfigBase},
+};
 
 use super::sha256::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 
 #[derive(Debug, Clone)]
-pub struct SHAConfig<F: Field> {
-    pub spread: SpreadConfig<F>,
+pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F> = SpreadConfig<F>> {
+    pub compression: CustomConfig,
     pub range: RangeConfig<F>,
 }
 
-impl<F: Field> SHAConfig<F> {
+impl<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> SHAConfig<F, CustomConfig> {
     pub fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
         let degree = params.k;
         let mut range = RangeConfig::configure(
@@ -40,40 +43,44 @@ impl<F: Field> SHAConfig<F> {
             params.k - 1,
             degree,
         );
-        let spread = SpreadConfig::configure(meta, 8, 2); // TODO configure num_advice_columns
+        let compression = CustomConfig::configure(meta, params);
 
         range.gate.max_rows = (1 << degree) - meta.minimum_rows();
-        Self { range, spread }
+        Self { range, compression }
     }
 }
 
-pub struct ShaCircuitBuilder<F: Field> {
-    pub builder: RefCell<ShaThreadBuilder<F>>,
+pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F> = ShaThreadBuilder<F>> {
+    pub builder: RefCell<ThreadBuilder>,
     pub break_points: RefCell<MultiPhaseThreadBreakPoints>, // `RefCell` allows the circuit to record break points in a keygen call of `synthesize` for use in later witness gen
+    _f: PhantomData<F>,
 }
 
-impl<F: Field> ShaCircuitBuilder<F> {
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
-    pub fn keygen(builder: ShaThreadBuilder<F>) -> Self {
+    pub fn keygen(builder: ThreadBuilder) -> Self {
         Self {
             builder: RefCell::new(builder.unknown(true)),
             break_points: RefCell::new(vec![]),
+            _f: PhantomData,
         }
     }
 
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
-    pub fn mock(builder: ShaThreadBuilder<F>) -> Self {
+    pub fn mock(builder: ThreadBuilder) -> Self {
         Self {
             builder: RefCell::new(builder.unknown(false)),
             break_points: RefCell::new(vec![]),
+            _f: PhantomData,
         }
     }
 
     /// Creates a new [ShaCircuitBuilder].
-    pub fn prover(builder: ShaThreadBuilder<F>, break_points: MultiPhaseThreadBreakPoints) -> Self {
+    pub fn prover(builder: ThreadBuilder, break_points: MultiPhaseThreadBreakPoints) -> Self {
         Self {
             builder: RefCell::new(builder.unknown(false)),
             break_points: RefCell::new(break_points),
+            _f: PhantomData,
         }
     }
 
@@ -87,7 +94,7 @@ impl<F: Field> ShaCircuitBuilder<F> {
     #[allow(clippy::type_complexity)]
     pub fn sub_synthesize(
         &self,
-        config: &SHAConfig<F>,
+        config: &SHAConfig<F, ThreadBuilder::Config>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<HashMap<(usize, usize), (circuit::Cell, usize)>, Error> {
         config
@@ -100,7 +107,7 @@ impl<F: Field> ShaCircuitBuilder<F> {
 
         let mut assigned_advices = HashMap::new();
 
-        config.spread.load(layouter)?;
+        config.compression.load(layouter)?;
 
         layouter.assign_region(
             || "ShaCircuitBuilder generated circuit",
@@ -117,41 +124,23 @@ impl<F: Field> ShaCircuitBuilder<F> {
                         &config.range.gate,
                         &config.range.lookup_advice,
                         &config.range.q_lookup,
-                        &config.spread,
+                        &config.compression,
                         &mut region,
                         Default::default(),
-                    );
+                    )?;
                     *self.break_points.borrow_mut() = assignments.break_points.clone();
                     assigned_advices = assignments.assigned_advices;
                 } else {
                     let builder = &mut self.builder.borrow_mut();
                     let break_points = &mut self.break_points.borrow_mut();
 
-                    let break_points_gate = mem::take(&mut break_points[FIRST_PHASE]);
-                    // warning: we currently take all contexts from phase 0, which means you can't read the values
-                    // from these contexts later in phase 1. If we want to read, should clone here
-                    let threads = mem::take(&mut builder.gate_builder.threads[FIRST_PHASE]);
-
-                    assign_threads_in(
-                        FIRST_PHASE,
-                        threads,
+                    builder.assign_witnesses(
                         &config.range.gate,
-                        &config.range.lookup_advice[FIRST_PHASE],
+                        &config.range.lookup_advice,
+                        &config.compression,
                         &mut region,
-                        break_points_gate,
-                    );
-
-                    let threads_dense = mem::take(&mut builder.threads_dense);
-                    let threads_spread = mem::take(&mut builder.threads_spread);
-
-                    assign_threads_sha(
-                        &threads_dense,
-                        &threads_spread,
-                        &config.spread,
-                        &mut region,
-                        false,
-                        None,
-                    );
+                        break_points,
+                    )?;
                 }
                 Ok(())
             },
@@ -160,15 +149,15 @@ impl<F: Field> ShaCircuitBuilder<F> {
     }
 }
 
-impl<F: Field> Circuit<F> for ShaCircuitBuilder<F> {
-    type Config = SHAConfig<F>;
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F> for ShaCircuitBuilder<F, ThreadBuilder> {
+    type Config = SHAConfig<F, ThreadBuilder::Config>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F, ThreadBuilder::Config> {
         let params: FlexGateConfigParams =
             serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
         SHAConfig::configure(meta, params)

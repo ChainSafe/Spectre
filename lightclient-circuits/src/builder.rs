@@ -8,32 +8,35 @@ use halo2_proofs::{
     plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
 };
 
-use crate::{gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder}, util::BaseThreadBuilder};
+use crate::{
+    gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder},
+    util::{ThreadBuilderBase, ThreadBuilderConfigBase},
+};
 
 #[derive(Clone, Debug)]
 /// Config shared for block header and storage proof circuits
-pub struct Eth2Config<F: Field> {
-    sha: SHAConfig<F>,
+pub struct Eth2Config<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {
+    sha: SHAConfig<F, CustomConfig>,
     pub instance: Column<Instance>,
 }
 
 /// This is an extension of [`ShaCircuitBuilder`] that adds support for public instances (aka public inputs+outputs)
-pub struct Eth2CircuitBuilder<F: Field> {
-    pub inner: ShaCircuitBuilder<F>,
+pub struct Eth2CircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
+    pub inner: ShaCircuitBuilder<F, ThreadBuilder>,
     pub assigned_instances: Vec<AssignedValue<F>>,
 }
 
-impl<F: Field> Eth2CircuitBuilder<F> {
-    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
-    pub fn keygen(assigned_instances: Vec<AssignedValue<F>>, builder: ShaThreadBuilder<F>) -> Self {
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Eth2CircuitBuilder<F, ThreadBuilder> {
+    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ThreadBuilder] set to true.
+    pub fn keygen(assigned_instances: Vec<AssignedValue<F>>, builder: ThreadBuilder) -> Self {
         Self {
             assigned_instances,
             inner: ShaCircuitBuilder::keygen(builder),
         }
     }
 
-    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
-    pub fn mock(assigned_instances: Vec<AssignedValue<F>>, builder: ShaThreadBuilder<F>) -> Self {
+    /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ThreadBuilder] set to false.
+    pub fn mock(assigned_instances: Vec<AssignedValue<F>>, builder: ThreadBuilder) -> Self {
         Self {
             assigned_instances,
             inner: ShaCircuitBuilder::mock(builder),
@@ -43,7 +46,7 @@ impl<F: Field> Eth2CircuitBuilder<F> {
     /// Creates a new [Eth2CircuitBuilder].
     pub fn prover(
         assigned_instances: Vec<AssignedValue<F>>,
-        builder: ShaThreadBuilder<F>,
+        builder: ThreadBuilder,
         break_points: MultiPhaseThreadBreakPoints,
     ) -> Self {
         Self {
@@ -69,8 +72,10 @@ impl<F: Field> Eth2CircuitBuilder<F> {
     }
 }
 
-impl<F: Field> Circuit<F> for Eth2CircuitBuilder<F> {
-    type Config = Eth2Config<F>;
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
+    for Eth2CircuitBuilder<F, ThreadBuilder>
+{
+    type Config = Eth2Config<F, ThreadBuilder::Config>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -78,7 +83,7 @@ impl<F: Field> Circuit<F> for Eth2CircuitBuilder<F> {
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let sha = ShaCircuitBuilder::configure(meta);
+        let sha = ShaCircuitBuilder::<F, ThreadBuilder>::configure(meta);
         let instance = meta.instance_column();
         meta.enable_equality(instance);
 
@@ -109,7 +114,9 @@ impl<F: Field> Circuit<F> for Eth2CircuitBuilder<F> {
     }
 }
 
-impl<F: Field> snark_verifier_sdk::CircuitExt<F> for Eth2CircuitBuilder<F> {
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> snark_verifier_sdk::CircuitExt<F>
+    for Eth2CircuitBuilder<F, ThreadBuilder>
+{
     fn num_instance(&self) -> Vec<usize> {
         vec![self.instance_count()]
     }

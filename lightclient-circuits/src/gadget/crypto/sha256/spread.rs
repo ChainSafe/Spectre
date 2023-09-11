@@ -1,11 +1,12 @@
 use std::marker::PhantomData;
 
-use crate::util::BaseThreadBuilder;
+use crate::util::{ThreadBuilderBase, ThreadBuilderConfigBase};
 
 use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
 use super::{compression::SpreadU32, util::*};
 use eth_types::Field;
+use halo2_base::gates::builder::FlexGateConfigParams;
 use halo2_base::halo2_proofs::halo2curves::FieldExt;
 use halo2_base::halo2_proofs::{
     circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
@@ -89,8 +90,15 @@ impl<F: Field> SpreadConfig<F> {
             region.name_column(|| format!("spread_{}", i), col);
         }
     }
+}
 
-    pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+
+impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
+        Self::configure(meta, 8, 2)  // TODO configure num_advice_columns
+    }
+
+    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         layouter.assign_table(
             || "spread table",
             |mut table| {
@@ -119,6 +127,16 @@ impl<F: Field> SpreadConfig<F> {
             },
         )?;
         Ok(())
+    }
+
+    fn annotate_columns_in_region(&self, region: &mut Region<F>) {
+        for (i, &column) in self.spreads.iter().enumerate() {
+            region.name_column(|| format!("spread_{i}"), column);
+        }
+
+        for (i, &column) in self.denses.iter().enumerate() {
+            region.name_column(|| format!("dense_{i}"), column);
+        }
     }
 }
 

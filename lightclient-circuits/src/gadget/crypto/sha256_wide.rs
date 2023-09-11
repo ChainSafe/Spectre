@@ -16,7 +16,7 @@ use std::{cell::RefCell, char::MAX};
 use crate::gadget::crypto::sha256_wide::util::Sha256AssignedRows;
 use crate::gadget::crypto::sha256_wide::witness::multi_sha256;
 use crate::gadget::rlc;
-use crate::util::{AssignedValueCell, BaseThreadBuilder};
+use crate::util::{AssignedValueCell, ThreadBuilderBase};
 use crate::witness::HashInput;
 
 use halo2_base::safe_types::RangeChip;
@@ -31,7 +31,7 @@ use halo2_proofs::{
     plonk::{Assigned, Error},
 };
 
-use self::builder::ShaBitThreadBuilder;
+pub use self::builder::ShaBitThreadBuilder;
 use self::config::Sha256BitConfig;
 use self::util::{NUM_BYTES_FINAL_HASH, NUM_WORDS_TO_ABSORB};
 
@@ -164,10 +164,10 @@ impl<'a, F: Field> HashInstructions<F, ShaBitThreadBuilder<F>> for Sha256ChipWid
 }
 
 impl<'a, F: Field> Sha256ChipWide<'a, F> {
-    pub fn new(range: &'a RangeChip<F>, randomness: Value<F>) -> Self {
+    pub fn new(range: &'a RangeChip<F>, randomness: F) -> Self {
         Self {
             range,
-            randomness: value_to_option(randomness).expect("randomness is not assigned"),
+            randomness,
         }
     }
 
@@ -180,7 +180,7 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
         let max_round = MAX_INPUT_SIZE / Self::BLOCK_SIZE;
 
         let mut assigned_rows = Sha256AssignedRows::new();
-        let witness = multi_sha256(&[input], Sha256BitConfig::fixed_challenge());
+        let witness = multi_sha256(&[input], self.randomness);
         let vec_vecs = witness
             .iter()
             .map(|sha256_row| {
@@ -244,218 +244,61 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use std::vec;
-//     use std::{cell::RefCell, marker::PhantomData};
 
-//     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
+#[cfg(test)]
+mod test {
+    use std::env::var;
+    use std::vec;
+    use std::{cell::RefCell, marker::PhantomData};
 
-//     use super::*;
-//     use ark_std::{end_timer, start_timer};
-//     use eth_types::Test;
-//     use halo2_base::gates::range::RangeConfig;
-//     use halo2_base::utils::fs::gen_srs;
-//     use halo2_base::SKIP_FIRST_PASS;
-//     use halo2_base::{
-//         gates::{builder::GateThreadBuilder, range::RangeStrategy},
-//         halo2_proofs::{
-//             circuit::{Layouter, SimpleFloorPlanner},
-//             dev::MockProver,
-//             halo2curves::bn256::Fr,
-//             plonk::{Circuit, ConstraintSystem},
-//         },
-//     };
-//     use sha2::{Digest, Sha256};
+    use crate::gadget::crypto::{ShaCircuitBuilder, constant_randomness};
+    use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
-//     #[derive(Debug, Clone)]
-//     struct TestConfig<F: Field> {
-//         sha256_config: Sha256BitConfig<F>,
-//         pub max_byte_size: usize,
-//         range: RangeConfig<F>,
-//         challenges: Challenges<Value<F>>,
-//     }
+    use super::*;
+    use ark_std::{end_timer, start_timer};
+    use eth_types::Test;
+    use halo2_base::gates::builder::FlexGateConfigParams;
+    use halo2_base::gates::range::RangeConfig;
+    use halo2_base::utils::fs::gen_srs;
+    use halo2_base::SKIP_FIRST_PASS;
+    use halo2_base::{
+        gates::{builder::GateThreadBuilder, range::RangeStrategy},
+        halo2_proofs::{
+            circuit::{Layouter, SimpleFloorPlanner},
+            dev::MockProver,
+            halo2curves::bn256::Fr,
+            plonk::{Circuit, ConstraintSystem},
+        },
+    };
+    use sha2::{Digest, Sha256};
 
-//     #[derive(Debug, Clone)]
-//     struct TestCircuit<F: Field> {
-//         builder: RefCell<GateThreadBuilder<F>>,
-//         range: RangeChip<F>,
-//         test_input: HashInput<QuantumCell<F>>,
-//         test_output: [u8; 32],
-//         _f: PhantomData<F>,
-//     }
+    fn test_circuit<F: Field>(
+        k: usize,
+        mut builder: ShaBitThreadBuilder<F>,
+        input_vector: &[Vec<u8>],
+    ) -> Result<ShaCircuitBuilder<F, ShaBitThreadBuilder<F>>, Error> {
+        let range = RangeChip::default(8);
+        let sha256 = Sha256ChipWide::new(&range, constant_randomness());
 
-//     impl<F: Field> Circuit<F> for TestCircuit<F>
-//     where
-//         [(); Self::MAX_BYTE_SIZE]:,
-//     {
-//         type Config = TestConfig<F>;
-//         type FloorPlanner = SimpleFloorPlanner;
+        for input in input_vector {
+            let _ = sha256.digest::<64>(&mut builder, input.as_slice().into_witness(), false)?;
+        }
 
-//         fn without_witnesses(&self) -> Self {
-//             unimplemented!()
-//         }
+        builder.config(k, None);
+        Ok(ShaCircuitBuilder::mock(builder))
+    }
 
-//         fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-//             let sha256_configs = Sha256BitConfig::<F>::new::<Test>(meta);
-//             let range = RangeConfig::configure(
-//                 meta,
-//                 RangeStrategy::Vertical,
-//                 &[Self::NUM_ADVICE],
-//                 &[Self::NUM_LOOKUP_ADVICE],
-//                 Self::NUM_FIXED,
-//                 Self::LOOKUP_BITS,
-//                 Self::K,
-//             );
-//             Self::Config {
-//                 sha256_config: sha256_configs,
-//                 max_byte_size: Self::MAX_BYTE_SIZE,
-//                 range,
-//                 challenges: Challenges::mock(Value::known(Sha256BitConfig::fixed_challenge())),
-//             }
-//         }
+    #[test]
+    fn test_sha256_chip_constant_size() {
+        let k = 10;
 
-//         fn synthesize(
-//             &self,
-//             config: Self::Config,
-//             mut layouter: impl Layouter<F>,
-//         ) -> Result<(), Error> {
-//             config.range.load_lookup_table(&mut layouter)?;
-//             let mut first_pass = SKIP_FIRST_PASS;
-//             let sha256 = Sha256ChipWide::new(
-//                 &config.sha256_config,
-//                 &self.range,
-//                 config.challenges.sha256_input(),
-//                 None,
-//                 0,
-//             );
+        let test_input = vec![0u8; 64];
 
-//             let mut builder = self.builder.borrow().clone();
+        let builder = ShaBitThreadBuilder::<Fr>::mock();
 
-//             let _ = layouter.assign_region(
-//                 || "sha2 test",
-//                 |mut region| {
-//                     if first_pass {
-//                         first_pass = false;
-//                         println!("first pass");
-//                         return Ok(vec![]);
-//                     }
-//                     config.sha256_config.annotate_columns_in_region(&mut region);
+        let circuit = test_circuit(k, builder, &[test_input]);
+        let prover = MockProver::run(k as u32, &circuit.unwrap(), vec![]).unwrap();
 
-//                     let ctx = builder.main(0);
-
-//                     let result = sha256.digest::<64>(self.test_input.clone(), ctx, &mut region)?;
-
-//                     let assigned_hash = result.output_bytes;
-//                     println!(
-//                         "assigned hash: {:?}",
-//                         assigned_hash.map(|e| e.value().get_lower_32())
-//                     );
-
-//                     // let correct_output = self
-//                     //     .test_output
-//                     //     .map(|b| ctx.load_witness(F::from(b as u64)));
-
-//                     // for (hash, check) in assigned_hash.iter().zip(correct_output.iter()) {
-//                     //     ctx.constrain_equal(hash, check);
-//                     // }
-
-//                     let extra_assignments = sha256.take_extra_assignments();
-
-//                     let _ = builder.assign_all(
-//                         &config.range.gate,
-//                         &config.range.lookup_advice,
-//                         &config.range.q_lookup,
-//                         &mut region,
-//                         extra_assignments,
-//                     );
-
-//                     Ok(assigned_hash.into_iter().map(|v| v.cell).collect())
-//                 },
-//             )?;
-
-//             Ok(())
-//         }
-//     }
-
-//     impl<F: Field> TestCircuit<F> {
-//         const MAX_BYTE_SIZE: usize = 64;
-//         const NUM_ADVICE: usize = 5;
-//         const NUM_FIXED: usize = 1;
-//         const NUM_LOOKUP_ADVICE: usize = 4;
-//         const LOOKUP_BITS: usize = 8;
-//         const K: usize = 11;
-//     }
-
-//     #[test]
-//     fn test_sha256_wide_chip_constant_size() {
-//         let k = TestCircuit::<Fr>::K as u32;
-
-//         let test_input = vec![0u8; 128];
-//         let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-//         let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-//         let builder = GateThreadBuilder::new(false);
-//         let circuit = TestCircuit::<Fr> {
-//             builder: RefCell::new(builder),
-//             range,
-//             test_input: test_input.into_witness(),
-//             test_output,
-//             _f: PhantomData,
-//         };
-
-//         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-//         prover.assert_satisfied();
-//     }
-
-//     #[test]
-//     fn test_sha256_wide_params_gen() {
-//         let k = TestCircuit::<Fr>::K as u32;
-//         let test_input = vec![0u8; 128];
-//         let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-//         let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-//         let builder = GateThreadBuilder::keygen();
-//         let circuit = TestCircuit::<Fr> {
-//             builder: RefCell::new(builder),
-//             range,
-//             test_input: test_input.into_witness(),
-//             test_output,
-//             _f: PhantomData,
-//         };
-//         let params = gen_srs(k);
-//         let pkey = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
-//     }
-
-//     #[test]
-//     fn test_sha256_wide_proof_gen() {
-//         let k = TestCircuit::<Fr>::K as u32;
-//         let test_input = vec![2u8; 32];
-//         let test_output: [u8; 32] = Sha256::digest(&test_input).into();
-//         let range = RangeChip::default(TestCircuit::<Fr>::LOOKUP_BITS);
-//         let builder = GateThreadBuilder::keygen();
-//         let circuit = TestCircuit::<Fr> {
-//             builder: RefCell::new(builder),
-//             range,
-//             test_input: HashInput::TwoToOne(
-//                 test_input.clone().into_witness(),
-//                 test_input.into_witness(),
-//             ),
-//             test_output,
-//             _f: PhantomData,
-//         };
-//         let pf_time = start_timer!(|| "mock prover");
-
-//         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-//         prover.assert_satisfied();
-//         prover.verify().unwrap();
-//         end_timer!(pf_time);
-
-//         let params = gen_srs(k);
-
-//         let pkey = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
-
-//         let proof = full_prover(&params, &pkey, circuit, vec![]);
-
-//         let is_valid = full_verifier(&params, pkey.get_vk(), proof, vec![]);
-//         assert!(is_valid);
-//     }
-// }
+        prover.assert_satisfied_par();
+    }
+}

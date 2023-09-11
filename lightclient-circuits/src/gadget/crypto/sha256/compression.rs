@@ -1,6 +1,6 @@
 use std::cell::RefMut;
 
-use crate::util::BaseThreadBuilder;
+use crate::util::ThreadBuilderBase;
 
 use super::ShaThreadBuilder;
 use super::builder::ShaContexts;

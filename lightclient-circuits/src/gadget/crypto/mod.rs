@@ -3,6 +3,7 @@ mod hash2curve;
 mod sha256;
 mod sha256_wide;
 mod util;
+mod ecc;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
 use eth_types::{AppCurveExt, Field, HashCurveExt};
@@ -15,10 +16,13 @@ use halo2_ecc::{
 };
 use halo2_proofs::plonk::Error;
 pub use hash2curve::{HashToCurveCache, HashToCurveChip};
+use lazy_static::lazy_static;
 pub use sha256::{Sha256Chip, ShaContexts, ShaThreadBuilder};
-pub use sha256_wide::*;
+pub use sha256_wide::{Sha256ChipWide, ShaBitThreadBuilder};
 
-use crate::{witness::HashInput, util::BaseThreadBuilder};
+pub use ecc::calculate_ysquared;
+
+use crate::{util::ThreadBuilderBase, witness::HashInput};
 pub type FpPoint<F> = ProperCrtUint<F>;
 pub type Fp2Point<F> = FieldVector<FpPoint<F>>;
 pub type G1Point<F> = EcPoint<F, ProperCrtUint<F>>;
@@ -30,7 +34,7 @@ pub type G1Chip<'chip, F> = EccChip<'chip, F, FpChip<'chip, F>>;
 #[allow(type_alias_bounds)]
 pub type G2Chip<'chip, F> = EccChip<'chip, F, Fp2Chip<'chip, F>>;
 
-pub trait HashInstructions<F: Field, ThreadBuilder: BaseThreadBuilder<F> = ShaThreadBuilder<F>> {
+pub trait HashInstructions<F: Field, ThreadBuilder: ThreadBuilderBase<F> = ShaThreadBuilder<F>> {
     const BLOCK_SIZE: usize;
     const DIGEST_SIZE: usize;
 
@@ -52,4 +56,9 @@ pub struct AssignedHashResult<F: Field> {
     // pub input_len: AssignedValue<F>,
     pub input_bytes: Vec<AssignedValue<F>>,
     pub output_bytes: [AssignedValue<F>; 32],
+}
+
+// This is a temporary measure. TODO: use challenges API.
+pub fn constant_randomness<F: Field>() -> F {
+    F::from_u128(0xca9d6022267d3bd658bf)
 }
