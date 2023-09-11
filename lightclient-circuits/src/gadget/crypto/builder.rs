@@ -26,7 +26,7 @@ use crate::{
 use super::sha256::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 
 #[derive(Debug, Clone)]
-pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F> = SpreadConfig<F>> {
+pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {
     pub compression: CustomConfig,
     pub range: RangeConfig<F>,
 }
@@ -50,7 +50,7 @@ impl<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> SHAConfig<F, CustomConf
     }
 }
 
-pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F> = ShaThreadBuilder<F>> {
+pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
     pub builder: RefCell<ThreadBuilder>,
     pub break_points: RefCell<MultiPhaseThreadBreakPoints>, // `RefCell` allows the circuit to record break points in a keygen call of `synthesize` for use in later witness gen
     _f: PhantomData<F>,
@@ -149,7 +149,9 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
     }
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F> for ShaCircuitBuilder<F, ThreadBuilder> {
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
+    for ShaCircuitBuilder<F, ThreadBuilder>
+{
     type Config = SHAConfig<F, ThreadBuilder::Config>;
     type FloorPlanner = SimpleFloorPlanner;
 
@@ -168,7 +170,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F> for ShaCircuitBui
         config: Self::Config,
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-        self.sub_synthesize(&config, &mut layouter);
+        self.sub_synthesize(&config, &mut layouter)?;
         Ok(())
     }
 }

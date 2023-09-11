@@ -22,8 +22,6 @@ use ssz_rs::Node;
 pub struct CommitteeRotationArgs<S: Spec, F: Field> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 
-    pub pubkeys_y: Vec<Fq>,
-
     pub randomness: F,
 
     pub _spec: PhantomData<S>,
@@ -32,17 +30,11 @@ pub struct CommitteeRotationArgs<S: Spec, F: Field> {
 impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
-        let dymmy_y = Fq::from((G1::B as f64).sqrt() as u64);
-
-        let pubkeys_y = iter::repeat(dymmy_y)
-            .take(S::SYNC_COMMITTEE_SIZE)
-            .collect_vec();
-
+        
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
-            pubkeys_y,
             randomness: constant_randomness(),
             _spec: PhantomData,
         }

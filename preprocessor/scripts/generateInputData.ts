@@ -183,3 +183,8 @@ fs.writeFileSync(
     `../test_data/sync_step.json`,
     serialize(input)
 );
+
+fs.writeFileSync(
+    `../test_data/committee_pubkeys.json`,
+    serialize( Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true))))
+);

@@ -85,7 +85,7 @@ impl<'a, F: Field> HashInstructions<F, ShaBitThreadBuilder<F>> for Sha256ChipWid
         let mut assigned_rounds = vec![];
         let assigned_output =
             self.load_digest::<MAX_INPUT_SIZE>(thread_pool, binary_input, &mut assigned_rounds)?;
- 
+
         let one_round_size = Self::BLOCK_SIZE;
         let num_round = 1;
 
@@ -165,10 +165,7 @@ impl<'a, F: Field> HashInstructions<F, ShaBitThreadBuilder<F>> for Sha256ChipWid
 
 impl<'a, F: Field> Sha256ChipWide<'a, F> {
     pub fn new(range: &'a RangeChip<F>, randomness: F) -> Self {
-        Self {
-            range,
-            randomness,
-        }
+        Self { range, randomness }
     }
 
     pub fn load_digest<const MAX_INPUT_SIZE: usize>(
@@ -244,14 +241,13 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use std::env::var;
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::gadget::crypto::{ShaCircuitBuilder, constant_randomness};
+    use crate::gadget::crypto::{constant_randomness, ShaCircuitBuilder};
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
 
     use super::*;
@@ -274,18 +270,19 @@ mod test {
 
     fn test_circuit<F: Field>(
         k: usize,
-        mut builder: ShaBitThreadBuilder<F>,
+        builder: &mut ShaBitThreadBuilder<F>,
         input_vector: &[Vec<u8>],
-    ) -> Result<ShaCircuitBuilder<F, ShaBitThreadBuilder<F>>, Error> {
+    ) -> Result<(), Error> {
         let range = RangeChip::default(8);
         let sha256 = Sha256ChipWide::new(&range, constant_randomness());
 
         for input in input_vector {
-            let _ = sha256.digest::<64>(&mut builder, input.as_slice().into_witness(), false)?;
+            let _ = sha256.digest::<64>(builder, input.as_slice().into_witness(), false)?;
         }
 
         builder.config(k, None);
-        Ok(ShaCircuitBuilder::mock(builder))
+
+        Ok(())
     }
 
     #[test]
@@ -294,11 +291,28 @@ mod test {
 
         let test_input = vec![0u8; 64];
 
-        let builder = ShaBitThreadBuilder::<Fr>::mock();
+        let mut builder = ShaBitThreadBuilder::<Fr>::mock();
 
-        let circuit = test_circuit(k, builder, &[test_input]);
-        let prover = MockProver::run(k as u32, &circuit.unwrap(), vec![]).unwrap();
+        test_circuit(k, &mut builder, &[test_input]).unwrap();
+
+        let circuit = ShaCircuitBuilder::mock(builder);
+
+        let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();
 
         prover.assert_satisfied_par();
+    }
+
+    #[test]
+    fn test_sha256_wide_params_gen() {
+        let k = 10;
+        let test_input = vec![1u8; 64];
+        let mut builder = ShaBitThreadBuilder::<Fr>::keygen();
+
+        test_circuit(k, &mut builder, &[test_input]).unwrap();
+
+        let circuit = ShaCircuitBuilder::keygen(builder);
+
+        let params = gen_srs(k as u32);
+        let pk = gen_pkey(|| "sha256_wide_chip", &params, None, &circuit).unwrap();
     }
 }

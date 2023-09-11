@@ -83,7 +83,7 @@ pub fn gen_pkey<C: Circuit<Fr>>(
         }
     } else {
         (
-            start_timer!(|| "Loading vkey"),
+            start_timer!(|| "Generating vkey"),
             keygen_vk(params, circuit).expect("vk generation should not fail"),
         )
     };

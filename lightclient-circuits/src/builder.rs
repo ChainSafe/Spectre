@@ -7,6 +7,7 @@ use halo2_proofs::{
     circuit::{Layouter, SimpleFloorPlanner},
     plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
 };
+use log::debug;
 
 use crate::{
     gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder},
@@ -97,6 +98,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
     ) -> Result<(), Error> {
         // we later `take` the builder, so we need to save this value
         let witness_gen_only = self.inner.builder.borrow().witness_gen_only();
+
         let assigned_advices = self.inner.sub_synthesize(&config.sha, &mut layouter)?;
 
         if !witness_gen_only {
@@ -120,6 +122,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> snark_verifier_sdk::CircuitE
     fn num_instance(&self) -> Vec<usize> {
         vec![self.instance_count()]
     }
+
     fn instances(&self) -> Vec<Vec<F>> {
         vec![self.instance()]
     }

@@ -824,13 +824,8 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             ("h_e", &config.h_e, &self.h_e),
         ] {
             for (offset, &val) in ctx.advice.iter().enumerate() {
-                let value = if use_unknown {
-                    Value::unknown()
-                } else {
-                    Value::known(val)
-                };
                 let cell = region
-                    .assign_fixed(|| name, *column, offset, || value)?
+                    .assign_fixed(|| name, *column, offset, || Value::known(val))?
                     .cell();
 
                 if let Some(assigned_advices) = assigned_advices.as_mut() {
@@ -904,7 +899,9 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
 
                 let cell = match region.assign_advice(|| name, *column, offset, || value) {
                     Ok(cell) => cell,
-                    Err(e) => return Err(e),
+                    Err(e) => {
+                        return Err(e);
+                    }
                 }
                 .cell();
 
@@ -913,7 +910,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                 }
             }
 
-            Ok(())
+            Ok::<_, Error>(())
         })
         .collect::<Result<Vec<_>, _>>()?;
 

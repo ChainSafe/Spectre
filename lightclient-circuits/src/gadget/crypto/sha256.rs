@@ -235,7 +235,7 @@ mod test {
         k: usize,
         mut builder: ShaThreadBuilder<F>,
         input_vector: &[Vec<u8>],
-    ) -> Result<ShaCircuitBuilder<F>, Error> {
+    ) -> Result<ShaCircuitBuilder<F, ShaThreadBuilder<F>>, Error> {
         let range = RangeChip::default(8);
         let sha256 = Sha256Chip::new(&range);
 

@@ -137,6 +137,7 @@ impl<F: Field> ThreadBuilderBase<F> for ShaThreadBuilder<F> {
         region: &mut Region<F>,
         break_points: &mut MultiPhaseThreadBreakPoints,
     ) -> Result<(), Error> {
+        
         let break_points_gate = mem::take(&mut break_points[FIRST_PHASE]);
         // warning: we currently take all contexts from phase 0, which means you can't read the values
         // from these contexts later in phase 1. If we want to read, should clone here
