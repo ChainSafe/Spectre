@@ -289,12 +289,25 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     ctx,
                     &mut region,
                 )?;
+
                 // TODO: Remember to commit to the poseidon commitment. Removing this for now for ease of testing.
                 // let public_input_commitment = sha256_chip.digest::<64>(
                 //     HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
                 //     ctx,
                 //     &mut region,
                 // )?;
+
+                // Truncate the public input commitment to 253 bits and convert to one field element
+                let gate = range.gate();
+                let mut public_input_commitment_bytes = public_input_commitment.output_bytes;
+                let cleared_byte = clear_3_bits(&range, &public_input_commitment_bytes[31], ctx);
+                public_input_commitment_bytes[31] = cleared_byte;
+
+                let byte_base = (0..32)
+                    .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+                    .collect_vec();
+
+                let pi_field = gate.inner_product(ctx, public_input_commitment_bytes, byte_base);
 
                 let extra_assignments = sha256_chip.take_extra_assignments();
 
@@ -310,23 +323,39 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     extra_assignments,
                 );
 
-                Ok(Some((public_input_commitment, assignments)))
+                Ok(Some((pi_field, assignments)))
             },
         )?;
+
         if let Some(assignments) = assignments {
-            let assigned_instances = assignments.0.output_bytes;
+            let pi_instance = assignments.0;
             let assigned_advices = assignments.1.assigned_advices;
 
-            for (i, instance) in assigned_instances.into_iter().enumerate() {
-                let cell = instance.cell.unwrap();
-                let (cell, _) = assigned_advices
-                    .get(&(cell.context_id, cell.offset))
-                    .expect("instance not assigned");
-                layouter.constrain_instance(*cell, config.pi, i);
-            }
+            let cell = pi_instance.cell.unwrap();
+            let (cell, _) = assigned_advices
+                .get(&(cell.context_id, cell.offset))
+                .expect("instance not assigned");
+            layouter.constrain_instance(*cell, config.pi, 0);
         }
         Ok(())
     }
+}
+
+/// Clears the 3 first least significat bits.
+/// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
+fn clear_3_bits<F: Field>(
+    range: &RangeChip<F>,
+    b: &AssignedValue<F>,
+    ctx: &mut Context<F>,
+) -> AssignedValue<F> {
+    let gate = range.gate();
+    // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
+    let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
+    // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
+    let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
+
+    // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
+    range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
 }
 
 impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
@@ -459,15 +488,15 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
         let execution_state_root = &self.execution_state_root;
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(execution_state_root);
-
-        let public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // TODO: Also hash the poseidon commitment
 
-        vec![public_input_commitment
-            .into_iter()
-            .map(|b| F::from(b as u64))
-            .collect_vec()]
+        let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
+        // Truncate to 253 bits
+        public_input_commitment[31] &= 0b00011111;
+        let pi_field = F::from_bytes_le_unsecure(&public_input_commitment);
+        vec![vec![pi_field]]
     }
+    //chung
 
     fn num_instance(&self) -> Vec<usize> {
         self.instances().iter().map(|v| v.len()).collect()
