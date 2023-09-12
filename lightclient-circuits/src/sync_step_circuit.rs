@@ -257,6 +257,8 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 )?;
 
                 // Public Input Commitment
+                let gate = range.gate();
+
                 let attested_slot = self.attested_block.slot.into_witness();
                 let finalized_slot = self.finalized_block.slot.into_witness();
                 let h = sha256_chip.digest::<128>(
@@ -264,42 +266,52 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     ctx,
                     &mut region,
                 )?;
-
+                // TODO: Investigate if we should hash it all concatinated in one go
                 let h = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), finalized_header.into()),
                     ctx,
                     &mut region,
                 )?;
 
-                let participation_s = self
-                    .participation_bits
-                    .iter()
-                    .map(|b| *b as u64)
-                    .sum::<u64>()
-                    .into_witness();
+                let byte_base = (0..32)
+                    .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+                    .collect_vec();
+
+                let participation_sum_bytes = participation_sum
+                    .value()
+                    .to_bytes_le()
+                    .into_iter()
+                    .map(|v| ctx.load_witness(F::from(v as u64)))
+                    .collect_vec();
 
                 let h = sha256_chip.digest::<128>(
-                    HashInput::TwoToOne(h.output_bytes.into(), participation_s),
+                    HashInput::TwoToOne(
+                        h.output_bytes.into(),
+                        participation_sum_bytes.clone().into(),
+                    ),
                     ctx,
                     &mut region,
                 )?;
+                // Constrain the participation sum bytes to be equal to the participation_sum
+                let sum_field = gate.inner_product(ctx, participation_sum_bytes, byte_base.clone());
+                ctx.constrain_equal(&sum_field, &participation_sum);
+
                 let h = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
                     ctx,
                     &mut region,
                 )?;
 
-                println!(
-                    "synthesis poseidon_commitment {:?}",
-                    poseidon_commit.value()
-                );
                 let poseidon_commit_bytes = poseidon_commit
                     .value()
                     .to_bytes_le()
                     .into_iter()
                     .map(|v| ctx.load_witness(F::from(v as u64)))
                     .collect_vec();
-                // println!("Synthesis: {:#04x?}", poseidon_commit_bytes.iter().map(|b| b.value()).collect_vec());
+                // Constrain poseidon bytes to be equal to the poseidon_commit_value
+                let poseidon_commit_field =
+                    gate.inner_product(ctx, poseidon_commit_bytes.clone(), byte_base.clone());
+                ctx.constrain_equal(&poseidon_commit_field, &poseidon_commit);
 
                 let public_input_commitment = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), poseidon_commit_bytes.into()),
@@ -308,14 +320,9 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 )?;
 
                 // Truncate the public input commitment to 253 bits and convert to one field element
-                let gate = range.gate();
                 let mut public_input_commitment_bytes = public_input_commitment.output_bytes;
                 let cleared_byte = clear_3_bits(&range, &public_input_commitment_bytes[31], ctx);
                 public_input_commitment_bytes[31] = cleared_byte;
-
-                let byte_base = (0..32)
-                    .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
-                    .collect_vec();
 
                 let pi_field = gate.inner_product(ctx, public_input_commitment_bytes, byte_base);
 
@@ -501,9 +508,7 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
         let h = sha2::Sha256::digest(&input).to_vec();
 
         let poseidon_commitment = g1_array_poseidon_native::<F>(&self.pubkeys).unwrap();
-        println!("wgen poseidon_commitment: {:x?}", poseidon_commitment);
         let poseidon_commitment_bytes = poseidon_commitment.to_bytes_le();
-        // println!("wgen: {:#04x?}", poseidon_commitment_bytes);
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(&poseidon_commitment_bytes);
 
