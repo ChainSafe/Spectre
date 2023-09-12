@@ -15,7 +15,7 @@ use crate::{
         Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
         HashToCurveChip, Sha256Chip, SpreadConfig,
     },
-    poseidon::{g1_array_poseidon, poseidon_sponge},
+    poseidon::{g1_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
     sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     table::Sha256Table,
@@ -671,45 +671,6 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             _spec: PhantomData,
         }
     }
-}
-use poseidon_native::Poseidon as PoseidonNative;
-const POSEIDON_SIZE: usize = 16;
-const R_F: usize = 8;
-const R_P: usize = 68;
-pub fn g1_array_poseidon_native<F: Field>(points: &[G1Affine]) -> Result<F, Error> {
-    let limbs_fq = points
-        .iter()
-        // Converts the point (usually in Fq) to limbs.
-        .map(|point| {
-            let x_fq_bytes = point.x.to_bytes_le();
-            let mut chunks = x_fq_bytes.chunks(14);
-            let mut limbs = vec![];
-            while let Some(chunk) = chunks.next() {
-                limbs.push(F::from_bytes_le(chunk));
-            }
-            limbs
-        })
-        .flatten()
-        // Converts the Fq point to a circuit field. It is safe because the limbs should be smaller
-        // even if the bits in the Field of the point are larger than the bits of the circuit field.
-        // .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
-        .collect_vec();
-    let limbs = limbs_fq
-        .iter()
-        .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
-        .collect_vec();
-
-    let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
-    let mut current_poseidon_hash = None;
-
-    for (i, chunk) in limbs.chunks(POSEIDON_SIZE - 3).enumerate() {
-        poseidon.update(chunk);
-        if i != 0 {
-            poseidon.update(&[current_poseidon_hash.unwrap()]);
-        }
-        current_poseidon_hash.insert(poseidon.squeeze());
-    }
-    Ok(current_poseidon_hash.unwrap())
 }
 
 #[cfg(test)]
