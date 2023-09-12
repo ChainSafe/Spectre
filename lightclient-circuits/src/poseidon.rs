@@ -21,10 +21,6 @@ pub fn g1_array_poseidon<F: Field>(
         .flat_map(|p| p.x.limbs())
         .copied()
         .collect_vec();
-    println!(
-        "synthewsis limbs: {:?}",
-        &limbs[..3].iter().map(|x| x.value()).collect_vec()
-    );
 
     let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
         .expect("failed to construct Poseidon circuit");
@@ -35,6 +31,7 @@ pub fn g1_array_poseidon<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
+
         current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
     }
 

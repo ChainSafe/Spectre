@@ -227,7 +227,7 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     &mut h2c_cache,
                 )?;
 
-                let res = bls_chip.verify_pairing(signature, msghash, agg_pubkey, g1_neg, ctx);
+                let res = bls_chip.verify_pairing(ctx, signature, msghash, agg_pubkey, g1_neg);
                 fp12_chip.assert_equal(ctx, res, fp12_one);
 
                 // verify finilized block header against current beacon state merkle proof
@@ -500,11 +500,9 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
         input[32..].copy_from_slice(execution_state_root);
         let h = sha2::Sha256::digest(&input).to_vec();
 
-        let poseidon_commitment = g1_array_poseidon_native::<F>(&self.pubkeys);
+        let poseidon_commitment = g1_array_poseidon_native::<F>(&self.pubkeys).unwrap();
         println!("wgen poseidon_commitment: {:x?}", poseidon_commitment);
-        let poseidon_commitment_bytes = g1_array_poseidon_native::<F>(&self.pubkeys)
-            .unwrap()
-            .to_bytes_le();
+        let poseidon_commitment_bytes = poseidon_commitment.to_bytes_le();
         // println!("wgen: {:#04x?}", poseidon_commitment_bytes);
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(&poseidon_commitment_bytes);
@@ -677,19 +675,24 @@ pub fn g1_array_poseidon_native<F: Field>(points: &[G1Affine]) -> Result<F, Erro
     let limbs_fq = points
         .iter()
         // Converts the point (usually in Fq) to limbs.
-        .map(|p| decompose(&p.x, 4, 112))
+        .map(|point| {
+            let x_fq_bytes = point.x.to_bytes_le();
+            let mut chunks = x_fq_bytes.chunks(14);
+            let mut limbs = vec![];
+            while let Some(chunk) = chunks.next() {
+                limbs.push(F::from_bytes_le(chunk));
+            }
+            limbs
+        })
         .flatten()
         // Converts the Fq point to a circuit field. It is safe because the limbs should be smaller
         // even if the bits in the Field of the point are larger than the bits of the circuit field.
         // .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
         .collect_vec();
-    println!("wgen fqlimbs: {:?}", &limbs_fq[..3]);
-
     let limbs = limbs_fq
         .iter()
         .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
         .collect_vec();
-    println!("wgen fr limbs: {:?}", &limbs[..3]);
 
     let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
     let mut current_poseidon_hash = None;
