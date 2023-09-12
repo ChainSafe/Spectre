@@ -35,7 +35,7 @@ use halo2_base::{
         range::RangeConfig,
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    utils::{fs::gen_srs, CurveAffineExt},
+    utils::{decompose, fe_to_bigint, fe_to_biguint, fs::gen_srs, CurveAffineExt, ScalarField},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -257,7 +257,6 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                 )?;
 
                 // Public Input Commitment
-                // TODO: This gets ssz padded to 32 bytes. Can probably just do a conversion to LE bytes to save a bunch of bytes
                 let attested_slot = self.attested_block.slot.into_witness();
                 let finalized_slot = self.finalized_block.slot.into_witness();
                 let h = sha256_chip.digest::<128>(
@@ -284,18 +283,29 @@ impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
                     ctx,
                     &mut region,
                 )?;
-                let public_input_commitment = sha256_chip.digest::<128>(
+                let h = sha256_chip.digest::<128>(
                     HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
                     ctx,
                     &mut region,
                 )?;
 
-                // TODO: Remember to commit to the poseidon commitment. Removing this for now for ease of testing.
-                // let public_input_commitment = sha256_chip.digest::<64>(
-                //     HashInput::TwoToOne(h.output_bytes.into(), iter::once(poseidon_commit).into()),
-                //     ctx,
-                //     &mut region,
-                // )?;
+                println!(
+                    "synthesis poseidon_commitment {:?}",
+                    poseidon_commit.value()
+                );
+                let poseidon_commit_bytes = poseidon_commit
+                    .value()
+                    .to_bytes_le()
+                    .into_iter()
+                    .map(|v| ctx.load_witness(F::from(v as u64)))
+                    .collect_vec();
+                // println!("Synthesis: {:#04x?}", poseidon_commit_bytes.iter().map(|b| b.value()).collect_vec());
+
+                let public_input_commitment = sha256_chip.digest::<128>(
+                    HashInput::TwoToOne(h.output_bytes.into(), poseidon_commit_bytes.into()),
+                    ctx,
+                    &mut region,
+                )?;
 
                 // Truncate the public input commitment to 253 bits and convert to one field element
                 let gate = range.gate();
@@ -488,7 +498,16 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
         let execution_state_root = &self.execution_state_root;
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(execution_state_root);
-        // TODO: Also hash the poseidon commitment
+        let h = sha2::Sha256::digest(&input).to_vec();
+
+        let poseidon_commitment = g1_array_poseidon_native::<F>(&self.pubkeys);
+        println!("wgen poseidon_commitment: {:x?}", poseidon_commitment);
+        let poseidon_commitment_bytes = g1_array_poseidon_native::<F>(&self.pubkeys)
+            .unwrap()
+            .to_bytes_le();
+        // println!("wgen: {:#04x?}", poseidon_commitment_bytes);
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&poseidon_commitment_bytes);
 
         let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // Truncate to 253 bits
@@ -496,7 +515,6 @@ impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
         let pi_field = F::from_bytes_le_unsecure(&public_input_commitment);
         vec![vec![pi_field]]
     }
-    //chung
 
     fn num_instance(&self) -> Vec<usize> {
         self.instances().iter().map(|v| v.len()).collect()
@@ -650,6 +668,40 @@ impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
             _spec: PhantomData,
         }
     }
+}
+use poseidon_native::Poseidon as PoseidonNative;
+const POSEIDON_SIZE: usize = 16;
+const R_F: usize = 8;
+const R_P: usize = 68;
+pub fn g1_array_poseidon_native<F: Field>(points: &[G1Affine]) -> Result<F, Error> {
+    let limbs_fq = points
+        .iter()
+        // Converts the point (usually in Fq) to limbs.
+        .map(|p| decompose(&p.x, 4, 112))
+        .flatten()
+        // Converts the Fq point to a circuit field. It is safe because the limbs should be smaller
+        // even if the bits in the Field of the point are larger than the bits of the circuit field.
+        // .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
+        .collect_vec();
+    println!("wgen fqlimbs: {:?}", &limbs_fq[..3]);
+
+    let limbs = limbs_fq
+        .iter()
+        .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
+        .collect_vec();
+    println!("wgen fr limbs: {:?}", &limbs[..3]);
+
+    let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
+    let mut current_poseidon_hash = None;
+
+    for (i, chunk) in limbs.chunks(POSEIDON_SIZE - 3).enumerate() {
+        poseidon.update(chunk);
+        if i != 0 {
+            poseidon.update(&[current_poseidon_hash.unwrap()]);
+        }
+        current_poseidon_hash.insert(poseidon.squeeze());
+    }
+    Ok(current_poseidon_hash.unwrap())
 }
 
 #[cfg(test)]
