@@ -11,18 +11,18 @@ use std::{
 };
 
 use crate::{
+    builder::Eth2CircuitBuilder,
     gadget::crypto::{
-        Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashChip, HashToCurveCache,
-        HashToCurveChip, Sha256Chip, SpreadConfig,
+        calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
+        HashToCurveCache, HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
-    poseidon::{g1_array_poseidon, poseidon_sponge},
-    sha256_circuit::{util::NUM_ROUNDS, Sha256CircuitConfig},
+    poseidon::{fq_array_poseidon, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
-    table::Sha256Table,
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
+        ThreadBuilderBase,
     },
-    witness::{self, HashInput, HashInputChunk, SyncState},
+    witness::{self, HashInput, HashInputChunk, SyncStepArgs},
 };
 use eth_types::{AppCurveExt, Field, Spec};
 use ethereum_consensus::capella::{self, mainnet::*};
@@ -30,9 +30,12 @@ use ff::PrimeField;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
-        builder::{FlexGateConfigParams, GateThreadBuilder, RangeCircuitBuilder},
+        builder::{
+            FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints,
+            RangeCircuitBuilder,
+        },
         flex_gate::GateStrategy,
-        range::RangeConfig,
+        range::{RangeConfig, RangeStrategy},
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::{fs::gen_srs, CurveAffineExt},
@@ -63,227 +66,169 @@ use sha2::{Digest, Sha256};
 use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
 use ssz_rs::{GeneralizedIndex, Merkleized, Node};
 
-#[derive(Clone, Debug)]
-pub struct SyncStepCircuitConfig<F: Field> {
-    range: RangeConfig<F>,
-    sha256_config: RefCell<SpreadConfig<F>>,
-    challenges: Challenges<Value<F>>,
-}
-
 #[allow(type_alias_bounds)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SyncStepCircuit<S: Spec, F: Field> {
-    builder: RefCell<GateThreadBuilder<F>>,
-    signature: Vec<u8>,
-    domain: [u8; 32],
-    attested_block: capella::BeaconBlockHeader,
-    finalized_block: capella::BeaconBlockHeader,
-    pubkeys: Vec<G1Affine>,
-    execution_state_root: Vec<u8>,
-    execution_merkle_branch: Vec<Vec<u8>>,
-    beacon_state_root: Vec<u8>,
-    finality_merkle_branch: Vec<Vec<u8>>,
-    pariticipation_bits: Vec<bool>,
-    dry_run: bool,
+    _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> Circuit<F> for SyncStepCircuit<S, F> {
-    type Config = SyncStepCircuitConfig<F>;
-    type FloorPlanner = SimpleFloorPlanner;
-
-    fn without_witnesses(&self) -> Self {
-        unimplemented!()
-    }
-
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        let range = RangeCircuitBuilder::configure(meta);
-        let sha256_config = SpreadConfig::<F>::configure(meta, 8, 1);
-
-        SyncStepCircuitConfig {
-            range,
-            sha256_config: RefCell::new(sha256_config),
-            challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
-        }
-    }
-
+impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     fn synthesize(
         &self,
-        mut config: Self::Config,
-        mut layouter: impl Layouter<F>,
-    ) -> Result<(), Error> {
-        config
-            .range
-            .load_lookup_table(&mut layouter)
-            .expect("load range lookup table");
+        thread_pool: &mut ShaThreadBuilder<F>,
+        range: &RangeChip<F>,
+        args: &witness::SyncStepArgs<S>,
+    ) -> Result<Vec<AssignedValue<F>>, Error> {
+        assert!(
+            !args.signature_compressed.is_empty(),
+            "no attestations supplied"
+        );
 
-        assert!(!self.signature.is_empty(), "no attestations supplied");
-        let mut first_pass = halo2_base::SKIP_FIRST_PASS;
-
-        let range = RangeChip::default(config.range.lookup_bits());
-        let fp_chip = FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
+        let sha256_chip = Sha256Chip::new(range);
+        let fp_chip = FpChip::<F>::new(range, G2::LIMB_BITS, G2::NUM_LIMBS);
         let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
         let g2_chip = EccChip::new(&fp2_chip);
         let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
         let pairing_chip = PairingChip::new(&fp_chip);
         let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
-        let sha256_chip = Sha256Chip::new(config.sha256_config, &range, None);
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
 
-        let builder_clone = RefCell::from(self.builder.borrow().deref().clone());
-        let mut builder = if self.dry_run {
-            self.builder.borrow_mut()
-        } else {
-            builder_clone.borrow_mut()
+        let beacon_state_root = args
+            .beacon_state_root
+            .iter()
+            .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
+            .collect_vec();
+
+        let execution_state_root: HashInputChunk<QuantumCell<F>> =
+            args.execution_state_root.clone().into_witness();
+
+        let pubkey_affines = args
+            .pubkeys_uncompressed
+            .iter()
+            .cloned()
+            .map(|bytes| {
+                G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                    .unwrap()
+            })
+            .collect_vec();
+
+        let mut assigned_affines = vec![];
+        let (agg_pubkey, participation_sum) = Self::aggregate_pubkeys(
+            thread_pool.main(),
+            &fp_chip,
+            &pubkey_affines,
+            &args.pariticipation_bits,
+            &mut assigned_affines,
+        );
+        let poseidon_commit = fq_array_poseidon(
+            thread_pool.main(),
+            range.gate(),
+            assigned_affines.iter().map(|p| &p.x),
+        )?;
+
+        let fp12_one = {
+            use ff::Field;
+            fp12_chip.load_constant(thread_pool.main(), Fq12::one())
         };
+        let mut h2c_cache = HashToCurveCache::<F>::default();
 
-        layouter.assign_region(
-            || "AggregationCircuitBuilder generated circuit",
-            |mut region| {
-                if first_pass {
-                    first_pass = false;
-                    return Ok(());
-                }
+        // // Verify attestted header
+        let attested_header = ssz_merkleize_chunks(
+            thread_pool,
+            &sha256_chip,
+            [
+                args.attested_block.slot.into_witness(),
+                args.attested_block.proposer_index.into_witness(),
+                args.attested_block.parent_root.as_ref().into_witness(),
+                args.attested_block.state_root.as_ref().into_witness(),
+                args.attested_block.body_root.as_ref().into_witness(),
+            ],
+        )?;
 
-                let ctx = builder.main(0);
+        let finilized_block_body_root = args
+            .finalized_block
+            .body_root
+            .as_ref()
+            .iter()
+            .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
+            .collect_vec();
 
-                let beacon_state_root = self
-                    .beacon_state_root
-                    .iter()
-                    .map(|&b| ctx.load_witness(F::from(b as u64)))
-                    .collect_vec();
+        let finalized_header = ssz_merkleize_chunks(
+            thread_pool,
+            &sha256_chip,
+            [
+                args.finalized_block.slot.into_witness(),
+                args.finalized_block.proposer_index.into_witness(),
+                args.finalized_block.parent_root.as_ref().into_witness(),
+                args.finalized_block.state_root.as_ref().into_witness(),
+                finilized_block_body_root.clone().into(),
+            ],
+        )?;
 
-                let execution_state_root: HashInputChunk<QuantumCell<F>> =
-                    self.execution_state_root.clone().into_witness();
+        let signing_root = sha256_chip
+            .digest::<64>(
+                thread_pool,
+                HashInput::TwoToOne(attested_header.into(), args.domain.to_vec().into_witness()),
+                false,
+            )?
+            .output_bytes;
 
-                let mut pubkey_points = vec![];
-                let (agg_pubkey, participation_sum) =
-                    self.aggregate_pubkeys(ctx, &fp_chip, &mut pubkey_points);
-                let poseidon_commit = g1_array_poseidon(ctx, range.gate(), pubkey_points)?;
+        let g1_neg = g1_chip.load_private_unchecked(
+            thread_pool.main(),
+            G1::generator_affine().neg().into_coordinates(),
+        );
 
-                let fp12_one = {
-                    use ff::Field;
-                    fp12_chip.load_constant(ctx, Fq12::one())
-                };
-                let mut h2c_cache = HashToCurveCache::<F>::default();
+        let signature =
+            Self::assign_signature(thread_pool.main(), &g2_chip, &args.signature_compressed);
 
-                // Verify attestted header
-                let attested_header = {
-                    let chunks = [
-                        self.attested_block.slot.into_witness(),
-                        self.attested_block.proposer_index.into_witness(),
-                        self.attested_block.parent_root.as_ref().into_witness(),
-                        self.attested_block.state_root.as_ref().into_witness(),
-                        self.attested_block.body_root.as_ref().into_witness(),
-                    ];
+        let msghash = h2c_chip.hash_to_curve::<G2>(
+            thread_pool,
+            &fp_chip,
+            signing_root.into(),
+            &mut h2c_cache,
+        )?;
 
-                    ssz_merkleize_chunks(ctx, &mut region, &sha256_chip, chunks)?
-                };
+        let res =
+            bls_chip.verify_pairing(thread_pool.main(), signature, msghash, agg_pubkey, g1_neg);
+        fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
-                let finilized_block_body_root = self
-                    .finalized_block
-                    .body_root
-                    .as_ref()
-                    .iter()
-                    .map(|&b| ctx.load_witness(F::from(b as u64)))
-                    .collect_vec();
+        // verify finilized block header against current beacon state merkle proof
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.finality_merkle_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            finalized_header.into(),
+            &beacon_state_root,
+            S::FINALIZED_HEADER_INDEX,
+        )?;
 
-                let finalized_header = {
-                    let chunks = [
-                        self.finalized_block.slot.into_witness(),
-                        self.finalized_block.proposer_index.into_witness(),
-                        self.finalized_block.parent_root.as_ref().into_witness(),
-                        self.finalized_block.state_root.as_ref().into_witness(),
-                        finilized_block_body_root.clone().into(),
-                    ];
-                    ssz_merkleize_chunks(ctx, &mut region, &sha256_chip, chunks)?
-                };
+        // verify execution state root against finilized block body merkle proof
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.execution_merkle_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            execution_state_root,
+            &finilized_block_body_root,
+            S::EXECUTION_STATE_ROOT_INDEX,
+        )?;
 
-                let signing_root = sha256_chip
-                    .digest::<128>(
-                        HashInput::TwoToOne(
-                            attested_header.into(),
-                            self.domain.to_vec().into_witness(),
-                        ),
-                        ctx,
-                        &mut region,
-                    )?
-                    .output_bytes;
+        let instances = vec![];
 
-                let g1_neg = g1_chip
-                    .load_private_unchecked(ctx, G1::generator_affine().neg().into_coordinates());
-
-                let signature = Self::assign_signature(&self.signature, &g2_chip, ctx);
-
-                let msghash = h2c_chip.hash_to_curve::<G2>(
-                    signing_root.into(),
-                    &fp_chip,
-                    ctx,
-                    &mut region,
-                    &mut h2c_cache,
-                )?;
-
-                let res = bls_chip.verify_pairing(signature, msghash, agg_pubkey, g1_neg, ctx);
-                fp12_chip.assert_equal(ctx, res, fp12_one);
-
-                // verify finilized block header against current beacon state merkle proof
-                verify_merkle_proof(
-                    ctx,
-                    &mut region,
-                    &sha256_chip,
-                    self.finality_merkle_branch
-                        .iter()
-                        .map(|w| w.clone().into_witness()),
-                    finalized_header.into(),
-                    &beacon_state_root,
-                    S::FINALIZED_HEADER_INDEX,
-                )?;
-
-                // verify execution state root against finilized block body merkle proof
-                verify_merkle_proof(
-                    ctx,
-                    &mut region,
-                    &sha256_chip,
-                    self.execution_merkle_branch
-                        .iter()
-                        .map(|w| w.clone().into_witness()),
-                    execution_state_root,
-                    &finilized_block_body_root,
-                    S::EXECUTION_STATE_ROOT_INDEX,
-                )?;
-
-                let extra_assignments = sha256_chip.take_extra_assignments();
-
-                if self.dry_run {
-                    return Ok(());
-                }
-
-                let _ = builder.assign_all(
-                    &config.range.gate,
-                    &config.range.lookup_advice,
-                    &config.range.q_lookup,
-                    &mut region,
-                    extra_assignments,
-                );
-
-                // TODO: constaint source_root, target_root with instances: `layouter.constrain_instance`
-                Ok(())
-            },
-        )
+        Ok(instances)
     }
 }
 
 impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
-    pub fn dry_run(mut self) -> Self {
-        self.dry_run = true;
-        self
-    }
-
     fn assign_signature(
-        bytes_compressed: &[u8],
-        g2_chip: &G2Chip<F>,
         ctx: &mut Context<F>,
+        g2_chip: &G2Chip<F>,
+        bytes_compressed: &[u8],
     ) -> EcPoint<F, Fp2Point<F>> {
         let sig_affine =
             G2Affine::from_bytes(&bytes_compressed.to_vec().try_into().unwrap()).unwrap();
@@ -293,10 +238,11 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
     /// Takes a list of pubkeys and aggregates them.
     fn aggregate_pubkeys<'a>(
-        &self,
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'a, F>,
-        committee_pubkeys: &mut Vec<G1Point<F>>,
+        pubkey_affines: &[G1Affine],
+        pariticipation_bits: &[bool],
+        assigned_affines: &mut Vec<G1Point<F>>,
     ) -> (G1Point<F>, AssignedValue<F>) {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
@@ -307,12 +253,11 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         let mut participation_bits = vec![];
 
-        assert_eq!(self.pubkeys.len(), S::SYNC_COMMITTEE_SIZE);
+        assert_eq!(pubkey_affines.len(), S::SYNC_COMMITTEE_SIZE);
 
-        for (&pk, is_attested) in itertools::multizip((
-            self.pubkeys.iter(),
-            self.pariticipation_bits.iter().copied(),
-        )) {
+        for (&pk, is_attested) in
+            itertools::multizip((pubkey_affines.iter(), pariticipation_bits.iter().copied()))
+        {
             let participation_bit = ctx.load_witness(F::from(is_attested as u64));
             gate.assert_bit(ctx, participation_bit);
 
@@ -321,7 +266,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             // Square y coordinate
             let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
             // Calculate y^2 using the elliptic curve equation
-            let ysq_calc = Self::calculate_ysquared::<G1>(ctx, fp_chip, assigned_pk.x.clone());
+            let ysq_calc = calculate_ysquared::<F, G1>(ctx, fp_chip, assigned_pk.x.clone());
             // Constrain witness y^2 to be equal to calculated y^2
             fp_chip.assert_equal(ctx, ysq, ysq_calc);
 
@@ -329,7 +274,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             // because we are concerned only with signature forgery, if this is the wrong
             // sign, the signature will be invalid anyway and thus verification fails.
 
-            committee_pubkeys.push(assigned_pk);
+            assigned_affines.push(assigned_pk);
             participation_bits.push(participation_bit);
         }
 
@@ -338,7 +283,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         for (bit, point) in participation_bits
             .iter()
             .copied()
-            .zip(committee_pubkeys.iter_mut())
+            .zip(assigned_affines.iter_mut())
         {
             let sum = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
             acc = g1_chip.select(ctx, sum, acc, bit);
@@ -348,177 +293,34 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         (agg_pubkey, participation_sum)
     }
-
-    // Calculates y^2 = x^3 + 4 (the curve equation)
-    fn calculate_ysquared<C: AppCurveExt>(
-        ctx: &mut Context<F>,
-        field_chip: &FpChip<'_, F>,
-        x: ProperCrtUint<F>,
-    ) -> ProperCrtUint<F> {
-        let x_squared = field_chip.mul(ctx, x.clone(), x.clone());
-        let x_cubed = field_chip.mul(ctx, x_squared, x);
-
-        let plus_b = field_chip.add_constant_no_carry(ctx, x_cubed, C::B.into());
-        field_chip.carry_mod(ctx, plus_b)
-    }
-}
-
-impl<S: Spec, F: Field> CircuitExt<F> for SyncStepCircuit<S, F> {
-    fn instances(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
-
-    fn num_instance(&self) -> Vec<usize> {
-        self.instances().iter().map(|v| v.len()).collect()
-    }
 }
 
 impl<S: Spec> AppCircuitExt<bn256::Fr> for SyncStepCircuit<S, bn256::Fr> {
-    fn new_from_state(
-        builder: RefCell<GateThreadBuilder<bn256::Fr>>,
-        state: &witness::SyncState,
-    ) -> Self {
-        Self {
-            builder,
-            signature: state.sync_signature.clone(),
-            domain: state.domain,
-            attested_block: state.attested_block.clone(),
-            finalized_block: state.finalized_block.clone(),
-            pubkeys: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| {
-                    G1Affine::from_uncompressed_unchecked(
-                        &v.pubkey_uncompressed.as_slice().try_into().unwrap(),
-                    )
-                    .unwrap()
-                })
-                .collect_vec(),
-            pariticipation_bits: state
-                .sync_committee
-                .iter()
-                .cloned()
-                .map(|v| v.is_attested)
-                .collect_vec(),
-            execution_merkle_branch: state.execution_merkle_branch.clone(),
-            finality_merkle_branch: state.finality_merkle_branch.clone(),
-            beacon_state_root: state.beacon_state_root.clone(),
-            execution_state_root: state.execution_state_root.clone(),
-            dry_run: false,
-            _spec: PhantomData,
-        }
-    }
-
-    fn parametrize(k: usize) -> FlexGateConfigParams {
-        // let state: SyncState =
-        // serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
-        // let builder = RefCell::new(GateThreadBuilder::keygen());
-        // let circuit = SyncStepCircuit::<S, bn256::Fr>::new_from_state(builder, &state).dry_run();
-        let circuit = SyncStepCircuit::<S, bn256::Fr>::default().dry_run();
-
-        let mock_k = 17;
-        // Due to the composite nature of Sync circuit (vanila + halo2-lib)
-        // we have to perfrom dry run to determine best circuit config.
-        let mock_params = FlexGateConfigParams {
-            strategy: GateStrategy::Vertical,
-            k: mock_k,
-            num_advice_per_phase: vec![200],
-            num_lookup_advice_per_phase: vec![20],
-            num_fixed: 1,
-        };
-
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&mock_params).unwrap(),
-        );
-        std::env::set_var("LOOKUP_BITS", 16.to_string());
-
-        let _ = MockProver::<bn256::Fr>::run(mock_k as u32, &circuit, vec![]);
-        let params = circuit.builder.borrow().config(k, None);
-        std::env::set_var("LOOKUP_BITS", (k - 1).to_string());
-        println!("parametrized with: {:?}", params);
-        params
-    }
-
     fn setup(
-        config: &FlexGateConfigParams,
+        k: usize,
         out: Option<&Path>,
-    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>) {
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        MultiPhaseThreadBreakPoints,
+    ) {
+        let args = witness::SyncStepArgs::<S>::default();
         let circuit = SyncStepCircuit::<S, bn256::Fr>::default();
+        let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
+        let mut thread_pool = ShaThreadBuilder::keygen();
 
-        set_var("LOOKUP_BITS", (config.k - 1).to_string());
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&config).unwrap(),
-        );
+        let assigned_instances = circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
+        let config = thread_pool.config(k, Some(109));
 
-        let params = gen_srs(config.k as u32);
+        let params = gen_srs(k as u32);
 
-        let pk = gen_pkey(|| "sync_step", &params, out, circuit).unwrap();
+        let circuit = Eth2CircuitBuilder::keygen(assigned_instances, thread_pool);
 
-        (params, pk)
-    }
-}
+        let pk = gen_pkey(|| "sync_step", &params, out, &circuit).unwrap();
 
-impl<S: Spec, F: Field> Default for SyncStepCircuit<S, F> {
-    fn default() -> Self {
-        let builder = RefCell::new(GateThreadBuilder::keygen());
+        let break_points = circuit.break_points();
 
-        let dummy_pk_bytes = hex::decode("f5f151e52f1e8a5b09e4c6f0b25fb13463d442709f21a84f98dcb76a7953aa5225c12e4dd524a95f9be8dfdfa0621c0252adea177adcce725f8b47d0b27370572ad6c5638122cab820103c9bcbb3239939de60b4814c117631d82963a7d7900a").unwrap();
-        let dummy_pk_point =
-            G1Affine::from_uncompressed_unchecked(&dummy_pk_bytes.as_slice().try_into().unwrap())
-                .unwrap();
-
-        let state_merkle_branch = iter::repeat(vec![0u8; 32])
-            .take(S::FINALIZED_HEADER_DEPTH)
-            .collect_vec();
-
-        fn compute_root(leaf: Vec<u8>, branch: &[Vec<u8>]) -> Vec<u8> {
-            let mut last_hash = Sha256::digest([leaf, branch[0].clone()].concat()).to_vec();
-
-            for i in 1..branch.len() {
-                last_hash = Sha256::digest([last_hash, branch[i].clone()].concat()).to_vec();
-            }
-
-            last_hash
-        }
-
-        let execution_state_root = vec![0; 32];
-        let execution_merkle_branch = vec![vec![0; 32]; S::EXECUTION_STATE_ROOT_DEPTH];
-        let beacon_block_body_root =
-            compute_root(execution_state_root.clone(), &state_merkle_branch);
-
-        let mut finalized_block = capella::BeaconBlockHeader {
-            body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
-            ..Default::default()
-        };
-        let finilized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
-
-        let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
-
-        let beacon_state_root = compute_root(finilized_header, &state_merkle_branch);
-
-        Self {
-            builder,
-            signature: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
-            domain: [
-                7, 0, 0, 0, 48, 83, 175, 74, 95, 250, 246, 166, 104, 40, 151, 228, 42, 212, 194, 8,
-                48, 56, 232, 147, 61, 9, 41, 204, 88, 234, 56, 134,
-            ],
-            attested_block: capella::BeaconBlockHeader::default(),
-            finalized_block,
-            pubkeys: iter::repeat(dummy_pk_point)
-                .take(S::SYNC_COMMITTEE_SIZE)
-                .collect_vec(),
-            pariticipation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
-            dry_run: false,
-            finality_merkle_branch,
-            beacon_state_root,
-            execution_merkle_branch,
-            execution_state_root,
-            _spec: PhantomData,
-        }
+        (params, pk, break_points)
     }
 }
 
@@ -530,9 +332,9 @@ mod tests {
     };
 
     use crate::{
-        table::Sha256Table,
+        builder::Eth2CircuitBuilder,
         util::{full_prover, full_verifier, gen_pkey},
-        witness::{SyncState, Validator},
+        witness::{SyncStepArgs, Validator},
     };
 
     use super::*;
@@ -565,72 +367,73 @@ mod tests {
         CircuitExt, SHPLONK,
     };
 
-    fn get_circuit_with_data(
+    fn load_circuit_with_data(
+        thread_pool: &mut ShaThreadBuilder<Fr>,
         k: usize,
-        config_path: &str,
-    ) -> (SyncStepCircuit<Test, Fr>, FlexGateConfigParams) {
-        let builder = GateThreadBuilder::new(false);
-        let state: SyncState =
-            serde_json::from_slice(&fs::read("../test_data/sync_state.json").unwrap()).unwrap();
+    ) -> Vec<AssignedValue<Fr>> {
+        let args: SyncStepArgs<Test> =
+            serde_json::from_slice(&fs::read("../test_data/sync_step.json").unwrap()).unwrap();
+        let circuit = SyncStepCircuit::<Test, bn256::Fr>::default();
+        let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
 
-        let config = if let Ok(f) = fs::read(config_path) {
-            serde_json::from_slice(&f).expect("read config file")
-        } else {
-            SyncStepCircuit::<Test, Fr>::parametrize(k)
-        };
+        circuit.synthesize(thread_pool, &range, &args).unwrap();
 
-        set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
-            serde_json::to_string(&config).unwrap(),
-        );
+        let config = thread_pool.config(k, None);
         set_var("LOOKUP_BITS", (config.k - 1).to_string());
-        println!("config used: {:?}", config);
+        println!("params used: {:?}", config);
 
-        let builder = RefCell::from(builder);
-        (SyncStepCircuit::new_from_state(builder, &state), config)
+        let instance = vec![];
+
+        instance
     }
 
     #[test]
     fn test_sync_circuit() {
-        let k = 20;
-        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20.json");
+        const K: usize = 20;
+
+        let mut builder = ShaThreadBuilder::mock();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+
+        let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
 
         let timer = start_timer!(|| "sync circuit mock prover");
-        let prover = MockProver::<Fr>::run(k as u32, &circuit, vec![]).unwrap();
-        prover.assert_satisfied();
+        let prover = MockProver::<Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
     #[test]
     fn test_sync_proofgen() {
-        let k = 20;
-        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
+        const K: usize = 20;
 
-        let params = gen_srs(k as u32);
+        let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
 
-        let pkey = gen_pkey(|| "sync_step", &params, None, circuit.clone()).unwrap();
+        let mut builder = ShaThreadBuilder::prover();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
-        let public_inputs = circuit.instances();
-        let proof = full_prover(&params, &pkey, circuit, public_inputs.clone());
+        let instances = circuit.instances();
+        let proof = full_prover(&params, &pk, circuit, instances.clone());
 
-        assert!(full_verifier(&params, pkey.get_vk(), proof, public_inputs))
+        assert!(full_verifier(&params, pk.get_vk(), proof, instances))
     }
 
     #[test]
     fn test_sync_evm_verify() {
-        let k = 20;
-        let (circuit, config) = get_circuit_with_data(k, "./config/sync_step_k21.json");
+        const K: usize = 21;
 
-        let (params, pk) = SyncStepCircuit::<Test, Fr>::setup(&config, None);
+        let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
+
+        let mut builder = ShaThreadBuilder::prover();
+        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+
+        let num_instance = circuit.num_instance();
+        let deployment_code = gen_evm_verifier_shplonk::<
+            Eth2CircuitBuilder<Fr, ShaThreadBuilder<Fr>>,
+        >(&params, pk.get_vk(), num_instance, None);
 
         let instances = circuit.instances();
-        let num_instance = circuit.num_instance();
-        let deployment_code = gen_evm_verifier_shplonk::<SyncStepCircuit<Test, Fr>>(
-            &params,
-            pk.get_vk(),
-            num_instance,
-            None,
-        );
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
 
         evm_verify(deployment_code, instances, proof);

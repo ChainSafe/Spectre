@@ -16,7 +16,7 @@ use halo2curves::bn256;
 pub use proof::*;
 
 use halo2_base::{
-    gates::builder::{FlexGateConfigParams, GateThreadBuilder},
+    gates::builder::{FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints},
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
@@ -35,7 +35,6 @@ use crate::{
         crypto::{Fp2Point, FpPoint},
         Expr,
     },
-    sha256_circuit::Sha256CircuitConfig,
     witness,
 };
 use eth_types::*;
@@ -67,15 +66,15 @@ pub(crate) fn query_expression<F: Field, T>(
     expr.unwrap()
 }
 
-pub trait AppCircuitExt<F: Field>: CircuitExt<F> + Default {
-    fn new_from_state(builder: RefCell<GateThreadBuilder<F>>, state: &witness::SyncState) -> Self;
-
-    fn parametrize(k: usize) -> FlexGateConfigParams;
-
+pub trait AppCircuitExt<F: Field>: Default {
     fn setup(
-        config: &FlexGateConfigParams,
+        k: usize,
         out: Option<&Path>,
-    ) -> (ParamsKZG<bn256::Bn256>, ProvingKey<bn256::G1Affine>);
+    ) -> (
+        ParamsKZG<bn256::Bn256>,
+        ProvingKey<bn256::G1Affine>,
+        MultiPhaseThreadBreakPoints,
+    );
 }
 
 /// Randomness used in circuits.

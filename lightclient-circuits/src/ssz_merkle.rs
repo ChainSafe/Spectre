@@ -1,13 +1,92 @@
+use std::os::unix::thread;
+
 use eth_types::Field;
 use halo2_base::{AssignedValue, Context, QuantumCell};
 use halo2_proofs::{circuit::Region, plonk::Error};
 use itertools::Itertools;
 
 use crate::{
-    gadget::crypto::HashChip,
-    util::{IntoConstant, IntoWitness},
+    gadget::crypto::{HashInstructions, ShaContexts, ShaThreadBuilder},
+    util::{IntoConstant, IntoWitness, ThreadBuilderBase},
     witness::{HashInput, HashInputChunk},
 };
+
+pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
+    thread_pool: &mut ThreadBuilder,
+    hasher: &impl HashInstructions<F, ThreadBuilder>,
+    chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+) -> Result<Vec<AssignedValue<F>>, Error> {
+    let mut chunks = chunks.into_iter().collect_vec();
+    let len_even = chunks.len() + chunks.len() % 2;
+    let height = (len_even as f64).log2().ceil() as usize;
+
+    for depth in 0..height {
+        // Pad to even length using 32 zero bytes assigned as constants.
+        let len_even = chunks.len() + chunks.len() % 2;
+        let padded_chunks = chunks
+            .into_iter()
+            .pad_using(len_even, |_| ZERO_HASHES[depth].as_slice().into_constant())
+            .collect_vec();
+
+        chunks = padded_chunks
+            .into_iter()
+            .tuples()
+            .take(3)
+            .map(|(left, right)| {
+                hasher
+                    .digest::<64>(thread_pool, HashInput::TwoToOne(left, right), false)
+                    .map(|res| res.output_bytes.into())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+
+    assert_eq!(chunks.len(), 1, "merkleize_chunks: expected one chunk");
+
+    let root = chunks.pop().unwrap().map(|cell| match cell {
+        QuantumCell::Existing(av) => av,
+        _ => unreachable!(),
+    });
+
+    Ok(root.bytes)
+}
+
+pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
+    thread_pool: &mut ThreadBuilder,
+    hasher: &impl HashInstructions<F, ThreadBuilder>,
+    proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+    leaf: HashInputChunk<QuantumCell<F>>,
+    root: &[AssignedValue<F>],
+    mut gindex: usize,
+) -> Result<(), Error> {
+    let mut computed_hash = leaf;
+
+    for witness in proof.into_iter() {
+        computed_hash = hasher
+            .digest::<64>(
+                thread_pool,
+                if gindex % 2 == 0 {
+                    HashInput::TwoToOne(computed_hash, witness)
+                } else {
+                    HashInput::TwoToOne(witness, computed_hash)
+                },
+                false,
+            )?
+            .output_bytes
+            .into();
+        gindex /= 2;
+    }
+
+    let computed_root = computed_hash.bytes.into_iter().map(|b| match b {
+        QuantumCell::Existing(av) => av,
+        _ => unreachable!(),
+    });
+
+    computed_root.zip(root.iter()).for_each(|(a, b)| {
+        thread_pool.main().constrain_equal(&a, b);
+    });
+
+    Ok(())
+}
 
 pub const ZERO_HASHES: [[u8; 32]; 64] = [
     [0; 32],
@@ -264,82 +343,3 @@ pub const ZERO_HASHES: [[u8; 32]; 64] = [
         29, 245, 55, 206, 225, 57, 239, 100, 234, 152, 75, 217,
     ],
 ];
-
-pub fn ssz_merkleize_chunks<F: Field>(
-    ctx: &mut Context<F>,
-    region: &mut Region<'_, F>,
-    hasher: &impl HashChip<F>,
-    chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
-) -> Result<Vec<AssignedValue<F>>, Error> {
-    let mut chunks = chunks.into_iter().collect_vec();
-    let len_even = chunks.len() + chunks.len() % 2;
-    let height = (len_even as f64).log2().ceil() as usize;
-
-    for depth in 0..height {
-        // Pad to even length using 32 zero bytes assigned as constants.
-        let len_even = chunks.len() + chunks.len() % 2;
-        let padded_chunks = chunks
-            .into_iter()
-            .pad_using(len_even, |_| ZERO_HASHES[depth].as_slice().into_constant())
-            .collect_vec();
-
-        chunks = padded_chunks
-            .into_iter()
-            .tuples()
-            .take(3)
-            .map(|(left, right)| {
-                hasher
-                    .digest::<64>(HashInput::TwoToOne(left, right), ctx, region)
-                    .map(|res| res.output_bytes.into())
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-    }
-
-    assert_eq!(chunks.len(), 1, "merkleize_chunks: expected one chunk");
-
-    let root = chunks.pop().unwrap().map(|cell| match cell {
-        QuantumCell::Existing(av) => av,
-        _ => unreachable!(),
-    });
-
-    Ok(root.bytes)
-}
-
-pub fn verify_merkle_proof<F: Field>(
-    ctx: &mut Context<F>,
-    region: &mut Region<'_, F>,
-    hasher: &impl HashChip<F>,
-    proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
-    leaf: HashInputChunk<QuantumCell<F>>,
-    root: &[AssignedValue<F>],
-    mut gindex: usize,
-) -> Result<(), Error> {
-    let mut computed_hash = leaf;
-
-    for witness in proof.into_iter() {
-        computed_hash = hasher
-            .digest::<128>(
-                if gindex % 2 == 0 {
-                    HashInput::TwoToOne(computed_hash, witness)
-                } else {
-                    HashInput::TwoToOne(witness, computed_hash)
-                },
-                ctx,
-                region,
-            )?
-            .output_bytes
-            .into();
-        gindex /= 2;
-    }
-
-    let computed_root = computed_hash.bytes.into_iter().map(|b| match b {
-        QuantumCell::Existing(av) => av,
-        _ => unreachable!(),
-    });
-
-    computed_root.zip(root.iter()).for_each(|(a, b)| {
-        ctx.constrain_equal(&a, b);
-    });
-
-    Ok(())
-}

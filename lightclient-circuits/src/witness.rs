@@ -1,13 +1,13 @@
 //! Witnesses for all circuits.
 
-mod state;
-pub use state::*;
+mod sync;
+pub use sync::*;
+
+mod rotation;
+pub use rotation::*;
 
 mod validators;
 pub use validators::*;
-
-mod merkle;
-pub use merkle::*;
 
 mod hashing;
 pub use hashing::*;
