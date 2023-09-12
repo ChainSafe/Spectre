@@ -1,8 +1,17 @@
 use crate::gadget::Expr;
 use eth_types::*;
+use halo2_base::{
+    gates::{
+        builder::{FlexGateConfigParams, KeygenAssignments, MultiPhaseThreadBreakPoints},
+        flex_gate::FlexGateConfig,
+    },
+    Context,
+};
 use halo2_proofs::{
-    circuit::{AssignedCell, Region, Value},
-    plonk::{Advice, Assigned, Column, Error, Expression, VirtualCells},
+    circuit::{AssignedCell, Layouter, Region, Value},
+    plonk::{
+        Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
+    },
     poly::Rotation,
 };
 
@@ -121,4 +130,72 @@ impl<F: Field> AssignedValueCell<F> {
     pub fn value(&self) -> F {
         self.value
     }
+}
+
+pub trait ThreadBuilderConfigBase<F: Field>: Clone + Sized {
+    fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self;
+
+    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error>;
+
+    fn annotate_columns_in_region(&self, region: &mut Region<F>);
+}
+
+pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
+    type Config: ThreadBuilderConfigBase<F>;
+
+    fn new(witness_gen_only: bool) -> Self;
+
+    fn mock() -> Self {
+        Self::new(false)
+    }
+
+    fn keygen() -> Self {
+        Self::new(false).unknown(true)
+    }
+
+    fn prover() -> Self {
+        println!("prver ThreadBuilderBase");
+        Self::new(true)
+    }
+
+    fn unknown(self, use_unknown: bool) -> Self;
+
+    fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams;
+
+    /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
+    /// * `phase`: The challenge phase (as an index) of the gate thread.
+    fn main(&mut self) -> &mut Context<F>;
+
+    fn witness_gen_only(&self) -> bool;
+
+    /// Returns the `use_unknown` flag.
+    fn use_unknown(&self) -> bool;
+
+    /// Returns the current number of threads in the [GateThreadBuilder].
+    fn thread_count(&self) -> usize;
+
+    /// Creates a new thread id by incrementing the `thread count`
+    fn get_new_thread_id(&mut self) -> usize;
+
+    /// Assigns all advice and fixed cells, turns on selectors, imposes equality constraints.
+    /// This should only be called during keygen.
+    fn assign_all(
+        &mut self,
+        gate: &FlexGateConfig<F>,
+        lookup_advice: &[Vec<Column<Advice>>],
+        q_lookup: &[Option<Selector>],
+        config: &Self::Config,
+        region: &mut Region<F>,
+        assignments: KeygenAssignments<F>,
+    ) -> Result<KeygenAssignments<F>, Error>;
+
+    /// Assigns witnesses. This should only be called during proof generation.
+    fn assign_witnesses(
+        &mut self,
+        gate: &FlexGateConfig<F>,
+        lookup_advice: &[Vec<Column<Advice>>],
+        config: &Self::Config,
+        region: &mut Region<F>,
+        break_points: &mut MultiPhaseThreadBreakPoints,
+    ) -> Result<(), Error>;
 }

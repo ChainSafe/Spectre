@@ -4,7 +4,7 @@
 use std::ops::Deref;
 use std::{cell::RefCell, iter, marker::PhantomData};
 
-use crate::util::AsBits;
+use crate::util::{AsBits, ThreadBuilderBase};
 use crate::{
     util::{bigint_to_le_bytes, decode_into_field, decode_into_field_be},
     witness::HashInput,
@@ -30,10 +30,10 @@ use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
 
 use super::{
-    sha256::HashChip,
     util::{fp2_sgn0, i2osp, strxor},
-    Fp2Point, G1Point, G2Point,
+    Fp2Point, G1Point, G2Point, HashInstructions,
 };
+use super::{AssignedHashResult, ShaContexts, ShaThreadBuilder};
 
 const G2_EXT_DEGREE: usize = 2;
 
@@ -45,13 +45,13 @@ pub type Fp2Chip<'chip, F, C: AppCurveExt, Fp = <C as AppCurveExt>::Fp> =
     fp2::Fp2Chip<'chip, F, FpChip<'chip, F, Fp>, C::Fq>;
 
 #[derive(Debug)]
-pub struct HashToCurveChip<'a, S: Spec, F: Field, HC: HashChip<F>> {
+pub struct HashToCurveChip<'a, S: Spec, F: Field, HC: HashInstructions<F>> {
     hash_chip: &'a HC,
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
 
-impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> {
+impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S, F, HC> {
     pub fn new(hash_chip: &'a HC) -> Self {
         Self {
             hash_chip,
@@ -62,17 +62,16 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
 
     pub fn hash_to_curve<C: HashCurveExt>(
         &self,
-        msg: HashInput<QuantumCell<F>>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         fp_chip: &FpChip<F, C::Fp>,
-        ctx: &mut Context<F>,
-        region: &mut Region<'_, F>,
+        msg: HashInput<QuantumCell<F>>,
         cache: &mut HashToCurveCache<F>,
     ) -> Result<G2Point<F>, Error>
     where
         C::Fq: FieldExtConstructor<C::Fp, 2>,
     {
-        let u = self.hash_to_field::<C>(msg, fp_chip, ctx, region, cache)?;
-        let p = self.map_to_curve::<C>(u, fp_chip, ctx, cache)?;
+        let u = self.hash_to_field::<C>(thread_pool, fp_chip, msg, cache)?;
+        let p = self.map_to_curve::<C>(thread_pool.main(), fp_chip, u, cache)?;
         Ok(p)
     }
 
@@ -86,10 +85,9 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
     /// - https://github.com/succinctlabs/telepathy-circuits/blob/d5c7771/circuits/hash_to_field.circom#L11
     fn hash_to_field<C: HashCurveExt>(
         &self,
-        msg: HashInput<QuantumCell<F>>,
+        thread_pool: &mut ShaThreadBuilder<F>,
         fp_chip: &FpChip<F, C::Fp>,
-        ctx: &mut Context<F>,
-        region: &mut Region<'_, F>,
+        msg: HashInput<QuantumCell<F>>,
         cache: &mut HashToCurveCache<F>,
     ) -> Result<[Fp2Point<F>; 2], Error> {
         //
@@ -98,30 +96,30 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
         let safe_types = SafeTypeChip::new(range);
 
         // constants
-        let zero = ctx.load_zero();
-        let one = ctx.load_constant(F::one());
+        let zero = thread_pool.main().load_zero();
+        let one = thread_pool.main().load_constant(F::one());
 
-        let assigned_msg = msg.into_assigned(ctx).to_vec();
+        let assigned_msg = msg.into_assigned(thread_pool.main()).to_vec();
 
         let len_in_bytes = 2 * G2_EXT_DEGREE * L;
         let extended_msg = Self::expand_message_xmd(
+            thread_pool,
+            self.hash_chip,
             assigned_msg,
             len_in_bytes,
-            self.hash_chip,
-            ctx,
-            region,
             cache,
         )?;
 
         let limb_bases = cache.binary_bases.get_or_insert_with(|| {
             C::limb_bytes_bases()
                 .into_iter()
-                .map(|base| ctx.load_constant(base))
+                .map(|base| thread_pool.main().load_constant(base))
                 .collect()
         });
 
         // 2^256
-        let two_pow_256 = fp_chip.load_constant_uint(ctx, BigUint::from(2u8).pow(256));
+        let two_pow_256 =
+            fp_chip.load_constant_uint(thread_pool.main(), BigUint::from(2u8).pow(256));
         let fq_bytes = C::BYTES_COMPRESSED / 2;
 
         let mut fst = true;
@@ -140,7 +138,7 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
-                                ctx,
+                                thread_pool.main(),
                             );
 
                             buf[rem..].copy_from_slice(&tv[32..]);
@@ -148,12 +146,14 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
                                 buf.to_vec(),
                                 &fp_chip.limb_bases,
                                 gate,
-                                ctx,
+                                thread_pool.main(),
                             );
 
-                            let lo_2_256 = fp_chip.mul_no_carry(ctx, lo, two_pow_256.clone());
-                            let lo_2_356_hi = fp_chip.add_no_carry(ctx, lo_2_256, hi);
-                            fp_chip.carry_mod(ctx, lo_2_356_hi)
+                            let lo_2_256 =
+                                fp_chip.mul_no_carry(thread_pool.main(), lo, two_pow_256.clone());
+                            let lo_2_356_hi =
+                                fp_chip.add_no_carry(thread_pool.main(), lo_2_256, hi);
+                            fp_chip.carry_mod(thread_pool.main(), lo_2_356_hi)
                         })
                         .collect_vec(),
                 )
@@ -167,9 +167,9 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
 
     pub fn map_to_curve<C: HashCurveExt>(
         &self,
-        u: [Fp2Point<F>; 2],
-        fp_chip: &FpChip<F, C::Fp>,
         ctx: &mut Context<F>,
+        fp_chip: &FpChip<F, C::Fp>,
+        u: [Fp2Point<F>; 2],
         cache: &mut HashToCurveCache<F>,
     ) -> Result<G2Point<F>, Error>
     where
@@ -199,11 +199,10 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
     /// - https://github.com/paulmillr/noble-curves/blob/bf70ba9/src/abstract/hash-to-curve.ts#L63
     /// - https://github.com/succinctlabs/telepathy-circuits/blob/d5c7771/circuits/hash_to_field.circom#L139
     fn expand_message_xmd(
+        thread_pool: &mut ShaThreadBuilder<F>,
+        hash_chip: &HC,
         msg: Vec<AssignedValue<F>>,
         len_in_bytes: usize,
-        hash_chip: &HC,
-        ctx: &mut Context<F>,
-        region: &mut Region<'_, F>,
         cache: &mut HashToCurveCache<F>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let range = hash_chip.range();
@@ -211,17 +210,19 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
 
         // constants
         // const MAX_INPUT_SIZE: usize = 192;
-        let zero = ctx.load_zero();
-        let one = ctx.load_constant(F::one());
+        let zero = thread_pool.main().load_zero();
+        let one = thread_pool.main().load_constant(F::one());
 
         // assign DST bytes & cache them
-        let dst_len = ctx.load_constant(F::from(S::DST.len() as u64));
+        let dst_len = thread_pool
+            .main()
+            .load_constant(F::from(S::DST.len() as u64));
         let dst_prime = cache
             .dst_with_len
             .get_or_insert_with(|| {
                 S::DST
                     .iter()
-                    .map(|&b| ctx.load_constant(F::from(b as u64)))
+                    .map(|&b| thread_pool.main().load_constant(F::from(b as u64)))
                     .chain(iter::once(dst_len))
                     .collect()
             })
@@ -229,7 +230,9 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
 
         // padding and length strings
         let z_pad = i2osp(0, HC::BLOCK_SIZE, |b| zero); // TODO: cache these
-        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| ctx.load_constant(b));
+        let l_i_b_str = i2osp(len_in_bytes as u128, 2, |b| {
+            thread_pool.main().load_constant(b)
+        });
 
         // compute blocks
         let ell = len_in_bytes.div_ceil(HC::DIGEST_SIZE);
@@ -242,36 +245,36 @@ impl<'a, S: Spec, F: Field, HC: HashChip<F> + 'a> HashToCurveChip<'a, S, F, HC> 
             .chain(dst_prime.clone());
 
         let b_0 = hash_chip
-            .digest::<192>(msg_prime.into(), ctx, region)?
+            .digest::<143>(thread_pool, msg_prime.into(), false)?
             .output_bytes;
 
         b_vals.insert(
             0,
             hash_chip
-                .digest::<128>(
+                .digest::<77>(
+                    thread_pool,
                     b_0.into_iter()
                         .chain(iter::once(one))
                         .chain(dst_prime.clone())
                         .into(),
-                    ctx,
-                    region,
+                    false,
                 )?
                 .output_bytes,
         );
 
         for i in 1..ell {
+            let preimg = strxor(b_0, b_vals[i - 1], gate, thread_pool.main())
+                .into_iter()
+                .chain(iter::once(
+                    thread_pool.main().load_constant(F::from(i as u64 + 1)),
+                ))
+                .chain(dst_prime.clone())
+                .into();
+
             b_vals.insert(
                 i,
                 hash_chip
-                    .digest::<128>(
-                        strxor(b_0, b_vals[i - 1], gate, ctx)
-                            .into_iter()
-                            .chain(iter::once(ctx.load_constant(F::from(i as u64 + 1))))
-                            .chain(dst_prime.clone())
-                            .into(),
-                        ctx,
-                        region,
-                    )?
+                    .digest::<77>(thread_pool, preimg, false)?
                     .output_bytes,
             );
         }
@@ -622,14 +625,13 @@ mod test {
     use std::vec;
     use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::gadget::crypto::sha256::SpreadConfig;
-    use crate::gadget::crypto::Sha256Chip;
-    use crate::sha256_circuit::Sha256CircuitConfig;
-    use crate::table::Sha256Table;
+    use crate::gadget::crypto::sha256::{SpreadChip, SpreadConfig};
+    use crate::gadget::crypto::ShaCircuitBuilder;
+    use crate::gadget::crypto::{Sha256Chip, ShaThreadBuilder};
     use crate::util::{print_fq2_dev, Challenges, IntoWitness};
 
     use super::*;
-    use eth_types::Mainnet;
+    use eth_types::{Mainnet, Test};
     use halo2_base::gates::builder::FlexGateConfigParams;
     use halo2_base::gates::range::RangeConfig;
     use halo2_base::safe_types::RangeChip;
@@ -648,132 +650,43 @@ mod test {
     use halo2curves::bls12_381::G2;
     use sha2::{Digest, Sha256};
 
-    #[derive(Debug, Clone)]
-    struct TestConfig<F: Field> {
-        sha256_config: RefCell<SpreadConfig<F>>,
-        pub max_byte_size: usize,
-        range: RangeConfig<F>,
-        challenges: Challenges<Value<F>>,
-    }
+    fn get_circuit<F: Field>(
+        k: usize,
+        mut builder: ShaThreadBuilder<F>,
+        input_vector: &[Vec<u8>],
+    ) -> Result<ShaCircuitBuilder<F, ShaThreadBuilder<F>>, Error> {
+        let range = RangeChip::default(8);
+        let sha256 = Sha256Chip::new(&range);
 
-    struct TestCircuit<S: Spec, F: Field> {
-        builder: RefCell<GateThreadBuilder<F>>,
-        range: RangeChip<F>,
-        test_input: HashInput<QuantumCell<F>>,
-        _spec: PhantomData<S>,
-    }
+        let h2c_chip = HashToCurveChip::<Test, F, _>::new(&sha256);
+        let fp_chip = halo2_ecc::bls12_381::FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
 
-    impl<S: Spec, F: Field> Circuit<F> for TestCircuit<S, F> {
-        type Config = TestConfig<F>;
-        type FloorPlanner = SimpleFloorPlanner;
-
-        fn without_witnesses(&self) -> Self {
-            unimplemented!()
-        }
-
-        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let sha256_configs = SpreadConfig::<F>::configure(meta, 8, 1);
-            let range = RangeConfig::configure(
-                meta,
-                RangeStrategy::Vertical,
-                &[Self::NUM_ADVICE],
-                &[Self::NUM_LOOKUP_ADVICE],
-                Self::NUM_FIXED,
-                Self::LOOKUP_BITS,
-                Self::K,
-            );
-            let challenges = Challenges::construct(meta);
-            Self::Config {
-                sha256_config: RefCell::new(sha256_configs),
-                max_byte_size: Self::MAX_BYTE_SIZE,
-                range,
-                challenges: Challenges::mock(Value::known(Sha256CircuitConfig::fixed_challenge())),
-            }
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<F>,
-        ) -> Result<(), Error> {
-            config.range.load_lookup_table(&mut layouter)?;
-            let mut first_pass = SKIP_FIRST_PASS;
-            let sha256 = Sha256Chip::new(config.sha256_config, &self.range, None);
-
-            let h2c_chip = HashToCurveChip::<Mainnet, F, _>::new(&sha256);
-            let fp_chip =
-                halo2_ecc::bls12_381::FpChip::<F>::new(&self.range, G2::LIMB_BITS, G2::NUM_LIMBS);
-
-            layouter.assign_region(
-                || "hash to curve test",
-                |mut region| {
-                    if first_pass {
-                        first_pass = false;
-                        return Ok(());
-                    }
-
-                    let builder = &mut self.builder.borrow_mut();
-                    let ctx = builder.main(0);
-
-                    let mut cache = HashToCurveCache::<F>::default();
-                    let hp = h2c_chip.hash_to_curve::<G2>(
-                        self.test_input.clone(),
-                        &fp_chip,
-                        ctx,
-                        &mut region,
-                        &mut cache,
-                    )?;
-
-                    print_fq2_dev::<G2, F>(hp.x(), "res_p.x");
-                    print_fq2_dev::<G2, F>(hp.y(), "res_p.y");
-
-                    let extra_assignments = h2c_chip.hash_chip.take_extra_assignments();
-
-                    builder.config(TestCircuit::<S, F>::K, Some(0));
-                    let params: FlexGateConfigParams =
-                        serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-                    println!("params: {:?}", params);
-
-                    let _ = builder.assign_all(
-                        &config.range.gate,
-                        &config.range.lookup_advice,
-                        &config.range.q_lookup,
-                        &mut region,
-                        extra_assignments,
-                    );
-
-                    Ok(())
-                },
+        for input in input_vector {
+            let mut cache = HashToCurveCache::<F>::default();
+            let hp = h2c_chip.hash_to_curve::<G2>(
+                &mut builder,
+                &fp_chip,
+                input.clone().into_witness(),
+                &mut cache,
             )?;
 
-            Ok(())
+            print_fq2_dev::<G2, F>(hp.x(), "res_p.x");
+            print_fq2_dev::<G2, F>(hp.y(), "res_p.y");
         }
-    }
 
-    impl<S: Spec, F: Field> TestCircuit<S, F> {
-        const MAX_BYTE_SIZE: usize = 160;
-        const NUM_ADVICE: usize = 21;
-        const NUM_FIXED: usize = 1;
-        const NUM_LOOKUP_ADVICE: usize = 3;
-        const LOOKUP_BITS: usize = 8;
-        const K: usize = 17;
+        builder.config(k, None);
+        Ok(ShaCircuitBuilder::mock(builder))
     }
 
     #[test]
     fn test_hash_to_g2() {
-        let k = TestCircuit::<Mainnet, Fr>::K as u32;
+        let k = 17;
 
         let test_input = vec![0u8; 32];
-        let range = RangeChip::default(TestCircuit::<Mainnet, Fr>::LOOKUP_BITS);
-        let builder = GateThreadBuilder::new(false);
-        let circuit = TestCircuit::<Mainnet, Fr> {
-            builder: RefCell::new(builder),
-            range,
-            test_input: test_input.into_witness(),
-            _spec: PhantomData,
-        };
+        let builder = ShaThreadBuilder::<Fr>::mock();
+        let circuit = get_circuit(k, builder, &[test_input]).unwrap();
 
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(k as u32, &circuit, vec![]).unwrap();
         prover.assert_satisfied();
     }
 }
