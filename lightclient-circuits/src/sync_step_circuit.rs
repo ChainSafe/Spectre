@@ -756,7 +756,7 @@ mod tests {
     #[test]
     fn test_sync_proofgen() {
         let k = 20;
-        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20_mock.json");
+        let (circuit, _) = get_circuit_with_data(k, "./config/sync_step_k20.json");
 
         let params = gen_srs(k as u32);
 
