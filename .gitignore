@@ -13,6 +13,11 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# ignore downloaded spec tests
+consensus-spec-tests
+general.tar.gz
+minimal.tar.gz
+
 
 # Added by cargo
 
