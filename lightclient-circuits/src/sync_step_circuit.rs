@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn test_sync_evm_verify() {
-        const K: usize = 21;
+        const K: usize = 22;
 
         let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
 
