@@ -267,7 +267,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         let h = sha256_chip.digest::<64>(
             thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), execution_state_root.into()),
+            HashInput::TwoToOne(h.output_bytes.into(), execution_state_root),
             false,
         )?;
 
@@ -296,7 +296,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         // Truncate the public input commitment to 253 bits and convert to one field element
         let mut public_input_commitment_bytes = public_input_commitment.output_bytes;
         let cleared_byte = clear_3_bits(
-            &range,
+            range,
             &public_input_commitment_bytes[31],
             thread_pool.main(),
         );
@@ -317,7 +317,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         input[..32].copy_from_slice(&attested_slot);
         input[32..].copy_from_slice(&finalized_slot);
-        let h = sha2::Sha256::digest(&input).to_vec();
+        let h = sha2::Sha256::digest(input).to_vec();
 
         let finalized_header_root: [u8; 32] = args
             .finalized_block
@@ -330,7 +330,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(&finalized_header_root);
-        let h = sha2::Sha256::digest(&input).to_vec();
+        let h = sha2::Sha256::digest(input).to_vec();
 
         let mut participation = args
             .pariticipation_bits
@@ -343,12 +343,12 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(&participation);
-        let h = sha2::Sha256::digest(&input).to_vec();
+        let h = sha2::Sha256::digest(input).to_vec();
 
         let execution_state_root = &args.execution_state_root;
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(execution_state_root);
-        let h = sha2::Sha256::digest(&input).to_vec();
+        let h = sha2::Sha256::digest(input).to_vec();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -364,7 +364,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         input[..32].copy_from_slice(&h);
         input[32..].copy_from_slice(&poseidon_commitment_bytes);
 
-        let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
+        let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
         // Truncate to 253 bits
         public_input_commitment[31] &= 0b00011111;
         let pi_field = bn256::Fr::from_bytes_le(&public_input_commitment);
