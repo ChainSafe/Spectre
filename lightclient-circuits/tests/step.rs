@@ -1,5 +1,6 @@
 #![cfg(test)]
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdate};
+use ethereum_consensus_types::{ForkData, Root};
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use std::path::PathBuf;
@@ -48,17 +49,17 @@ fn test_verify(
     let meta: TestMeta = load_yaml(&path.join("meta.yaml").to_str().unwrap());
     let steps: Vec<TestStep> = load_yaml(&path.join("steps.yaml").to_str().unwrap());
 
-    // let genesis_validators_root = Node::try_from(
-    //     hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
-    //         .unwrap()
-    //         .as_slice(),
-    // )
-    // .unwrap();
-    // let fork_data = ForkData {
-    //     fork_version: [1, 0, 0, 1],
-    //     genesis_validators_root: genesis_validators_root.clone(),
-    // };
-    // println!("fork_data: 0x{:?}", hex::encode(fork_data.fork_digest()));
+    let genesis_validators_root = Root::try_from(
+        hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    let fork_data = ForkData {
+        fork_version: [1, 0, 0, 1],
+        genesis_validators_root: genesis_validators_root.clone(),
+    };
+    println!("fork_data: 0x{:?}", hex::encode(fork_data.fork_digest()));
 
     // let updates = steps
     //     .iter()
