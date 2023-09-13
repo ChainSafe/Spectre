@@ -10,24 +10,27 @@ use halo2_proofs::{
 use log::debug;
 
 use crate::{
-    gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder},
+    gadget::crypto::{
+        SHAConfig, ShaCircuitBuilder, ShaGenericThreadBuilderBase,
+        ShaGenericThreadBuilderConfigBase, ShaThreadBuilder,
+    },
     util::{ThreadBuilderBase, ThreadBuilderConfigBase},
 };
 
 #[derive(Clone, Debug)]
 /// Config shared for block header and storage proof circuits
-pub struct Eth2Config<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {
+pub struct Eth2Config<F: Field, CustomConfig: ShaGenericThreadBuilderConfigBase<F>> {
     sha: SHAConfig<F, CustomConfig>,
     pub instance: Column<Instance>,
 }
 
 /// This is an extension of [`ShaCircuitBuilder`] that adds support for public instances (aka public inputs+outputs)
-pub struct Eth2CircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
+pub struct Eth2CircuitBuilder<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> {
     pub inner: ShaCircuitBuilder<F, ThreadBuilder>,
     pub assigned_instances: Vec<AssignedValue<F>>,
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Eth2CircuitBuilder<F, ThreadBuilder> {
+impl<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> Eth2CircuitBuilder<F, ThreadBuilder> {
     /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ThreadBuilder] set to true.
     pub fn keygen(assigned_instances: Vec<AssignedValue<F>>, builder: ThreadBuilder) -> Self {
         Self {
@@ -73,10 +76,10 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Eth2CircuitBuilder<F, Thread
     }
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
+impl<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> Circuit<F>
     for Eth2CircuitBuilder<F, ThreadBuilder>
 {
-    type Config = Eth2Config<F, ThreadBuilder::Config>;
+    type Config = Eth2Config<F, <ThreadBuilder as ShaGenericThreadBuilderBase<F>>::Config>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
@@ -116,7 +119,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
     }
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> snark_verifier_sdk::CircuitExt<F>
+impl<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> snark_verifier_sdk::CircuitExt<F>
     for Eth2CircuitBuilder<F, ThreadBuilder>
 {
     fn num_instance(&self) -> Vec<usize> {

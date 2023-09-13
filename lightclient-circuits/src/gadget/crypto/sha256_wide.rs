@@ -32,7 +32,7 @@ use halo2_proofs::{
 };
 
 pub use self::builder::ShaBitThreadBuilder;
-use self::config::Sha256BitConfig;
+pub use self::config::Sha256BitConfig;
 use self::util::{NUM_BYTES_FINAL_HASH, NUM_WORDS_TO_ABSORB};
 
 use super::{AssignedHashResult, HashInstructions};

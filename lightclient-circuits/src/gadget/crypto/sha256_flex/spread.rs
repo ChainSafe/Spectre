@@ -91,7 +91,6 @@ impl<F: Field> SpreadConfig<F> {
         }
     }
 }
-
 impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
     fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
         Self::configure(meta, 8, 2) // TODO configure num_advice_columns

@@ -5,7 +5,9 @@ mod sha256_flex;
 mod sha256_wide;
 mod util;
 
-pub use builder::{SHAConfig, ShaCircuitBuilder};
+pub use builder::{
+    SHAConfig, ShaCircuitBuilder, ShaGenericThreadBuilderBase, ShaGenericThreadBuilderConfigBase,
+};
 use eth_types::{AppCurveExt, Field, HashCurveExt};
 use halo2_base::{safe_types::RangeChip, AssignedValue, QuantumCell};
 use halo2_ecc::{
@@ -22,7 +24,10 @@ pub use sha256_wide::{Sha256ChipWide, ShaBitThreadBuilder};
 
 pub use ecc::calculate_ysquared;
 
-use crate::{util::ThreadBuilderBase, witness::HashInput};
+use crate::{
+    util::{ThreadBuilderBase, ThreadBuilderConfigBase},
+    witness::HashInput,
+};
 pub type FpPoint<F> = ProperCrtUint<F>;
 pub type Fp2Point<F> = FieldVector<FpPoint<F>>;
 pub type G1Point<F> = EcPoint<F, ProperCrtUint<F>>;

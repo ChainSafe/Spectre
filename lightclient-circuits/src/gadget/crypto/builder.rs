@@ -23,15 +23,35 @@ use crate::{
     util::{ThreadBuilderBase, ThreadBuilderConfigBase},
 };
 
-use super::sha256_flex::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
+use super::sha256_wide::Sha256BitConfig;
+use super::{
+    sha256_flex::{SpreadConfig, FIRST_PHASE},
+    ShaBitThreadBuilder,
+};
+pub trait ShaGenericThreadBuilderBase<F: Field>:
+    ThreadBuilderBase<F, Config = <Self as ShaGenericThreadBuilderBase<F>>::Config>
+{
+    type Config: ShaGenericThreadBuilderConfigBase<F>;
+}
+
+pub trait ShaGenericThreadBuilderConfigBase<F: Field>: ThreadBuilderConfigBase<F> {}
+
+impl<F: Field> ShaGenericThreadBuilderBase<F> for ShaThreadBuilder<F> {
+    type Config = SpreadConfig<F>;
+}
+impl<F: Field> ShaGenericThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
+    type Config = Sha256BitConfig<F>;
+}
+impl<F: Field> ShaGenericThreadBuilderConfigBase<F> for SpreadConfig<F> {}
+impl<F: Field> ShaGenericThreadBuilderConfigBase<F> for Sha256BitConfig<F> {}
 
 #[derive(Debug, Clone)]
-pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {
+pub struct SHAConfig<F: Field, CustomConfig: ShaGenericThreadBuilderConfigBase<F>> {
     pub compression: CustomConfig,
     pub range: RangeConfig<F>,
 }
 
-impl<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> SHAConfig<F, CustomConfig> {
+impl<F: Field, CustomConfig: ShaGenericThreadBuilderConfigBase<F>> SHAConfig<F, CustomConfig> {
     pub fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
         let degree = params.k;
         let mut range = RangeConfig::configure(
@@ -50,13 +70,13 @@ impl<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> SHAConfig<F, CustomConf
     }
 }
 
-pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
+pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> {
     pub builder: RefCell<ThreadBuilder>,
     pub break_points: RefCell<MultiPhaseThreadBreakPoints>, // `RefCell` allows the circuit to record break points in a keygen call of `synthesize` for use in later witness gen
     _f: PhantomData<F>,
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
+impl<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
     pub fn keygen(builder: ThreadBuilder) -> Self {
         Self {
@@ -94,7 +114,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
     #[allow(clippy::type_complexity)]
     pub fn sub_synthesize(
         &self,
-        config: &SHAConfig<F, ThreadBuilder::Config>,
+        config: &SHAConfig<F, <ThreadBuilder as ShaGenericThreadBuilderBase<F>>::Config>,
         layouter: &mut impl Layouter<F>,
     ) -> Result<HashMap<(usize, usize), (circuit::Cell, usize)>, Error> {
         config
@@ -149,17 +169,19 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
     }
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
+impl<F: Field, ThreadBuilder: ShaGenericThreadBuilderBase<F>> Circuit<F>
     for ShaCircuitBuilder<F, ThreadBuilder>
 {
-    type Config = SHAConfig<F, ThreadBuilder::Config>;
+    type Config = SHAConfig<F, <ThreadBuilder as ShaGenericThreadBuilderBase<F>>::Config>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F, ThreadBuilder::Config> {
+    fn configure(
+        meta: &mut ConstraintSystem<F>,
+    ) -> SHAConfig<F, <ThreadBuilder as ShaGenericThreadBuilderBase<F>>::Config> {
         let params: FlexGateConfigParams =
             serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
         SHAConfig::configure(meta, params)
