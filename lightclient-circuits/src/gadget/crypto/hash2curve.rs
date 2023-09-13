@@ -4,12 +4,18 @@
 use std::ops::Deref;
 use std::{cell::RefCell, iter, marker::PhantomData};
 
+use super::{
+    util::{fp2_sgn0, i2osp, strxor},
+    Fp2Point, G1Point, G2Point, HashInstructions,
+};
+use super::{AssignedHashResult, ShaContexts, ShaThreadBuilder};
 use crate::util::{AsBits, ThreadBuilderBase};
 use crate::{
     util::{bigint_to_le_bytes, decode_into_field, decode_into_field_be},
     witness::HashInput,
 };
 use eth_types::{AppCurveExt, Field, HashCurveExt, Spec};
+use ff::Field as _;
 use halo2_base::{
     safe_types::{GateInstructions, RangeInstructions, SafeBytes32, SafeTypeChip},
     utils::ScalarField,
@@ -28,12 +34,6 @@ use halo2curves::group::GroupEncoding;
 use itertools::Itertools;
 use num_bigint::{BigInt, BigUint};
 use pasta_curves::arithmetic::SqrtRatio;
-
-use super::{
-    util::{fp2_sgn0, i2osp, strxor},
-    Fp2Point, G1Point, G2Point, HashInstructions,
-};
-use super::{AssignedHashResult, ShaContexts, ShaThreadBuilder};
 
 const G2_EXT_DEGREE: usize = 2;
 

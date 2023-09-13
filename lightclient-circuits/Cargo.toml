@@ -62,6 +62,8 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 [dev-dependencies]
 rstest = "0.18.2"
+test-utils = { path = "../../zipline-sygma/test-utils" }
+ethereum-consensus-types = { path = "../../zipline-sygma/ethereum-consensus-types"}
 
 [features]
 default = []

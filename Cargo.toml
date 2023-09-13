@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "eth-types", "test-utils"]
+members = ["lightclient-circuits", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
@@ -26,12 +26,12 @@ halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "dev/
 # halo2curves = { path = "../halo2curves" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false, features = [
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9ed4039a497697b83eafabec62519", default-features = false, features = [
     "halo2-pse",
     "display",
 ] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false }
-poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false }
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9ed4039a497697b83eafabec62519", default-features = false }
+poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9ed4039a497697b83eafabec62519", default-features = false }
 
 # halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
 #     "halo2-pse",
