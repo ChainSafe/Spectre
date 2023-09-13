@@ -75,6 +75,10 @@ pub trait AppCircuitExt<F: Field>: Default {
         ProvingKey<bn256::G1Affine>,
         MultiPhaseThreadBreakPoints,
     );
+
+    fn instances(&self) -> Vec<Vec<F>> {
+        vec![]
+    }
 }
 
 /// Randomness used in circuits.
@@ -153,7 +157,7 @@ pub mod to_bytes {
 }
 
 /// Converts assigned bytes into biginterger
-/// Warning: method does not perfrom any checks on input `bytes`.
+/// Warning: method does not perform any checks on input `bytes`.
 pub fn decode_into_field<F: Field, C: AppCurveExt>(
     bytes: impl IntoIterator<Item = AssignedValue<F>>,
     limb_bases: &[F],

@@ -1,9 +1,9 @@
 mod builder;
+mod ecc;
 mod hash2curve;
-mod sha256;
+mod sha256_flex;
 mod sha256_wide;
 mod util;
-mod ecc;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
 use eth_types::{AppCurveExt, Field, HashCurveExt};
@@ -17,7 +17,7 @@ use halo2_ecc::{
 use halo2_proofs::plonk::Error;
 pub use hash2curve::{HashToCurveCache, HashToCurveChip};
 use lazy_static::lazy_static;
-pub use sha256::{Sha256Chip, ShaContexts, ShaThreadBuilder};
+pub use sha256_flex::{Sha256Chip, ShaContexts, ShaThreadBuilder};
 pub use sha256_wide::{Sha256ChipWide, ShaBitThreadBuilder};
 
 pub use ecc::calculate_ysquared;

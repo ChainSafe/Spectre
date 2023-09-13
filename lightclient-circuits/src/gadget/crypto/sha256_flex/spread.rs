@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use crate::util::{ThreadBuilderBase, ThreadBuilderConfigBase};
 
-use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
+use super::ShaThreadBuilder;
 use super::{compression::SpreadU32, util::*};
 use eth_types::Field;
 use halo2_base::gates::builder::FlexGateConfigParams;
@@ -92,10 +92,9 @@ impl<F: Field> SpreadConfig<F> {
     }
 }
 
-
 impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
     fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
-        Self::configure(meta, 8, 2)  // TODO configure num_advice_columns
+        Self::configure(meta, 8, 2) // TODO configure num_advice_columns
     }
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
@@ -223,7 +222,9 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
         let assigned_spread = ctx_base.load_witness(spread_value);
         let assigned_spread_vanila = ctx_spread.load_witness(*assigned_spread.value());
-        thread_pool.main().constrain_equal(&assigned_spread_vanila, &assigned_spread);
+        thread_pool
+            .main()
+            .constrain_equal(&assigned_spread_vanila, &assigned_spread);
 
         Ok(assigned_spread)
     }

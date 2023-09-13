@@ -31,7 +31,6 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
     "loader_evm",
     "halo2-pse",
 ] }
-
 # crypto
 num-bigint = { version = "0.4", features = ["rand"] }
 pasta_curves = "0.4.1"
@@ -59,6 +58,9 @@ log = "0.4"
 hex = "0.4"
 rayon = "1.7.0"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
+
+poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
+# [dev-dependencies]
 
 [features]
 default = []

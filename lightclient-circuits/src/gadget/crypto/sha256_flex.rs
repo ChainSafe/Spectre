@@ -16,7 +16,7 @@ use sha2::digest::generic_array::GenericArray;
 use std::collections::HashMap;
 use std::{cell::RefCell, char::MAX};
 
-use crate::gadget::crypto::sha256::compression::{sha256_compression, INIT_STATE};
+use crate::gadget::crypto::sha256_flex::compression::{sha256_compression, INIT_STATE};
 use crate::util::{AssignedValueCell, ThreadBuilderBase};
 use crate::witness::HashInput;
 use halo2_base::safe_types::RangeChip;
@@ -35,7 +35,7 @@ pub use self::builder::ShaContexts;
 pub(super) use self::builder::{assign_threads_sha, FIRST_PHASE};
 pub use self::spread::SpreadChip;
 
-use super::{HashInstructions, AssignedHashResult};
+use super::{AssignedHashResult, HashInstructions};
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 

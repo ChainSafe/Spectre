@@ -23,7 +23,7 @@ use crate::{
     util::{ThreadBuilderBase, ThreadBuilderConfigBase},
 };
 
-use super::sha256::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
+use super::sha256_flex::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 
 #[derive(Debug, Clone)]
 pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {

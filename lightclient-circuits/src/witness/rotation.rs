@@ -30,7 +30,7 @@ pub struct CommitteeRotationArgs<S: Spec, F: Field> {
 impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
-        
+
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)

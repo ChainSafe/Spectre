@@ -9,7 +9,9 @@ use halo2_base::{
 };
 use halo2_proofs::{
     circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{Advice, Assigned, Column, Error, Expression, Selector, VirtualCells, ConstraintSystem},
+    plonk::{
+        Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
+    },
     poly::Rotation,
 };
 

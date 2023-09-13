@@ -9,7 +9,7 @@ use ethereum_consensus::capella;
 use ethereum_consensus::phase0::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::Deserialize;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use ssz_rs::Merkleized;
 use ssz_rs::Node;
 
