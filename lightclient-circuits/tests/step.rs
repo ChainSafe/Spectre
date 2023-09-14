@@ -1,15 +1,27 @@
-use eth_types::Test;
+use ark_std::env::set_var;
+use ark_std::{end_timer, start_timer};
+use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdate};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
+use halo2_base::gates::range::{RangeConfig, RangeStrategy};
+use halo2_base::safe_types::RangeChip;
+use halo2_base::AssignedValue;
+use halo2_proofs::dev::MockProver;
 use halo2curves::bn256::{self, Bn256};
 use light_client_verifier::ZiplineWitness;
+use lightclient_circuits::builder::Eth2CircuitBuilder;
+use lightclient_circuits::gadget::crypto::ShaThreadBuilder;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
+use lightclient_circuits::util::ThreadBuilderBase;
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
+use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
 use std::path::PathBuf;
 use test_utils::{load_snappy_ssz, load_yaml};
+use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
+use itertools::Itertools;
 #[derive(Debug, serde::Deserialize)]
 struct TestMeta {
     genesis_validators_root: String,
@@ -60,20 +72,33 @@ fn to_witness<
         FINALIZED_ROOT_PROOF_SIZE,
     >,
     genesis_validators_root: Root,
-) -> SyncStepArgs<Test> {
-    let mut args = SyncStepArgs::<Test>::default();
+) -> SyncStepArgs<Minimal> {
+    let mut args = SyncStepArgs::<Minimal>::default();
     args.signature_compressed = zipline_witness
         .light_client_update
         .sync_aggregate
         .sync_committee_signature
         .to_bytes()
         .to_vec();
-    args.pubkeys_uncompressed = zipline_witness
-        .committee
-        .pubkeys
-        .iter()
-        .map(|pk| pk.to_bytes().to_vec())
-        .collect();
+    args.signature_compressed.reverse();
+    let pubkeys_uncompressed = zipline_witness
+    .committee
+    .pubkeys
+    .iter()
+    .map(|pk| {
+        let  p = pk.decompressed_bytes();
+        let mut x = (&p[0..48]).clone().to_vec();
+        let mut y = (&p[48..96]).clone().to_vec();
+        x.reverse();
+        y.reverse();
+        let mut res = vec![];
+        res.append(&mut x);
+        res.append(&mut y);
+        res
+
+    })
+    .collect_vec();
+    args.pubkeys_uncompressed = pubkeys_uncompressed;
     args.pariticipation_bits = zipline_witness
         .light_client_update
         .sync_aggregate
@@ -143,6 +168,9 @@ fn to_witness<
         )
         .unwrap(),
     };
+    let mut p = args.finalized_block.clone();
+    let h = p.hash_tree_root().unwrap();
+    println!("finalized_block hash_tree_root: {:x?}", h.as_bytes());
     let fork_data = ForkData {
         fork_version: [1, 0, 0, 1],
         genesis_validators_root: genesis_validators_root.clone(),
@@ -182,7 +210,7 @@ fn test_verify(
     };
     println!("fork_data: 0x{:?}", hex::encode(fork_data.fork_digest()));
 
-    let circuit = SyncStepCircuit::<Test, bn256::Fr>::default();
+    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
     let updates = steps
         .iter()
         .filter_map(|step| match step {
@@ -200,29 +228,68 @@ fn test_verify(
         })
         .collect::<Vec<_>>();
 
-    let witness = ZiplineWitness {
+    let zipline_witness = ZiplineWitness {
         committee: bootstrap.current_sync_committee.clone(),
         light_client_update: updates[0].clone(),
     };
 
-    // // pretend we are in the prior sync period and therefore the bootstrap current_sync_committee is actually the next_sync_committee
-    // let pre_state = ZiplineLightClientState {
-    //     sync_period: slot_to_sync_period(bootstrap.header.beacon.slot),
-    //     next_sync_committee_root: bootstrap
-    //         .current_sync_committee
-    //         .clone()
-    //         .hash_tree_root()
-    //         .unwrap(),
-    // };
+    const K: usize = 20;
+    let mut builder = ShaThreadBuilder::mock();
+    let spectre_args = to_witness(&zipline_witness, genesis_validators_root.clone());
+    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
 
-    // let post_state = ZiplineLightClientState {
-    //     sync_period: slot_to_sync_period(bootstrap.header.beacon.slot) + 1,
-    //     next_sync_committee_root: updates[0]
-    //         .next_sync_committee
-    //         .clone()
-    //         .hash_tree_root()
-    //         .unwrap(),
-    // };
+    let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
 
-    // verify(&fork_data, &pre_state, &post_state, &witness).unwrap();
+    let timer = start_timer!(|| "sync circuit mock prover");
+    let prover = MockProver::<bn256::Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+    prover.assert_satisfied_par();
+    end_timer!(timer);
 }
+
+fn load_circuit_with_data(
+    args: &SyncStepArgs<Minimal>,
+    thread_pool: &mut ShaThreadBuilder<bn256::Fr>,
+    k: usize,
+) -> Vec<AssignedValue<bn256::Fr>> {
+    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
+    let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
+
+    let instance = circuit.synthesize(thread_pool, &range, args).unwrap();
+
+    let config = thread_pool.config(k, None);
+    set_var("LOOKUP_BITS", (config.k - 1).to_string());
+    println!("params used: {:?}", config);
+
+    instance
+}
+
+// #[test]
+// fn test_sync_circuit() {
+//     const K: usize = 20;
+
+//     let mut builder = ShaThreadBuilder::mock();
+//     let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
+
+//     let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
+
+//     let timer = start_timer!(|| "sync circuit mock prover");
+//     let prover = MockProver::<Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+//     prover.assert_satisfied_par();
+//     end_timer!(timer);
+// }
+
+// #[test]
+// fn test_sync_proofgen() {
+//     const K: usize = 20;
+
+//     let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
+
+//     let mut builder = ShaThreadBuilder::prover();
+//     let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
+//     let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+
+//     let instances = SyncStepCircuit::<Test, bn256::Fr>::instances(args);
+//     let proof = full_prover(&params, &pk, circuit, instances.clone());
+
+//     assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+// }

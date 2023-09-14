@@ -75,7 +75,7 @@ pub struct SyncStepCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
-    fn synthesize(
+    pub fn synthesize(
         &self,
         thread_pool: &mut ShaThreadBuilder<F>,
         range: &RangeChip<F>,
@@ -167,6 +167,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 finalized_block_body_root.clone().into(),
             ],
         )?;
+        println!("circuit finalized_header: {:x?}", finalized_header.iter().map(|v| v.value().get_lower_32()).collect_vec());
 
         let signing_root = sha256_chip
             .digest::<64>(
