@@ -25,7 +25,6 @@ use crate::{
     witness::{self, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
-use ethereum_consensus::phase0::BeaconBlockHeader;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
@@ -63,6 +62,7 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::Merkleized;
+use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -225,13 +225,12 @@ mod tests {
     use crate::{
         gadget::crypto::constant_randomness,
         util::{full_prover, full_verifier, gen_pkey},
-        witness::{CommitteeRotationArgs, SyncStepArgs, Validator},
+        witness::{CommitteeRotationArgs, SyncStepArgs},
     };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Test;
-    use ethereum_consensus::builder;
     use halo2_base::{
         gates::{
             builder::{CircuitBuilderStage, FlexGateConfigParams},

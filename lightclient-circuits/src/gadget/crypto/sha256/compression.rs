@@ -2,10 +2,10 @@ use std::cell::RefMut;
 
 use crate::util::ThreadBuilderBase;
 
-use super::ShaThreadBuilder;
 use super::builder::ShaContexts;
 use super::spread::{self, SpreadChip, SpreadConfig};
 use super::util::{bits_le_to_fe, fe_to_bits_le};
+use super::ShaThreadBuilder;
 use eth_types::Field;
 use halo2_base::halo2_proofs::halo2curves::FieldExt;
 use halo2_base::halo2_proofs::{
@@ -155,13 +155,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             // let f_spread = state_to_spread_u32(ctx, range, ctx_spread, &f)?;
             // let g_spread = state_to_spread_u32(ctx, range, ctx_spread, &g)?;
             let sigma_term = sigma_upper1(thread_pool, spread_chip, &e_spread)?;
-            let ch_term = ch(
-                thread_pool,
-                spread_chip,
-                &e_spread,
-                &f_spread,
-                &g_spread,
-            )?;
+            let ch_term = ch(thread_pool, spread_chip, &e_spread, &f_spread, &g_spread)?;
             // println!(
             //     "idx {} sigma {:?} ch {:?}",
             //     idx,
@@ -191,13 +185,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
             // let b_spread = state_to_spread_u32(ctx, range, ctx_spread, &b)?;
             // let c_spread = state_to_spread_u32(ctx, range, ctx_spread, &c)?;
             let sigma_term = sigma_upper0(thread_pool, spread_chip, &a_spread)?;
-            let maj_term = maj(
-                thread_pool,
-                spread_chip,
-                &a_spread,
-                &b_spread,
-                &c_spread,
-            )?;
+            let maj_term = maj(thread_pool, spread_chip, &a_spread, &b_spread, &c_spread)?;
             let add = gate.add(
                 thread_pool.main(),
                 QuantumCell::Existing(sigma_term),
@@ -243,7 +231,11 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         .copied()
         .zip(pre_state_words.iter().copied())
         .map(|(x, y)| {
-            let add = gate.add(thread_pool.main(), QuantumCell::Existing(x), QuantumCell::Existing(y));
+            let add = gate.add(
+                thread_pool.main(),
+                QuantumCell::Existing(x),
+                QuantumCell::Existing(y),
+            );
             // println!(
             //     "pre {:?} new {:?} add {:?}",
             //     y.value(),
@@ -338,10 +330,14 @@ fn ch<'a, 'b: 'a, F: Field>(
         QuantumCell::Existing(x_neg_hi),
         QuantumCell::Existing(z_hi),
     );
-    let (p_lo_even, p_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &p_lo)?;
-    let (p_hi_even, p_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &p_hi)?;
-    let (q_lo_even, q_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &q_lo)?;
-    let (q_hi_even, q_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &q_hi)?;
+    let (p_lo_even, p_lo_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &p_lo)?;
+    let (p_hi_even, p_hi_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &p_hi)?;
+    let (q_lo_even, q_lo_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &q_lo)?;
+    let (q_hi_even, q_hi_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &q_hi)?;
     {
         let even_spread = spread_chip.spread(thread_pool, &p_lo_even)?;
         let odd_spread = spread_chip.spread(thread_pool, &p_lo_odd)?;
@@ -431,8 +427,10 @@ fn maj<'a, 'b: 'a, F: Field>(
         QuantumCell::Existing(y_hi),
         QuantumCell::Existing(z_hi),
     );
-    let (m_lo_even, m_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &m_lo)?;
-    let (m_hi_even, m_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &m_hi)?;
+    let (m_lo_even, m_lo_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &m_lo)?;
+    let (m_hi_even, m_hi_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &m_hi)?;
     {
         let even_spread = spread_chip.spread(thread_pool, &m_lo_even)?;
         let odd_spread = spread_chip.spread(thread_pool, &m_lo_odd)?;
@@ -648,10 +646,30 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
         // let assigned_b_spread = spread_config.spread(ctx, range, &assigned_b)?;
         // let assigned_c_spread = spread_config.spread(ctx, range, &assigned_c)?;
         // let assigned_d_spread = spread_config.spread(ctx, range, &assigned_d)?;
-        sum = gate.mul_add(thread_pool.main(), QuantumCell::Constant(coeffs[0]), assigned_a, sum);
-        sum = gate.mul_add(thread_pool.main(), QuantumCell::Constant(coeffs[1]), assigned_b, sum);
-        sum = gate.mul_add(thread_pool.main(), QuantumCell::Constant(coeffs[2]), assigned_c, sum);
-        sum = gate.mul_add(thread_pool.main(), QuantumCell::Constant(coeffs[3]), assigned_d, sum);
+        sum = gate.mul_add(
+            thread_pool.main(),
+            QuantumCell::Constant(coeffs[0]),
+            assigned_a,
+            sum,
+        );
+        sum = gate.mul_add(
+            thread_pool.main(),
+            QuantumCell::Constant(coeffs[1]),
+            assigned_b,
+            sum,
+        );
+        sum = gate.mul_add(
+            thread_pool.main(),
+            QuantumCell::Constant(coeffs[2]),
+            assigned_c,
+            sum,
+        );
+        sum = gate.mul_add(
+            thread_pool.main(),
+            QuantumCell::Constant(coeffs[3]),
+            assigned_d,
+            sum,
+        );
         sum
     };
     let (r_lo, r_hi) = {
@@ -671,8 +689,10 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
         (assigned_lo, assigned_hi)
     };
 
-    let (r_lo_even, r_lo_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &r_lo)?;
-    let (r_hi_even, r_hi_odd) = spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &r_hi)?;
+    let (r_lo_even, r_lo_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &r_lo)?;
+    let (r_hi_even, r_hi_odd) =
+        spread_chip.decompose_even_and_odd_unchecked(thread_pool.main(), &r_hi)?;
 
     {
         let even_spread = spread_chip.spread(thread_pool, &r_lo_even)?;

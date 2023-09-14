@@ -1,6 +1,6 @@
-use eth_types::{Field, AppCurveExt};
+use eth_types::{AppCurveExt, Field};
 use halo2_base::Context;
-use halo2_ecc::{bls12_381::FpChip, bigint::ProperCrtUint, fields::FieldChip};
+use halo2_ecc::{bigint::ProperCrtUint, bls12_381::FpChip, fields::FieldChip};
 
 // Calculates y^2 = x^3 + 4 (the curve equation)
 pub fn calculate_ysquared<F: Field, C: AppCurveExt>(

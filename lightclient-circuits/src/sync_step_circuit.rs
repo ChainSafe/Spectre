@@ -25,7 +25,6 @@ use crate::{
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
 };
 use eth_types::{AppCurveExt, Field, Spec};
-use ethereum_consensus::capella::{self, mainnet::*};
 use ff::PrimeField;
 use group::UncompressedEncoding;
 use halo2_base::{
@@ -139,16 +138,16 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                args.attested_block.slot.into_witness(),
-                args.attested_block.proposer_index.into_witness(),
-                args.attested_block.parent_root.as_ref().into_witness(),
-                args.attested_block.state_root.as_ref().into_witness(),
-                args.attested_block.body_root.as_ref().into_witness(),
+                args.attested_header.slot.into_witness(),
+                args.attested_header.proposer_index.into_witness(),
+                args.attested_header.parent_root.as_ref().into_witness(),
+                args.attested_header.state_root.as_ref().into_witness(),
+                args.attested_header.body_root.as_ref().into_witness(),
             ],
         )?;
 
         let finilized_block_body_root = args
-            .finalized_block
+            .finalized_header
             .body_root
             .as_ref()
             .iter()
@@ -159,10 +158,10 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                args.finalized_block.slot.into_witness(),
-                args.finalized_block.proposer_index.into_witness(),
-                args.finalized_block.parent_root.as_ref().into_witness(),
-                args.finalized_block.state_root.as_ref().into_witness(),
+                args.finalized_header.slot.into_witness(),
+                args.finalized_header.proposer_index.into_witness(),
+                args.finalized_header.parent_root.as_ref().into_witness(),
+                args.finalized_header.state_root.as_ref().into_witness(),
                 finilized_block_body_root.clone().into(),
             ],
         )?;
@@ -329,25 +328,26 @@ mod tests {
     use std::{
         env::{set_var, var},
         fs,
+        os::unix::thread,
     };
 
     use crate::{
         builder::Eth2CircuitBuilder,
         util::{full_prover, full_verifier, gen_pkey},
-        witness::{SyncStepArgs, Validator},
+        witness::SyncStepArgs,
     };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Test;
-    use ethereum_consensus::builder;
+    use group::Group;
     use halo2_base::{
         gates::{
             builder::{CircuitBuilderStage, FlexGateConfigParams},
             flex_gate::GateStrategy,
             range::RangeStrategy,
         },
-        utils::fs::gen_srs,
+        utils::{decompose, fs::gen_srs},
     };
     use halo2_proofs::{
         circuit::SimpleFloorPlanner,
@@ -358,7 +358,7 @@ mod tests {
     };
     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
     use pasta_curves::group::UncompressedEncoding;
-    use rand::rngs::OsRng;
+    use rand::{rngs::OsRng, thread_rng};
     use rayon::iter::ParallelIterator;
     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
     use snark_verifier_sdk::{
@@ -428,6 +428,8 @@ mod tests {
         let assigned_instances = load_circuit_with_data(&mut builder, K);
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
+
+    
         let num_instance = circuit.num_instance();
         let deployment_code = gen_evm_verifier_shplonk::<
             Eth2CircuitBuilder<Fr, ShaThreadBuilder<Fr>>,

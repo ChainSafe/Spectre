@@ -1,9 +1,9 @@
 mod builder;
+mod ecc;
 mod hash2curve;
 mod sha256;
 mod sha256_wide;
 mod util;
-mod ecc;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
 use eth_types::{AppCurveExt, Field, HashCurveExt};

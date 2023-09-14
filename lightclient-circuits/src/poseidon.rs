@@ -1,6 +1,6 @@
 use eth_types::{AppCurveExt, Field};
 use halo2_base::{safe_types::GateInstructions, AssignedValue, Context};
-use halo2_ecc::bigint::{ProperUint, ProperCrtUint};
+use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
 use halo2_proofs::plonk::Error;
 use halo2curves::bls12_381::G1;
 use itertools::Itertools;
@@ -17,7 +17,11 @@ pub fn fq_array_poseidon<'a, F: Field>(
     gate: &impl GateInstructions<F>,
     fields: impl IntoIterator<Item = &'a ProperCrtUint<F>>,
 ) -> Result<AssignedValue<F>, Error> {
-    let limbs = fields.into_iter().flat_map(|f| f.limbs()).copied().collect_vec();
+    let limbs = fields
+        .into_iter()
+        .flat_map(|f| f.limbs())
+        .copied()
+        .collect_vec();
 
     let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
         .expect("failed to construct Poseidon circuit");

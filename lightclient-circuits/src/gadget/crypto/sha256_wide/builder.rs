@@ -4,8 +4,8 @@ use eth_types::Field;
 use halo2_base::{
     gates::{
         builder::{
-            CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder, KeygenAssignments,
-            ThreadBreakPoints, assign_threads_in,
+            assign_threads_in, CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder,
+            KeygenAssignments, ThreadBreakPoints,
         },
         flex_gate::FlexGateConfig,
     },
@@ -182,14 +182,9 @@ impl<F: Field> ThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
             break_points_gate,
         );
 
-        self.sha_contexts().assign_in_region(
-            region,
-            config,
-            use_unknown,
-            None,
-        )
+        self.sha_contexts()
+            .assign_in_region(region, config, use_unknown, None)
     }
-
 }
 
 impl<F: Field> ShaBitThreadBuilder<F> {

@@ -23,6 +23,7 @@ fn main() {
 async fn app(options: Options) -> eyre::Result<()> {
     match options.proof {
         Proof::CommitteeUpdate(args) => match args.out {
+            
             Out::Proof => {
                 gen_evm_proof::<CommitteeUpdateCircuit<Test, Fr>>(
                     &args.config_path,
@@ -81,14 +82,13 @@ fn setup_circuit<C: AppCircuitExt<Fr>>(config_path: &Path, build_dir: &Path) {
     let config: FlexGateConfigParams =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
 
-    let _ = C::setup(&config, Some(build_dir));
+    let _ = C::setup(config.k, Some(build_dir));
 }
 
 fn gen_evm_verifier<C: AppCircuitExt<Fr>>(config_path: &Path, vkey_path: &Path, path_out: &Path) {
     let config: FlexGateConfigParams =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
 
-    set_config(&config);
 
     let params = read_params(config.k as u32);
 

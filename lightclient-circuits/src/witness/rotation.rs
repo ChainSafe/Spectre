@@ -3,13 +3,11 @@ use std::marker::PhantomData;
 
 use crate::gadget::crypto::constant_randomness;
 
-use super::{HashInput, Validator};
+use super::HashInput;
 use eth_types::AppCurveExt;
 use eth_types::{Field, Spec};
-use ethereum_consensus::bellatrix::mainnet;
-use ethereum_consensus::bellatrix::BeaconState;
-use ethereum_consensus::capella;
-use ethereum_consensus::phase0::BeaconBlockHeader;
+use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
+
 use halo2curves::bls12_381::Fq;
 use halo2curves::bls12_381::G1;
 use itertools::Itertools;
@@ -30,7 +28,7 @@ pub struct CommitteeRotationArgs<S: Spec, F: Field> {
 impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
-        
+
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)

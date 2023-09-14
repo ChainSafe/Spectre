@@ -35,7 +35,7 @@ pub use self::builder::ShaContexts;
 pub(super) use self::builder::{assign_threads_sha, FIRST_PHASE};
 pub use self::spread::SpreadChip;
 
-use super::{HashInstructions, AssignedHashResult};
+use super::{AssignedHashResult, HashInstructions};
 
 const SHA256_CONTEXT_ID: usize = usize::MAX;
 

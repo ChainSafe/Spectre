@@ -6,9 +6,10 @@ edition = "2021"
 [dependencies]
 # cli
 clap = { version = "=4.2", features = ["derive"] }
-strum = {version = "0.25", features = ["derive"] }
+strum = {version = "=0.25", features = ["derive"] }
 cli-batteries = "=0.4"
 eyre = "0.6"
+anstyle = "=1.0.0"
 
 
 # halo2

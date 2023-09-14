@@ -1,5 +1,8 @@
 use eth_types::Field;
-use halo2_base::{utils::{biguint_to_fe, fe_to_biguint}, AssignedValue};
+use halo2_base::{
+    utils::{biguint_to_fe, fe_to_biguint},
+    AssignedValue,
+};
 use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -54,8 +57,6 @@ pub struct Sha256AssignedRows<F: Field> {
     /// Output words at the row.
     pub output_rlc: Vec<AssignedValue<F>>,
 }
-
-
 
 impl<F: Field> Sha256AssignedRows<F> {
     pub fn new() -> Self {

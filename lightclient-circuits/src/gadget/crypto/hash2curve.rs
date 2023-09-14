@@ -33,7 +33,7 @@ use super::{
     util::{fp2_sgn0, i2osp, strxor},
     Fp2Point, G1Point, G2Point, HashInstructions,
 };
-use super::{ShaContexts, ShaThreadBuilder, AssignedHashResult};
+use super::{AssignedHashResult, ShaContexts, ShaThreadBuilder};
 
 const G2_EXT_DEGREE: usize = 2;
 

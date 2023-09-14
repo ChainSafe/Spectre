@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "eth-types"]
+members = ["lightclient-circuits", "preprocessor", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
@@ -49,4 +49,8 @@ snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", bran
 # halo2curves = { path = "../halo2curves" }
 
 [patch."https://github.com/ralexstokes/ssz-rs"]
-ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }
+ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main", default-features = false }
+
+[patch."https://github.com/polytope-labs/sync-committee-rs"]
+sync-committee-prover = { path = "../sync-committee-rs/prover", features=["testnet"] }
+sync-committee-primitives = { path = "../sync-committee-rs/primitives", features=["testnet"] }
