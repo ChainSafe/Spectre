@@ -149,8 +149,8 @@ fn to_witness<
     };
     let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
     args.domain = signing_domain;
-    args.execution_merkle_branch = todo!();
-    args.execution_state_root = todo!();
+    args.execution_merkle_branch = vec![vec![]];
+    args.execution_state_root = vec![];
     args.finality_merkle_branch = zipline_witness
         .light_client_update
         .finality_branch

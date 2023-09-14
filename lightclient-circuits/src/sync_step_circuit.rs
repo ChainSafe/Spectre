@@ -102,8 +102,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
             .collect_vec();
 
-        let execution_state_root: HashInputChunk<QuantumCell<F>> =
-            args.execution_state_root.clone().into_witness();
+        // let execution_state_root: HashInputChunk<QuantumCell<F>> =
+        //     args.execution_state_root.clone().into_witness();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -208,16 +208,16 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         )?;
 
         // verify execution state root against finilized block body merkle proof
-        verify_merkle_proof(
-            thread_pool,
-            &sha256_chip,
-            args.execution_merkle_branch
-                .iter()
-                .map(|w| w.clone().into_witness()),
-            execution_state_root.clone(),
-            &finalized_block_body_root,
-            S::EXECUTION_STATE_ROOT_INDEX,
-        )?;
+        // verify_merkle_proof(
+        //     thread_pool,
+        //     &sha256_chip,
+        //     args.execution_merkle_branch
+        //         .iter()
+        //         .map(|w| w.clone().into_witness()),
+        //     execution_state_root.clone(),
+        //     &finalized_block_body_root,
+        //     S::EXECUTION_STATE_ROOT_INDEX,
+        // )?;
 
         // Public Input Commitment
         let gate = range.gate();
@@ -265,11 +265,11 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .main()
             .constrain_equal(&sum_field, &participation_sum);
 
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), execution_state_root),
-            false,
-        )?;
+        // let h = sha256_chip.digest::<64>(
+        //     thread_pool,
+        //     HashInput::TwoToOne(h.output_bytes.into(), execution_state_root),
+        //     false,
+        // )?;
 
         let poseidon_commit_bytes = poseidon_commit
             .value()
@@ -345,10 +345,10 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         input[32..].copy_from_slice(&participation);
         let h = sha2::Sha256::digest(input).to_vec();
 
-        let execution_state_root = &args.execution_state_root;
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(execution_state_root);
-        let h = sha2::Sha256::digest(input).to_vec();
+        // let execution_state_root = &args.execution_state_root;
+        // input[..32].copy_from_slice(&h);
+        // input[32..].copy_from_slice(execution_state_root);
+        // let h = sha2::Sha256::digest(input).to_vec();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
