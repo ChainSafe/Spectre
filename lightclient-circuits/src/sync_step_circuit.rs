@@ -541,13 +541,11 @@ mod tests {
         let circuit = SyncStepCircuit::<Test, bn256::Fr>::default();
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
 
-        circuit.synthesize(thread_pool, &range, &args).unwrap();
+        let instance = circuit.synthesize(thread_pool, &range, &args).unwrap();
 
         let config = thread_pool.config(k, None);
         set_var("LOOKUP_BITS", (config.k - 1).to_string());
         println!("params used: {:?}", config);
-
-        let instance = vec![];
 
         (instance, args)
     }

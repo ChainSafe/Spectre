@@ -64,6 +64,7 @@ poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = 
 rstest = "0.18.2"
 test-utils = { path = "../../zipline-sygma/test-utils" }
 ethereum-consensus-types = { path = "../../zipline-sygma/ethereum-consensus-types"}
+light-client-verifier = { path = "../../zipline-sygma/light-client-verifier" }
 
 [features]
 default = []
