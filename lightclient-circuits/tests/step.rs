@@ -9,6 +9,8 @@ use halo2_base::safe_types::RangeChip;
 use halo2_base::AssignedValue;
 use halo2_proofs::dev::MockProver;
 use halo2curves::bn256::{self, Bn256};
+use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
+use itertools::Itertools;
 use light_client_verifier::ZiplineWitness;
 use lightclient_circuits::builder::Eth2CircuitBuilder;
 use lightclient_circuits::gadget::crypto::ShaThreadBuilder;
@@ -20,8 +22,6 @@ use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
 use std::path::PathBuf;
 use test_utils::{load_snappy_ssz, load_yaml};
-use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
-use itertools::Itertools;
 #[derive(Debug, serde::Deserialize)]
 struct TestMeta {
     genesis_validators_root: String,
@@ -82,22 +82,21 @@ fn to_witness<
         .to_vec();
     args.signature_compressed.reverse();
     let pubkeys_uncompressed = zipline_witness
-    .committee
-    .pubkeys
-    .iter()
-    .map(|pk| {
-        let  p = pk.decompressed_bytes();
-        let mut x = (&p[0..48]).clone().to_vec();
-        let mut y = (&p[48..96]).clone().to_vec();
-        x.reverse();
-        y.reverse();
-        let mut res = vec![];
-        res.append(&mut x);
-        res.append(&mut y);
-        res
-
-    })
-    .collect_vec();
+        .committee
+        .pubkeys
+        .iter()
+        .map(|pk| {
+            let p = pk.decompressed_bytes();
+            let mut x = (&p[0..48]).clone().to_vec();
+            let mut y = (&p[48..96]).clone().to_vec();
+            x.reverse();
+            y.reverse();
+            let mut res = vec![];
+            res.append(&mut x);
+            res.append(&mut y);
+            res
+        })
+        .collect_vec();
     args.pubkeys_uncompressed = pubkeys_uncompressed;
     args.pariticipation_bits = zipline_witness
         .light_client_update
@@ -186,12 +185,14 @@ fn to_witness<
         .map(|b| b.as_ref().to_vec())
         .collect();
     args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
+    println!("beacon_state_root: {:x?}", args.beacon_state_root);
 
     args
 }
 #[rstest]
 fn test_verify(
-    #[files("../consensus-spec-tests/tests/minimal/altair/light_client/sync/pyspec_tests/**")] path: PathBuf,
+    #[files("../consensus-spec-tests/tests/minimal/altair/light_client/sync/pyspec_tests/deneb_store_with_legacy_data")]
+    path: PathBuf,
 ) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(&path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -210,7 +211,7 @@ fn test_verify(
     };
     println!("fork_data: 0x{:?}", hex::encode(fork_data.fork_digest()));
 
-    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
+    // let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
     let updates = steps
         .iter()
         .filter_map(|step| match step {

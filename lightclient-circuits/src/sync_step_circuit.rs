@@ -167,7 +167,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 finalized_block_body_root.clone().into(),
             ],
         )?;
-        println!("circuit finalized_header: {:x?}", finalized_header.iter().map(|v| v.value().get_lower_32()).collect_vec());
 
         let signing_root = sha256_chip
             .digest::<64>(
@@ -196,7 +195,25 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             bls_chip.verify_pairing(thread_pool.main(), signature, msghash, agg_pubkey, g1_neg);
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
-        // verify finilized block header against current beacon state merkle proof
+        println!(
+            "circuit finalized_header: {:x?}",
+            finalized_header
+                .iter()
+                .map(|v| v.value().get_lower_32())
+                .collect_vec()
+        );
+        println!(
+            "circuit beacon_state_root: {:x?}",
+            beacon_state_root
+                .iter()
+                .map(|v| v.value().get_lower_32())
+                .collect_vec()
+        );
+        println!(
+            "circuit finality_merkle_branch: {:x?}",
+            args.finality_merkle_branch
+        );
+        // verify finalized block header against current beacon state merkle proof
         verify_merkle_proof(
             thread_pool,
             &sha256_chip,
