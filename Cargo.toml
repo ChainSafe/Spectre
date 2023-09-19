@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "preprocessor", "eth-types"]
+members = ["lightclient-circuits", "prover", "preprocessor", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
