@@ -15,6 +15,7 @@ pub mod witness;
 
 pub mod committee_update_circuit;
 pub mod sync_step_circuit;
+pub mod aggregation;
 
 mod builder;
 mod poseidon;

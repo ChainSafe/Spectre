@@ -15,11 +15,12 @@ pub struct Options {
 pub enum Proof {
     CommitteeUpdate(Args),
     SyncStep(Args),
+    Aggregation(AggregationArgs),
 }
 
 #[derive(Clone, clap::Args)]
 pub struct Args {
-    #[clap(long, short, default_value = "proof")]
+    #[clap(long, short, default_value = "snark")]
     pub out: Out,
 
     #[clap(long, short)]
@@ -46,10 +47,22 @@ pub struct Args {
 }
 
 
+#[derive(Clone, clap::Args)]
+pub struct AggregationArgs {
+    #[clap(flatten)]
+    pub aggregation: Args,
+
+    #[clap(long)]
+    pub app_pk_path: PathBuf,
+
+    #[clap(long)]
+    pub app_config_path: PathBuf,
+}
+
 #[derive(Clone, Debug, PartialEq, EnumString)]
 pub enum Out {
-    #[strum(serialize = "proof")]
-    Proof,
+    #[strum(serialize = "snark")]
+    Snark,
     #[strum(serialize = "artifacts")]
     Artifacts,
     #[strum(serialize = "evm-verifier")]

@@ -295,13 +295,13 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
 impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
     type Pinning = Eth2ConfigPinning;
-    type Args = witness::SyncStepArgs<S>;
+    type Witness = witness::SyncStepArgs<S>;
 
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         params: &ParamsKZG<Bn256>,
-        args: &Self::Args,
+        args: &Self::Witness,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut thread_pool = ShaThreadBuilder::from_stage(stage);
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);

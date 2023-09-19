@@ -44,7 +44,6 @@ poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "d3455345c40f
 snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
 snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
 
-
 # [patch."https://github.com/timoftime/halo2curves"]
 # halo2curves = { path = "../halo2curves" }
 
