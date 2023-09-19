@@ -12,6 +12,7 @@ use lightclient_circuits::{
 use ssz_rs::Merkleized;
 use sync_committee_primitives::{consensus_types::BeaconBlockHeader, util::compute_domain};
 use sync_committee_prover::SyncCommitteeProver;
+use tokio::fs;
 
 pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStepArgs<S>> {
     let client = SyncCommitteeProver::new(node_url);
@@ -24,6 +25,7 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .current_sync_committee
         .public_keys
         .iter()
+        .take(S::SYNC_COMMITTEE_SIZE)
         .map(|pk| {
             let pk_rev = pk.iter().copied().rev().collect_vec();
             G1Affine::from_bytes_unchecked(&pk_rev.try_into().unwrap())
@@ -58,10 +60,26 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
             .map(|branch| branch.iter().map(|n| n.as_bytes().to_vec()).collect_vec())
             .map_err(|e| eyre::eyre!("merkleization error: {:?}", e))?;
 
+    let mut signature_compressed = beacon_block
+        .body
+        .sync_aggregate
+        .sync_committee_signature
+        .to_vec();
+
+    // reverse beacouse it's big endian
+    signature_compressed.reverse();
+
     let args = SyncStepArgs::<S> {
-        signature_compressed: vec![],
+        signature_compressed,
         pubkeys_uncompressed,
-        pariticipation_bits: vec![],
+        pariticipation_bits: beacon_block
+            .body
+            .sync_aggregate
+            .sync_committee_bits
+            .iter()
+            .by_vals()
+            .take(S::SYNC_COMMITTEE_SIZE)
+            .collect_vec(),
         attested_header: BeaconBlockHeader {
             slot: beacon_block.slot,
             proposer_index: beacon_block.proposer_index,
@@ -97,6 +115,7 @@ pub async fn fetch_rotation_args<S: Spec>(
         .current_sync_committee
         .public_keys
         .iter()
+        .take(S::SYNC_COMMITTEE_SIZE)
         .map(|pk| pk.to_vec())
         .collect_vec();
 
@@ -109,10 +128,28 @@ pub async fn fetch_rotation_args<S: Spec>(
     Ok(args)
 }
 
-// #[tokio::test]
-// async fn fetch_step_args() {
-//     let client = BeaconClient::new("http://localhost:80");
-//     let args = client.fetch_step_args::<Testnet>().await.unwrap();
+pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<S>> {
+    serde_json::from_slice(
+        &fs::read(path)
+            .await
+            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
+    )
+    .map_err(|e| eyre::eyre!("Errror decoding witness {}", e))
+}
 
-//     println!("{:x?}", args);
-// }
+pub async fn read_rotation_args<S: Spec>(
+    path: String,
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
+    let pubkeys_compressed = serde_json::from_slice(
+        &fs::read(path)
+            .await
+            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
+    )
+    .map_err(|e| eyre::eyre!("Errror decoding witness {}", e))?;
+
+    Ok(CommitteeRotationArgs::<S, Fr> {
+        pubkeys_compressed,
+        randomness: crypto::constant_randomness(),
+        _spec: PhantomData,
+    })
+}

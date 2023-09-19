@@ -35,12 +35,8 @@ async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<()> {
             .await
         }
         Proof::SyncStep(args) => {
-            generic_circuit_app::<SyncStepCircuit<S, Fr>, _, _>(
-                args,
-                fetch_step_args,
-                "sync_step",
-            )
-            .await
+            generic_circuit_app::<SyncStepCircuit<S, Fr>, _, _>(args, fetch_step_args, "sync_step")
+                .await
         }
     }
 }
@@ -54,7 +50,9 @@ async fn generic_circuit_app<
     fetch: FnFetch,
     name: &str,
 ) -> eyre::Result<()> {
-    let k = Circuit::get_degree(&cli_args.config_path);
+    let k = cli_args
+        .k
+        .unwrap_or_else(|| Circuit::get_degree(&cli_args.config_path));
     let params = gen_srs(k);
     let pk_filename = format!("{}.pkey", name);
 
@@ -102,7 +100,7 @@ async fn generic_circuit_app<
             );
             let witness = fetch(cli_args.node_url.clone()).await?;
 
-            Circuit::gen_calldata(
+            let calldata = Circuit::gen_calldata(
                 &params,
                 &pk,
                 &cli_args.config_path,
@@ -111,6 +109,8 @@ async fn generic_circuit_app<
                 &witness,
             )
             .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
+
+            println!("{}", calldata)
         }
     }
     Ok(())

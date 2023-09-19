@@ -31,7 +31,7 @@ use halo2_base::{
     gates::{
         builder::{
             FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints,
-            RangeCircuitBuilder,
+            RangeCircuitBuilder, CircuitBuilderStage,
         },
         flex_gate::GateStrategy,
         range::{RangeConfig, RangeStrategy},
@@ -229,7 +229,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         bytes_compressed: &[u8],
     ) -> EcPoint<F, Fp2Point<F>> {
         let sig_affine =
-            G2Affine::from_bytes(&bytes_compressed.to_vec().try_into().unwrap()).unwrap();
+            G2Affine::from_bytes(&bytes_compressed.to_vec().try_into().unwrap()).expect("correct signature");
 
         g2_chip.load_private_unchecked(ctx, sig_affine.into_coordinates())
     }
@@ -298,7 +298,7 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
     type Args = witness::SyncStepArgs<S>;
 
     fn create_circuit(
-        stage: halo2_base::gates::builder::CircuitBuilderStage,
+        stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         params: &ParamsKZG<Bn256>,
         args: &Self::Args,
@@ -307,6 +307,16 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
 
         let assigned_instances = Self::synthesize(&mut thread_pool, &range, args)?;
+
+        match stage {
+            CircuitBuilderStage::Prover => {}
+            _ => {
+                thread_pool.config(
+                    params.k() as usize,
+                    Some(var("MINIMUM_ROWS").unwrap_or_else(|_| "0".to_string()).parse().unwrap()),
+                );
+            }
+        }
 
         Ok(Eth2CircuitBuilder::from_stage(
             assigned_instances,

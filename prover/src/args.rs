@@ -22,6 +22,9 @@ pub struct Args {
     #[clap(long, short, default_value = "proof")]
     pub out: Out,
 
+    #[clap(long, short)]
+    pub k: Option<u32>, 
+
     #[clap(
         long,
         short,
@@ -32,14 +35,14 @@ pub struct Args {
     #[clap(long, short, default_value = "./build")]
     pub build_dir: PathBuf,
 
-    #[clap(long, short, default_value = "./sync_state.json")]
-    pub input_path: PathBuf,
+    #[clap(long, short)]
+    pub input_path: Option<PathBuf>,
+
+    #[clap(long, short, help = "Beacon node URL", default_value = "http://localhost::5052")]
+    pub node_url: String,
 
     #[clap(index = 1, help = "path to output", default_value = ".")]
     pub path_out: PathBuf,
-
-    #[clap(index = 1, help = "Beacon node URL", default_value = "http://localhost::5052")]
-    pub node_url: String,
 }
 
 

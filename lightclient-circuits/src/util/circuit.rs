@@ -4,7 +4,7 @@ use std::{fs::File, path::Path};
 use halo2_base::gates::builder::{
     CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints,
 };
-use halo2_proofs::plonk::{Error, VerifyingKey};
+use halo2_proofs::plonk::{Error, VerifyingKey, Circuit};
 use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use serde::{Deserialize, Serialize};
@@ -102,13 +102,8 @@ pub trait AppCircuit: Sized {
     /// Reads the proving key for the pre-circuit.
     /// If `read_only` is true, then it is assumed that the proving key exists and can be read from `path` (otherwise the program will panic).
     fn read_pk(params: &ParamsKZG<Bn256>, path: impl AsRef<Path>) -> ProvingKey<G1Affine> {
-        let circuit = Self::create_circuit(
-            CircuitBuilderStage::Keygen,
-            None,
-            params,
-            &Self::Args::default(),
-        );
-        todo!()
+        let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, params, &Self::Args::default()).unwrap();
+        custom_read_pk(path, &circuit)
     }
 
     /// Creates the proving key for the pre-circuit if file at `pk_path` is not found.
@@ -125,6 +120,7 @@ pub trait AppCircuit: Sized {
             &Self::Args::default(),
         )
         .unwrap();
+    
         let pk_exists = pk_path.as_ref().exists();
         let pk = gen_pk(params, &circuit, Some(pk_path.as_ref()));
         if !pk_exists {
@@ -235,4 +231,12 @@ pub fn write_calldata_generic<ConcreteCircuit: CircuitExt<Fr>>(
         evm_verify(deployment_code, instances, proof);
     }
     calldata
+}
+
+fn custom_read_pk<C, P>(fname: P, _: &C) -> ProvingKey<G1Affine>
+where
+    C: Circuit<Fr>,
+    P: AsRef<Path>,
+{
+    read_pk::<C>(fname.as_ref()).expect("proving key should exist")
 }

@@ -30,7 +30,7 @@ use halo2_base::{
     gates::{
         builder::{
             FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints,
-            RangeCircuitBuilder,
+            RangeCircuitBuilder, CircuitBuilderStage,
         },
         flex_gate::GateStrategy,
         range::{RangeConfig, RangeStrategy},
@@ -49,7 +49,7 @@ use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
     dev::MockProver,
     plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
-    poly::kzg::commitment::ParamsKZG,
+    poly::{kzg::commitment::ParamsKZG, commitment::Params},
 };
 use halo2curves::{
     bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
@@ -189,7 +189,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     type Args = witness::CommitteeRotationArgs<S, bn256::Fr>;
 
     fn create_circuit(
-        stage: halo2_base::gates::builder::CircuitBuilderStage,
+        stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         params: &ParamsKZG<bn256::Bn256>,
         args: &witness::CommitteeRotationArgs<S, bn256::Fr>,
@@ -198,6 +198,16 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
 
         let assigned_instances = Self::synthesize(&mut thread_pool, &range, args)?;
+
+        match stage {
+            CircuitBuilderStage::Prover => {}
+            _ => {
+                thread_pool.config(
+                    params.k() as usize,
+                    Some(var("MINIMUM_ROWS").unwrap_or_else(|_| "0".to_string()).parse().unwrap()),
+                );
+            }
+        }
 
         Ok(Eth2CircuitBuilder::from_stage(
             assigned_instances,
