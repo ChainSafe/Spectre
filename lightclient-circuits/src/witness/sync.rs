@@ -63,7 +63,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
         let mut finalized_block = capella::BeaconBlockHeader {
-            body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
+            body_root: Node::try_from(beacon_block_body_root.as_ref()).unwrap(),
             ..Default::default()
         };
         let finilized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();

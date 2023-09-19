@@ -65,7 +65,7 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use sha2::{Digest, Sha256};
 use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
-use ssz_rs::{GeneralizedIndex, Merkleized, Node};
+use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -96,14 +96,14 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
 
-        let beacon_state_root = args
-            .beacon_state_root
-            .iter()
-            .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
-            .collect_vec();
+        // let beacon_state_root = args
+        //     .beacon_state_root
+        //     .iter()
+        //     .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
+        //     .collect_vec();
 
-        // let execution_state_root: HashInputChunk<QuantumCell<F>> =
-        //     args.execution_state_root.clone().into_witness();
+        let execution_state_root: HashInputChunk<QuantumCell<F>> =
+            args.execution_state_root.clone().into_witness();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -164,7 +164,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 args.finalized_block.proposer_index.into_witness(),
                 args.finalized_block.parent_root.as_ref().into_witness(),
                 args.finalized_block.state_root.as_ref().into_witness(),
-                finalized_block_body_root.clone().into(),
+                args.finalized_block.body_root.as_ref().into_witness(),
             ],
         )?;
 
@@ -196,22 +196,44 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
         println!(
-            "circuit finalized_header: {:x?}",
-            finalized_header
-                .iter()
-                .map(|v| v.value().get_lower_32())
-                .collect_vec()
+            "circuit finalized_header: {:?}",
+            hex::encode(
+                &finalized_header
+                    .iter()
+                    .map(|v| v.value().get_lower_32() as u8)
+                    .collect_vec()
+            )
         );
+
+        let bs_root = args
+            .attested_block
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
         println!(
-            "circuit beacon_state_root: {:x?}",
-            beacon_state_root
-                .iter()
-                .map(|v| v.value().get_lower_32())
-                .collect_vec()
+            "circuit beacon_state_root: {:?}",
+            hex::encode(
+                &bs_root
+                    .iter()
+                    .map(|v| v.value().get_lower_32() as u8)
+                    .collect_vec()
+            )
         );
+        println!("attested Beacon block header: {:?}", args.attested_block);
+        println!("finalized Beacon block header: {:?}", args.finalized_block);
         println!(
-            "circuit finality_merkle_branch: {:x?}",
+            "circuit finality_merkle_branch: {:?}",
             args.finality_merkle_branch
+                .iter()
+                .map(|v| hex::encode(v))
+                .collect_vec()
+        );
+
+        println!(
+            "Finality branch length {}",
+            args.finality_merkle_branch.len()
         );
         // verify finalized block header against current beacon state merkle proof
         verify_merkle_proof(
@@ -221,21 +243,21 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 .iter()
                 .map(|w| w.clone().into_witness()),
             finalized_header.clone().into(),
-            &beacon_state_root,
+            &bs_root,
             S::FINALIZED_HEADER_INDEX,
         )?;
 
         // verify execution state root against finilized block body merkle proof
-        // verify_merkle_proof(
-        //     thread_pool,
-        //     &sha256_chip,
-        //     args.execution_merkle_branch
-        //         .iter()
-        //         .map(|w| w.clone().into_witness()),
-        //     execution_state_root.clone(),
-        //     &finalized_block_body_root,
-        //     S::EXECUTION_STATE_ROOT_INDEX,
-        // )?;
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.execution_merkle_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            execution_state_root.clone(),
+            &finalized_block_body_root,
+            S::EXECUTION_STATE_ROOT_INDEX,
+        )?;
 
         // Public Input Commitment
         let gate = range.gate();
@@ -342,7 +364,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_bytes()
+            .as_ref()
             .try_into()
             .unwrap();
 

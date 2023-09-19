@@ -1,7 +1,9 @@
 use ark_std::env::set_var;
 use ark_std::{end_timer, start_timer};
 use eth_types::Minimal;
-use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdate};
+use ethereum_consensus_types::presets::minimal::{
+    LightClientBootstrap, LightClientUpdate, LightClientUpdateCapella,
+};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
 use halo2_base::gates::range::{RangeConfig, RangeStrategy};
@@ -11,7 +13,7 @@ use halo2_proofs::dev::MockProver;
 use halo2curves::bn256::{self, Bn256};
 use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
 use itertools::Itertools;
-use light_client_verifier::ZiplineWitness;
+use light_client_verifier::{ZiplineUpdateWitness, ZiplineUpdateWitnessCapella};
 use lightclient_circuits::builder::Eth2CircuitBuilder;
 use lightclient_circuits::gadget::crypto::ShaThreadBuilder;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
@@ -20,6 +22,9 @@ use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
+use ssz_rs::Merkleized;
+use ssz_rs::Node;
+use std::ops::Deref;
 use std::path::PathBuf;
 use test_utils::{load_snappy_ssz, load_yaml};
 #[derive(Debug, serde::Deserialize)]
@@ -55,6 +60,7 @@ struct Checks {
 struct RootAtSlot {
     slot: u64,
     beacon_root: String,
+    execution_root: String,
 }
 
 fn to_witness<
@@ -63,13 +69,17 @@ fn to_witness<
     const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
     const FINALIZED_ROOT_GINDEX: usize,
     const FINALIZED_ROOT_PROOF_SIZE: usize,
+    const BYTES_PER_LOGS_BLOOM: usize,
+    const MAX_EXTRA_DATA_BYTES: usize,
 >(
-    zipline_witness: &ZiplineWitness<
+    zipline_witness: &ZiplineUpdateWitnessCapella<
         SYNC_COMMITTEE_SIZE,
         NEXT_SYNC_COMMITTEE_GINDEX,
         NEXT_SYNC_COMMITTEE_PROOF_SIZE,
         FINALIZED_ROOT_GINDEX,
         FINALIZED_ROOT_PROOF_SIZE,
+        BYTES_PER_LOGS_BLOOM,
+        MAX_EXTRA_DATA_BYTES,
     >,
     genesis_validators_root: Root,
 ) -> SyncStepArgs<Minimal> {
@@ -106,15 +116,21 @@ fn to_witness<
         .map(|b| *b)
         .collect();
     args.attested_block = ethereum_consensus::phase0::BeaconBlockHeader {
-        slot: zipline_witness.light_client_update.attested_header.slot,
+        slot: zipline_witness
+            .light_client_update
+            .attested_header
+            .beacon
+            .slot,
         proposer_index: zipline_witness
             .light_client_update
             .attested_header
+            .beacon
             .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
                 .attested_header
+                .beacon
                 .parent_root
                 .as_ref(),
         )
@@ -123,6 +139,7 @@ fn to_witness<
             zipline_witness
                 .light_client_update
                 .attested_header
+                .beacon
                 .state_root
                 .as_ref(),
         )
@@ -131,21 +148,28 @@ fn to_witness<
             zipline_witness
                 .light_client_update
                 .attested_header
+                .beacon
                 .body_root
                 .as_ref(),
         )
         .unwrap(),
     };
     args.finalized_block = ethereum_consensus::phase0::BeaconBlockHeader {
-        slot: zipline_witness.light_client_update.finalized_header.slot,
+        slot: zipline_witness
+            .light_client_update
+            .finalized_header
+            .beacon
+            .slot,
         proposer_index: zipline_witness
             .light_client_update
             .finalized_header
+            .beacon
             .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
                 .finalized_header
+                .beacon
                 .parent_root
                 .as_ref(),
         )
@@ -154,6 +178,7 @@ fn to_witness<
             zipline_witness
                 .light_client_update
                 .finalized_header
+                .beacon
                 .state_root
                 .as_ref(),
         )
@@ -162,36 +187,50 @@ fn to_witness<
             zipline_witness
                 .light_client_update
                 .finalized_header
+                .beacon
                 .body_root
                 .as_ref(),
         )
         .unwrap(),
     };
-    let mut p = args.finalized_block.clone();
-    let h = p.hash_tree_root().unwrap();
-    println!("finalized_block hash_tree_root: {:x?}", h.as_bytes());
     let fork_data = ForkData {
-        fork_version: [1, 0, 0, 1],
+        fork_version: [3, 0, 0, 1],
         genesis_validators_root: genesis_validators_root.clone(),
     };
     let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
     args.domain = signing_domain;
-    args.execution_merkle_branch = vec![vec![]];
-    args.execution_state_root = vec![];
+    args.execution_merkle_branch = zipline_witness
+        .light_client_update
+        .finalized_header
+        .execution_branch
+        .iter()
+        .map(|b| b.0.as_ref().to_vec())
+        .collect();
+    args.execution_state_root = zipline_witness
+        .light_client_update
+        .finalized_header
+        .execution
+        .clone()
+        .hash_tree_root()
+        .unwrap()
+        .as_ref()
+        .to_vec();
     args.finality_merkle_branch = zipline_witness
         .light_client_update
         .finality_branch
         .iter()
         .map(|b| b.as_ref().to_vec())
         .collect();
-    args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
+    // args.beacon_state_root = zipline_witness.light_client_update.finalized_header.state_root.clone().as_ref().to_vec();
+    // args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
     println!("beacon_state_root: {:x?}", args.beacon_state_root);
 
     args
 }
 #[rstest]
 fn test_verify(
-    #[files("../consensus-spec-tests/tests/minimal/altair/light_client/sync/pyspec_tests/deneb_store_with_legacy_data")]
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/light_client_sync")]
+    // #[files("../consensus-spec-tests/tests/minimal/altair/light_client/sync/pyspec_tests/capella_store_with_legacy_data")]
     path: PathBuf,
 ) {
     let bootstrap: LightClientBootstrap =
@@ -216,7 +255,7 @@ fn test_verify(
         .iter()
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
-                let update: LightClientUpdate = load_snappy_ssz(
+                let update: LightClientUpdateCapella = load_snappy_ssz(
                     &path
                         .join(format!("{}.ssz_snappy", update))
                         .to_str()
@@ -229,7 +268,7 @@ fn test_verify(
         })
         .collect::<Vec<_>>();
 
-    let zipline_witness = ZiplineWitness {
+    let zipline_witness = light_client_verifier::ZiplineUpdateWitnessCapella {
         committee: bootstrap.current_sync_committee.clone(),
         light_client_update: updates[0].clone(),
     };
@@ -263,34 +302,3 @@ fn load_circuit_with_data(
 
     instance
 }
-
-// #[test]
-// fn test_sync_circuit() {
-//     const K: usize = 20;
-
-//     let mut builder = ShaThreadBuilder::mock();
-//     let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
-
-//     let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
-
-//     let timer = start_timer!(|| "sync circuit mock prover");
-//     let prover = MockProver::<Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
-//     prover.assert_satisfied_par();
-//     end_timer!(timer);
-// }
-
-// #[test]
-// fn test_sync_proofgen() {
-//     const K: usize = 20;
-
-//     let (params, pk, break_points) = SyncStepCircuit::<Test, Fr>::setup(K, None);
-
-//     let mut builder = ShaThreadBuilder::prover();
-//     let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
-//     let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
-
-//     let instances = SyncStepCircuit::<Test, bn256::Fr>::instances(args);
-//     let proof = full_prover(&params, &pk, circuit, instances.clone());
-
-//     assert!(full_verifier(&params, pk.get_vk(), proof, instances))
-// }

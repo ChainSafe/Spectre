@@ -15,8 +15,8 @@ pub struct Minimal;
 impl Spec for Minimal {
     const SYNC_COMMITTEE_SIZE: usize = 32;
     const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
-    const EXECUTION_STATE_ROOT_INDEX: usize = 402;
-    const EXECUTION_STATE_ROOT_DEPTH: usize = 8;
+    const EXECUTION_STATE_ROOT_INDEX: usize = 9;
+    const EXECUTION_STATE_ROOT_DEPTH: usize = 4;
     const FINALIZED_HEADER_INDEX: usize = 105;
     const FINALIZED_HEADER_DEPTH: usize = 6;
 }
