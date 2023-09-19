@@ -317,7 +317,7 @@ fn test_step_evm_verify(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    const K: usize = 20;
+    const K: usize = 22;
     let spectre_args = read_test_files_and_gen_witness(path);
 
     let (params, pk, break_points) = SyncStepCircuit::<Minimal, bn256::Fr>::setup(K, None);
