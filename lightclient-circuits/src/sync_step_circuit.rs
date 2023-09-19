@@ -325,7 +325,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         Ok(vec![pi_field])
     }
 
-    fn instances(args: SyncStepArgs<S>) -> Vec<Vec<bn256::Fr>> {
+    pub fn instance(args: SyncStepArgs<S>) -> Vec<Vec<bn256::Fr>> {
         let mut input: [u8; 64] = [0; 64];
 
         let mut attested_slot = args.attested_block.slot.to_le_bytes().to_vec();
@@ -593,7 +593,7 @@ mod tests {
         let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
-        let instances = SyncStepCircuit::<Test, bn256::Fr>::instances(args);
+        let instances = SyncStepCircuit::<Test, bn256::Fr>::instance(args);
         let proof = full_prover(&params, &pk, circuit, instances.clone());
 
         assert!(full_verifier(&params, pk.get_vk(), proof, instances))
@@ -608,7 +608,7 @@ mod tests {
         let mut builder = ShaThreadBuilder::prover();
         let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
-        let instances = SyncStepCircuit::<Test, bn256::Fr>::instances(args);
+        let instances = SyncStepCircuit::<Test, bn256::Fr>::instance(args);
 
         let num_instance = vec![instances[0].len()];
         let deployment_code = gen_evm_verifier_shplonk::<

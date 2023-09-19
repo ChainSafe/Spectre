@@ -17,8 +17,9 @@ use light_client_verifier::{ZiplineUpdateWitness, ZiplineUpdateWitnessCapella};
 use lightclient_circuits::builder::Eth2CircuitBuilder;
 use lightclient_circuits::gadget::crypto::ShaThreadBuilder;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
-use lightclient_circuits::util::ThreadBuilderBase;
+use lightclient_circuits::util::{AppCircuitExt, ThreadBuilderBase};
 use lightclient_circuits::witness::SyncStepArgs;
+use rstest::fixture;
 use rstest::rstest;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
@@ -225,12 +226,8 @@ fn to_witness<
     // args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
     args
 }
-#[rstest]
-fn test_verify(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-    #[exclude("deneb*")]
-    path: PathBuf,
-) {
+
+fn read_test_files_and_gen_witness(path: PathBuf) -> SyncStepArgs<Minimal> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(&path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
     let meta: TestMeta = load_yaml(&path.join("meta.yaml").to_str().unwrap());
@@ -265,10 +262,17 @@ fn test_verify(
         committee: bootstrap.current_sync_committee.clone(),
         light_client_update: updates[0].clone(),
     };
-
+    to_witness(&zipline_witness, genesis_validators_root.clone())
+}
+#[rstest]
+fn test_step_mock(
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+    #[exclude("deneb*")]
+    path: PathBuf,
+) {
+    let spectre_args = read_test_files_and_gen_witness(path);
     const K: usize = 20;
     let mut builder = ShaThreadBuilder::mock();
-    let spectre_args = to_witness(&zipline_witness, genesis_validators_root.clone());
     let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
 
     let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
@@ -276,6 +280,67 @@ fn test_verify(
     let timer = start_timer!(|| "sync circuit mock prover");
     let prover = MockProver::<bn256::Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
     prover.assert_satisfied_par();
+    end_timer!(timer);
+}
+
+#[rstest]
+fn test_step_proofgen(
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+    #[exclude("deneb*")]
+    path: PathBuf,
+) {
+    const K: usize = 20;
+    let spectre_args = read_test_files_and_gen_witness(path);
+
+    let (params, pk, break_points) = SyncStepCircuit::<Minimal, bn256::Fr>::setup(K, None);
+
+    let mut builder = ShaThreadBuilder::prover();
+    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
+    let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+
+    let instances = SyncStepCircuit::<Minimal, bn256::Fr>::instance(spectre_args);
+    let timer = start_timer!(|| "sync circuit prover");
+    let proof = lightclient_circuits::util::full_prover(&params, &pk, circuit, instances.clone());
+    end_timer!(timer);
+    let timer = start_timer!(|| "sync circuit verifier");
+    assert!(lightclient_circuits::util::full_verifier(
+        &params,
+        pk.get_vk(),
+        proof,
+        instances
+    ));
+    end_timer!(timer);
+}
+#[rstest]
+fn test_step_evm_verify(
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+    #[exclude("deneb*")]
+    path: PathBuf,
+) {
+    const K: usize = 20;
+    let spectre_args = read_test_files_and_gen_witness(path);
+
+    let (params, pk, break_points) = SyncStepCircuit::<Minimal, bn256::Fr>::setup(K, None);
+
+    let mut builder = ShaThreadBuilder::prover();
+    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
+    let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+
+    let instances = SyncStepCircuit::<Minimal, bn256::Fr>::instance(spectre_args);
+    let num_instance = vec![instances[0].len()];
+
+    let timer = start_timer!(|| "sync evm prover");
+
+    let deployment_code = snark_verifier_sdk::evm::gen_evm_verifier_shplonk::<
+        Eth2CircuitBuilder<bn256::Fr, ShaThreadBuilder<bn256::Fr>>,
+    >(&params, pk.get_vk(), num_instance, None);
+
+    let proof =
+        snark_verifier_sdk::evm::gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
+
+    end_timer!(timer);
+    let timer = start_timer!(|| "sync evm verify");
+    snark_verifier_sdk::evm::evm_verify(deployment_code, instances, proof);
     end_timer!(timer);
 }
 
