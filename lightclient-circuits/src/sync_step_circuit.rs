@@ -212,29 +212,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .iter()
             .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        println!(
-            "circuit beacon_state_root: {:?}",
-            hex::encode(
-                &bs_root
-                    .iter()
-                    .map(|v| v.value().get_lower_32() as u8)
-                    .collect_vec()
-            )
-        );
-        println!("attested Beacon block header: {:?}", args.attested_block);
-        println!("finalized Beacon block header: {:?}", args.finalized_block);
-        println!(
-            "circuit finality_merkle_branch: {:?}",
-            args.finality_merkle_branch
-                .iter()
-                .map(|v| hex::encode(v))
-                .collect_vec()
-        );
 
-        println!(
-            "Finality branch length {}",
-            args.finality_merkle_branch.len()
-        );
         // verify finalized block header against current beacon state merkle proof
         verify_merkle_proof(
             thread_pool,

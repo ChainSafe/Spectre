@@ -223,14 +223,12 @@ fn to_witness<
         .collect();
     // args.beacon_state_root = zipline_witness.light_client_update.finalized_header.state_root.clone().as_ref().to_vec();
     // args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
-    println!("beacon_state_root: {:x?}", args.beacon_state_root);
-
     args
 }
 #[rstest]
 fn test_verify(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/light_client_sync")]
-    // #[files("../consensus-spec-tests/tests/minimal/altair/light_client/sync/pyspec_tests/capella_store_with_legacy_data")]
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+    #[exclude("deneb*")]
     path: PathBuf,
 ) {
     let bootstrap: LightClientBootstrap =
@@ -244,11 +242,6 @@ fn test_verify(
             .as_slice(),
     )
     .unwrap();
-    let fork_data = ForkData {
-        fork_version: [1, 0, 0, 1],
-        genesis_validators_root: genesis_validators_root.clone(),
-    };
-    println!("fork_data: 0x{:?}", hex::encode(fork_data.fork_digest()));
 
     // let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
     let updates = steps
