@@ -106,8 +106,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let pubkey_affines = pubkeys_uncompressed
             .iter()
             .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
-                    .unwrap()
+                G1Affine::from_compressed_unchecked(&bytes.as_slice().try_into().unwrap()).unwrap()
             })
             .collect_vec();
         let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines).unwrap();
