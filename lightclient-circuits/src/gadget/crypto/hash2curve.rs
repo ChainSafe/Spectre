@@ -631,7 +631,7 @@ mod test {
     use crate::util::{print_fq2_dev, Challenges, IntoWitness};
 
     use super::*;
-    use eth_types::{Mainnet, Test};
+    use eth_types::{Mainnet, Testnet};
     use halo2_base::gates::builder::FlexGateConfigParams;
     use halo2_base::gates::range::RangeConfig;
     use halo2_base::safe_types::RangeChip;
@@ -658,7 +658,7 @@ mod test {
         let range = RangeChip::default(8);
         let sha256 = Sha256Chip::new(&range);
 
-        let h2c_chip = HashToCurveChip::<Test, F, _>::new(&sha256);
+        let h2c_chip = HashToCurveChip::<Testnet, F, _>::new(&sha256);
         let fp_chip = halo2_ecc::bls12_381::FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
 
         for input in input_vector {

@@ -5,7 +5,7 @@ use halo2_base::{
     gates::{
         builder::{
             assign_threads_in, FlexGateConfigParams, KeygenAssignments,
-            MultiPhaseThreadBreakPoints, ThreadBreakPoints,
+            MultiPhaseThreadBreakPoints, ThreadBreakPoints, CircuitBuilderStage,
         },
         range::{RangeConfig, RangeStrategy},
     },
@@ -57,31 +57,32 @@ pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
 }
 
 impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
-    /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
-    pub fn keygen(builder: ThreadBuilder) -> Self {
+    pub fn new(builder: ThreadBuilder, break_points: Option<MultiPhaseThreadBreakPoints>) -> Self {
         Self {
-            builder: RefCell::new(builder.unknown(true)),
-            break_points: RefCell::new(vec![]),
+            builder: RefCell::new(builder),
+            break_points: RefCell::new(break_points.unwrap_or_default()),
             _f: PhantomData,
         }
+    }
+
+    pub fn from_stage(builder: ThreadBuilder, break_points: Option<MultiPhaseThreadBreakPoints>, stage: CircuitBuilderStage) -> Self {
+        Self::new(builder.unknown(stage == CircuitBuilderStage::Keygen), break_points)
+    }
+
+    /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
+    pub fn keygen(builder: ThreadBuilder) -> Self {
+        Self::new(builder.unknown(true), None)
     }
 
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
     pub fn mock(builder: ThreadBuilder) -> Self {
-        Self {
-            builder: RefCell::new(builder.unknown(false)),
-            break_points: RefCell::new(vec![]),
-            _f: PhantomData,
-        }
+        Self::new(builder.unknown(false), None)
+
     }
 
     /// Creates a new [ShaCircuitBuilder].
     pub fn prover(builder: ThreadBuilder, break_points: MultiPhaseThreadBreakPoints) -> Self {
-        Self {
-            builder: RefCell::new(builder.unknown(false)),
-            break_points: RefCell::new(break_points),
-            _f: PhantomData,
-        }
+        Self::new(builder.unknown(false), Some(break_points))
     }
 
     pub fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
