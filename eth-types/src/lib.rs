@@ -3,7 +3,7 @@
 #![feature(associated_type_defaults)]
 #![feature(generic_const_exprs)]
 mod spec;
-pub use spec::{Mainnet, Spec, Test};
+pub use spec::{Spec, Minimal, Testnet, Mainnet};
 
 mod curve;
 pub use curve::{AppCurveExt, HashCurveExt};
