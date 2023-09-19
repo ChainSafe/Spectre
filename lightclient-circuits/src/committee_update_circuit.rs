@@ -307,14 +307,14 @@ mod tests {
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
         break_points: MultiPhaseThreadBreakPoints,
-    ) -> Snark {
+    ) -> (Snark, CommitteeRotationArgs<Test, bn256::Fr>) {
         let mut thread_pool = ShaBitThreadBuilder::prover();
 
-        let (assigned_instances, _args) = load_circuit_with_data(&mut thread_pool, k);
+        let (assigned_instances, args) = load_circuit_with_data(&mut thread_pool, k);
 
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, thread_pool, break_points);
 
-        gen_snark_shplonk(params, pk, circuit, None::<String>)
+        (gen_snark_shplonk(params, pk, circuit, None::<String>), args)
     }
 
     #[test]
@@ -355,7 +355,7 @@ mod tests {
         const K: usize = 17;
         let (params_app, pk_app, break_points) = CommitteeUpdateCircuit::<Test, Fr>::setup(K, None);
 
-        let snark = gen_application_snark(K, &params_app, &pk_app, break_points);
+        let (snark, args) = gen_application_snark(K, &params_app, &pk_app, break_points);
 
         let agg_config = AggregationConfigParams::from_path(path);
 
@@ -377,14 +377,16 @@ mod tests {
             iter::once(snark),
         );
 
-        let num_instances = agg_circuit.num_instance();
-        let instances = agg_circuit.instances();
+        let instances =
+            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
+        let num_instances = instances[0].len();
+
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
         let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
             &params,
             pk.get_vk(),
-            num_instances,
+            vec![num_instances],
             None,
         );
         println!("deployment_code size: {}", deployment_code.len());
