@@ -153,3 +153,41 @@ pub async fn read_rotation_args<S: Spec>(
         _spec: PhantomData,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use eth_types::Testnet;
+    use lightclient_circuits::{
+        sync_step_circuit::SyncStepCircuit,
+        util::{gen_srs, AppCircuit},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_sync_step_snark_sepolia() {
+        const K: u32 = 21;
+        let params = gen_srs(K);
+
+        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params,
+            "../build/sync_step.pkey",
+            "./config/sync_step.json",
+            false,
+            &SyncStepArgs::<Testnet>::default(),
+        );
+
+        let witness = fetch_step_args::<Testnet>("http://3.128.78.74:5052".to_string())
+            .await
+            .unwrap();
+
+        SyncStepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+            &params,
+            &pk,
+            "../lightclient-circuits/config/sync_step.json",
+            None::<String>,
+            &witness,
+        )
+        .unwrap();
+    }
+}

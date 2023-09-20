@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_committee_update_circuit() {
+    fn test_sync_circuit() {
         const K: u32 = 21;
         let params = gen_srs(K);
 
@@ -443,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn test_committee_update_proofgen() {
+    fn test_sync_proofgen() {
         const K: u32 = 21;
         let params = gen_srs(K);
 
@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn test_sync_evm_verify() {
-        const K: u32 = 22;
+        const K: u32 = 21;
         let params = gen_srs(K);
 
         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
