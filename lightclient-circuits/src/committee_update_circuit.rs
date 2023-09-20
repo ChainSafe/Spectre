@@ -1,22 +1,10 @@
-use std::{
-    cell::{Ref, RefCell},
-    collections::HashMap,
-    env::{set_var, var},
-    fs, iter,
-    marker::PhantomData,
-    ops::Neg,
-    path::Path,
-    rc::Rc,
-    vec,
-};
-
 use crate::{
     builder::Eth2CircuitBuilder,
     gadget::crypto::{
         calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
         HashToCurveCache, HashToCurveChip, Sha256ChipWide, ShaBitThreadBuilder, ShaCircuitBuilder,
     },
-    poseidon::{fq_array_poseidon, poseidon_sponge},
+    poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
     ssz_merkle::ssz_merkleize_chunks,
     util::{
         decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
@@ -63,6 +51,17 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::Merkleized;
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    env::{set_var, var},
+    fs, iter,
+    marker::PhantomData,
+    ops::Neg,
+    path::Path,
+    rc::Rc,
+    vec,
+};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -100,7 +99,18 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
         let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
 
-        Ok(vec![])
+        Ok(vec![poseidon_commit])
+    }
+
+    pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
+        let pubkey_affines = pubkeys_uncompressed
+            .iter()
+            .map(|bytes| {
+                G1Affine::from_compressed_unchecked(&bytes.as_slice().try_into().unwrap()).unwrap()
+            })
+            .collect_vec();
+        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines).unwrap();
+        vec![vec![poseidon_commitment]]
     }
 
     fn decode_pubkeys_x<'a, I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
@@ -265,7 +275,10 @@ mod tests {
     fn load_circuit_with_data(
         thread_pool: &mut ShaBitThreadBuilder<Fr>,
         k: usize,
-    ) -> Vec<AssignedValue<Fr>> {
+    ) -> (
+        Vec<AssignedValue<Fr>>,
+        CommitteeRotationArgs<Test, bn256::Fr>,
+    ) {
         let args = {
             let pubkeys_compressed: Vec<Vec<u8>> =
                 serde_json::from_slice(&fs::read("../test_data/committee_pubkeys.json").unwrap())
@@ -280,15 +293,13 @@ mod tests {
         let circuit = CommitteeUpdateCircuit::<Test, bn256::Fr>::default();
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
 
-        circuit.synthesize(thread_pool, &range, &args).unwrap();
+        let instance = circuit.synthesize(thread_pool, &range, &args).unwrap();
 
         let config = thread_pool.config(k, None);
         set_var("LOOKUP_BITS", (config.k - 1).to_string());
         println!("params used: {:?}", config);
 
-        let instance = vec![];
-
-        instance
+        (instance, args)
     }
 
     fn gen_application_snark(
@@ -296,21 +307,21 @@ mod tests {
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
         break_points: MultiPhaseThreadBreakPoints,
-    ) -> Snark {
+    ) -> (Snark, CommitteeRotationArgs<Test, bn256::Fr>) {
         let mut thread_pool = ShaBitThreadBuilder::prover();
 
-        let assigned_instances = load_circuit_with_data(&mut thread_pool, k);
+        let (assigned_instances, args) = load_circuit_with_data(&mut thread_pool, k);
 
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, thread_pool, break_points);
 
-        gen_snark_shplonk(params, pk, circuit, None::<String>)
+        (gen_snark_shplonk(params, pk, circuit, None::<String>), args)
     }
 
     #[test]
     fn test_committee_update_circuit() {
         const K: usize = 18;
         let mut builder = ShaBitThreadBuilder::mock();
-        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
 
         let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
 
@@ -327,11 +338,12 @@ mod tests {
         let (params, pk, break_points) = CommitteeUpdateCircuit::<Test, Fr>::setup(K, None);
 
         let mut builder = ShaBitThreadBuilder::prover();
-        let assigned_instances = load_circuit_with_data(&mut builder, K);
+        let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
 
         let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
 
-        let instances = circuit.instances();
+        let instances =
+            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
         let proof = full_prover(&params, &pk, circuit, instances.clone());
 
         assert!(full_verifier(&params, pk.get_vk(), proof, instances))
@@ -343,7 +355,7 @@ mod tests {
         const K: usize = 17;
         let (params_app, pk_app, break_points) = CommitteeUpdateCircuit::<Test, Fr>::setup(K, None);
 
-        let snark = gen_application_snark(K, &params_app, &pk_app, break_points);
+        let (snark, args) = gen_application_snark(K, &params_app, &pk_app, break_points);
 
         let agg_config = AggregationConfigParams::from_path(path);
 
@@ -365,14 +377,16 @@ mod tests {
             iter::once(snark),
         );
 
-        let num_instances = agg_circuit.num_instance();
-        let instances = agg_circuit.instances();
+        let instances =
+            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
+        let num_instances = instances[0].len();
+
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
         let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
             &params,
             pk.get_vk(),
-            num_instances,
+            vec![num_instances],
             None,
         );
         println!("deployment_code size: {}", deployment_code.len());
