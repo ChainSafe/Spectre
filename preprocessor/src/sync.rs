@@ -4,16 +4,12 @@ use eth_types::Spec;
 use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
-use ssz_rs::Merkleized;
+use ssz_rs::{Merkleized, Serialize};
 use sync_committee_primitives::{
-    consensus_types::BeaconBlockHeader,
-    domains::DomainType,
-    util::{compute_domain, compute_signing_root},
+    consensus_types::BeaconBlockHeader, domains::DomainType, types::LightClientState,
+    util::compute_domain,
 };
 use sync_committee_prover::SyncCommitteeProver;
-use sync_committee_verifier::{
-    signature_verification::verify_aggregate_signature, LightClientState,
-};
 use tokio::fs;
 
 pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStepArgs<S>> {
@@ -23,6 +19,12 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .fetch_beacon_state(state_id)
         .await
         .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
+
+    let mut bf = vec![];
+    state.serialize(&mut bf).unwrap();
+    fs::write("../test_data/beacon_state_head", bf)
+        .await
+        .unwrap();
 
     let mut finalized_block = client.fetch_block("finalized").await.unwrap();
 
@@ -74,49 +76,64 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
     )
     .map_err(|e| eyre::eyre!("domain computation error: {:?}", e))?;
 
-    {
-        let sig_root =
-            compute_signing_root(&mut light_client_update.attested_header, domain).unwrap();
-        let sync_committee_apk = state.current_sync_committee.aggregate_public_key.clone();
-        let non_participant_pubkeys = light_client_update
-            .sync_aggregate
-            .sync_committee_bits
-            .iter()
-            .zip(state.current_sync_committee.public_keys.iter())
-            .filter_map(|(bit, key)| if !(*bit) { Some(key.clone()) } else { None })
-            .collect::<Vec<_>>();
-        verify_aggregate_signature(
-            &sync_committee_apk,
-            &non_participant_pubkeys,
-            sig_root.0.to_vec(),
-            &light_client_update.sync_aggregate.sync_committee_signature,
-        )
-        .unwrap();
-    }
-
-    let beacon_state_root = state
+    let state_root = state
         .hash_tree_root()
         .map_err(|e| eyre::eyre!("merkleization error: {:?}", e))?;
 
-    let finality_branch = light_client_update
-        .finality_proof
-        .finality_branch
-        .iter()
-        .map(|n| n.as_bytes().to_vec())
-        .collect_vec();
+    println!("state_root: {:?}", hex::encode(state_root.as_bytes()));
 
-    let execution_state_root = light_client_update
-        .execution_payload
-        .state_root
-        .as_bytes()
-        .to_vec();
+    let mut finality_branch =
+        ssz_rs::generate_proof(&mut state, &[S::FINALIZED_HEADER_INDEX]).unwrap();
 
-    let execution_payload_branch = light_client_update
+    // FIXME: `ssz_rs::generate_proof` generates branch without `finalized_checkpoint.epoch` leaf. Why?
+    finality_branch.insert(
+        0,
+        state.finalized_checkpoint.epoch.hash_tree_root().unwrap(),
+    );
+
+    let finalized_header_root = light_client_update
+        .finalized_header
+        .hash_tree_root()
+        .unwrap();
+
+    assert!(
+        ssz_rs::verify_merkle_proof(
+            &finalized_header_root,
+            &finality_branch,
+            &ssz_rs::GeneralizedIndex(S::FINALIZED_HEADER_INDEX),
+            &state_root,
+        ),
+        "Execution payload merkle proof verification failed"
+    );
+
+    // TODO: why execution payload proof from `light_client_update` is invalid for S::EXECUTION_STATE_ROOT_INDEX?
+    // let execution_payload_branch = light_client_update
+    //     .execution_payload
+    //     .execution_payload_branch
+    //     .iter()
+    //     .take(4)
+    //     .map(|n| n.as_bytes().to_vec())
+    //     .collect_vec();
+
+    let execution_payload_branch =
+        ssz_rs::generate_proof(&mut finalized_block.body, &[S::EXECUTION_STATE_ROOT_INDEX])
+            .unwrap();
+
+    let execution_payload_root = finalized_block
+        .body
         .execution_payload
-        .execution_payload_branch
-        .iter()
-        .map(|n| n.as_bytes().to_vec())
-        .collect_vec();
+        .hash_tree_root()
+        .unwrap();
+
+    assert!(
+        ssz_rs::verify_merkle_proof(
+            &execution_payload_root,
+            &execution_payload_branch,
+            &ssz_rs::GeneralizedIndex(S::EXECUTION_STATE_ROOT_INDEX),
+            &finalized_header.body_root,
+        ),
+        "Execution payload merkle proof verification failed"
+    );
 
     let mut signature_compressed = light_client_update
         .sync_aggregate
@@ -139,10 +156,16 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         attested_header: light_client_update.attested_header,
         finalized_header: light_client_update.finalized_header,
         domain,
-        execution_payload_branch,
-        execution_state_root,
-        finality_branch,
-        beacon_state_root: beacon_state_root.as_bytes().to_vec(),
+        execution_payload_branch: execution_payload_branch
+            .iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect_vec(),
+        execution_payload_root: execution_payload_root.0.to_vec(),
+        finality_branch: finality_branch
+            .iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect_vec(),
+        beacon_state_root: state_root.as_bytes().to_vec(),
         _spec: PhantomData,
     };
 

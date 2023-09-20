@@ -99,8 +99,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
             .collect_vec();
 
-        let execution_state_root: HashInputChunk<QuantumCell<F>> =
-            args.execution_state_root.clone().into_witness();
+        let execution_payload_root: HashInputChunk<QuantumCell<F>> =
+            args.execution_payload_root.clone().into_witness();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -153,7 +153,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
             .collect_vec();
 
-        let finalized_header = ssz_merkleize_chunks(
+        let finalized_header_root = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
             [
@@ -193,28 +193,28 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
         // verify finilized block header against current beacon state merkle proof
-        // verify_merkle_proof(
-        //     thread_pool,
-        //     &sha256_chip,
-        //     args.finality_merkle_branch
-        //         .iter()
-        //         .map(|w| w.clone().into_witness()),
-        //     finalized_header.into(),
-        //     &beacon_state_root,
-        //     S::FINALIZED_HEADER_INDEX,
-        // )?;
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.finality_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            finalized_header_root.into(),
+            &beacon_state_root,
+            S::FINALIZED_HEADER_INDEX,
+        )?;
 
-        // // verify execution state root against finilized block body merkle proof
-        // verify_merkle_proof(
-        //     thread_pool,
-        //     &sha256_chip,
-        //     args.execution_merkle_branch
-        //         .iter()
-        //         .map(|w| w.clone().into_witness()),
-        //     execution_state_root,
-        //     &finilized_block_body_root,
-        //     S::EXECUTION_STATE_ROOT_INDEX,
-        // )?;
+        // verify execution state root against finilized block body merkle proof
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.execution_payload_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+                execution_payload_root,
+            &finilized_block_body_root,
+            S::EXECUTION_STATE_ROOT_INDEX,
+        )?;
 
         let instances = vec![];
 

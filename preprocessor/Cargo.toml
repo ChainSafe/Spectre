@@ -11,12 +11,12 @@ ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b
 halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
 sync-committee-prover = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
 sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
-sync-committee-verifier = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
 
 #crypto
 group = "0.12"
 
 # misc
+hex = "0.4"
 log = "=0.4.20"
 eyre = "0.6"
 tokio = { version = "1", features = ["full"]}
@@ -42,3 +42,4 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
     "halo2-pse",
 ] }
 ark-std = { version = "0.4.0", features = ["print-trace"] }
+# sync-committee-verifier = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }

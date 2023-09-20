@@ -25,7 +25,7 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub execution_payload_branch: Vec<Vec<u8>>,
 
-    pub execution_state_root: Vec<u8>,
+    pub execution_payload_root: Vec<u8>,
 
     pub finality_branch: Vec<Vec<u8>>,
 
@@ -83,7 +83,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             finality_branch: finality_merkle_branch,
             beacon_state_root,
             execution_payload_branch: execution_merkle_branch,
-            execution_state_root,
+            execution_payload_root: execution_state_root,
             _spec: PhantomData,
         }
     }
