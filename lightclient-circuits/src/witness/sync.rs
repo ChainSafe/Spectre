@@ -23,11 +23,11 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub domain: [u8; 32],
 
-    pub execution_merkle_branch: Vec<Vec<u8>>,
+    pub execution_payload_branch: Vec<Vec<u8>>,
 
     pub execution_state_root: Vec<u8>,
 
-    pub finality_merkle_branch: Vec<Vec<u8>>,
+    pub finality_branch: Vec<Vec<u8>>,
 
     pub beacon_state_root: Vec<u8>,
 
@@ -80,9 +80,9 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             ],
             attested_header: BeaconBlockHeader::default(),
             finalized_header: finalized_block,
-            finality_merkle_branch,
+            finality_branch: finality_merkle_branch,
             beacon_state_root,
-            execution_merkle_branch,
+            execution_payload_branch: execution_merkle_branch,
             execution_state_root,
             _spec: PhantomData,
         }

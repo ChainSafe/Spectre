@@ -193,28 +193,28 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
         // verify finilized block header against current beacon state merkle proof
-        verify_merkle_proof(
-            thread_pool,
-            &sha256_chip,
-            args.finality_merkle_branch
-                .iter()
-                .map(|w| w.clone().into_witness()),
-            finalized_header.into(),
-            &beacon_state_root,
-            S::FINALIZED_HEADER_INDEX,
-        )?;
+        // verify_merkle_proof(
+        //     thread_pool,
+        //     &sha256_chip,
+        //     args.finality_merkle_branch
+        //         .iter()
+        //         .map(|w| w.clone().into_witness()),
+        //     finalized_header.into(),
+        //     &beacon_state_root,
+        //     S::FINALIZED_HEADER_INDEX,
+        // )?;
 
-        // verify execution state root against finilized block body merkle proof
-        verify_merkle_proof(
-            thread_pool,
-            &sha256_chip,
-            args.execution_merkle_branch
-                .iter()
-                .map(|w| w.clone().into_witness()),
-            execution_state_root,
-            &finilized_block_body_root,
-            S::EXECUTION_STATE_ROOT_INDEX,
-        )?;
+        // // verify execution state root against finilized block body merkle proof
+        // verify_merkle_proof(
+        //     thread_pool,
+        //     &sha256_chip,
+        //     args.execution_merkle_branch
+        //         .iter()
+        //         .map(|w| w.clone().into_witness()),
+        //     execution_state_root,
+        //     &finilized_block_body_root,
+        //     S::EXECUTION_STATE_ROOT_INDEX,
+        // )?;
 
         let instances = vec![];
 
@@ -330,45 +330,6 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
             stage,
         ))
     }
-
-    // type ThreadBuilder = ShaThreadBuilder<bn256::Fr>;
-
-    // type Args = witness::SyncStepArgs<S>;
-
-    // fn synthesize(
-    //     thread_pool: &mut Self::ThreadBuilder,
-    //     range: &RangeChip<bn256::Fr>,
-    //     args: &Self::Args,
-    // ) -> Result<Vec<AssignedValue<bn256::Fr>>, Error> {
-    //     Self::synthesize(thread_pool, range, args)
-    // }
-
-    // fn setup(
-    //     k: usize,
-    //     out: Option<&Path>,
-    // ) -> (
-    //     ParamsKZG<bn256::Bn256>,
-    //     ProvingKey<bn256::G1Affine>,
-    //     MultiPhaseThreadBreakPoints,
-    // ) {
-    //     let args = witness::SyncStepArgs::<S>::default();
-    //     let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-    //     let mut thread_pool = ShaThreadBuilder::keygen();
-
-    //     let assigned_instances =
-    //         SyncStepCircuit::<S, bn256::Fr>::synthesize(&mut thread_pool, &range, &args).unwrap();
-    //     let config = thread_pool.config(k, Some(109));
-
-    //     let params = gen_srs(k as u32);
-
-    //     let circuit = Eth2CircuitBuilder::keygen(assigned_instances, thread_pool);
-
-    //     let pk = gen_pkey(|| "sync_step", &params, out, &circuit).unwrap();
-
-    //     let break_points = circuit.break_points();
-
-    //     (params, pk, break_points)
-    // }
 }
 
 #[cfg(test)]

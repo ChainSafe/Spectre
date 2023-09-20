@@ -7,11 +7,11 @@ edition = "2021"
 
 [dependencies]
 # ethereum
-# ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "46ca171" }
 ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
 halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
 sync-committee-prover = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
 sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
+sync-committee-verifier = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
 
 #crypto
 group = "0.12"
@@ -22,8 +22,23 @@ eyre = "0.6"
 tokio = { version = "1", features = ["full"]}
 itertools = "0.11.0"
 serde_json = "1.0.78"
-# tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 # local
 eth-types = { path = "../eth-types" }
 lightclient-circuits = { path = "../lightclient-circuits" }
+
+[dev-dependencies]
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
+    "dev-graph",
+] }
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+    "display",
+    "loader_halo2",
+    "loader_evm",
+    "halo2-pse",
+] }
+ark-std = { version = "0.4.0", features = ["print-trace"] }
