@@ -28,7 +28,7 @@ impl PinnableCircuit<Fr> for AggregationCircuit {
 impl AppCircuit for AggregationCircuit {
     type Pinning = AggregationConfigPinning;
 
-    type Witness = Snark;
+    type Witness = Vec<Snark>;
 
     fn create_circuit(
         stage: CircuitBuilderStage,
@@ -42,7 +42,7 @@ impl AppCircuit for AggregationCircuit {
             pinning.map(|p| p.break_points),
             lookup_bits,
             params,
-            iter::once(snark.clone()),
+            snark.clone(),
         );
 
         match stage {

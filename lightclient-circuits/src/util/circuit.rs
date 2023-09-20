@@ -169,12 +169,12 @@ pub trait AppCircuit: Sized {
     fn gen_evm_verifier_shplonk(
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
-        yul_path: impl AsRef<Path>,
+        yul_path: Option<impl AsRef<Path>>,
         witness: &Self::Witness,
     ) -> Result<Vec<u8>, Error> {
         let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, params, witness)?;
         let deployment_code =
-            custom_gen_evm_verifier_shplonk(params, pk.get_vk(), &circuit, Some(yul_path));
+            custom_gen_evm_verifier_shplonk(params, pk.get_vk(), &circuit, yul_path);
 
         Ok(deployment_code)
     }

@@ -74,9 +74,9 @@ async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<()> {
 
             generic_circuit_cli::<AggregationCircuit, _, _>(
                 &args.aggregation,
-                |_| async { Ok(snark.clone()) },
+                |_| async { Ok(vec![snark.clone()]) },
                 "aggregation",
-                snark.clone(),
+                vec![snark.clone()],
             )
             .await
         }
@@ -134,7 +134,7 @@ async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            Circuit::gen_evm_verifier_shplonk(&params, &pk, &args.path_out, &default_witness)
+            Circuit::gen_evm_verifier_shplonk(&params, &pk, Some(&args.path_out), &default_witness)
                 .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
         }
         Out::Calldata => {
