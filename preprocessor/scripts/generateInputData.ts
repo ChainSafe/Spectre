@@ -107,7 +107,7 @@ let beaconBlockBody = {
 
 let beaconBlockTree = ssz.capella.BeaconBlockBody.toView(beaconBlockBody);
 
-let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload", "stateRoot"]).gindex;
+let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload"]).gindex;
 
 let execMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execRootGindex }) as SingleProof;
 
@@ -173,9 +173,9 @@ let input = {
     attestedHeader: attestedBlockJson,
     finalizedHeader: finilizedBlockJson,
     signatureCompressed: syncSigBytes,
-    executionMerkleBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
+    executionPayloadBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
     executionStateRoot: beaconBlockBody.executionPayload.stateRoot,
-    finalityMerkleBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
+    finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
     beaconStateRoot: Array.from(beaconStateRoot),
 };
 

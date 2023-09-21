@@ -51,5 +51,9 @@ snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", bran
 ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main", default-features = false }
 
 [patch."https://github.com/polytope-labs/sync-committee-rs"]
-sync-committee-prover = { path = "../sync-committee-rs/prover", features=["testnet"] }
-sync-committee-primitives = { path = "../sync-committee-rs/primitives", features=["testnet"] }
+sync-committee-prover = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz", features = [
+    "testnet",
+] }
+sync-committee-primitives = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz", features = [
+    "testnet",
+] }

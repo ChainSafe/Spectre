@@ -1,3 +1,5 @@
+use std::{env::var, marker::PhantomData, vec};
+
 use crate::{
     builder::Eth2CircuitBuilder,
     gadget::crypto::{
@@ -85,9 +87,10 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
         let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
-        let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
+        // let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
 
-        Ok(vec![poseidon_commit])
+        // Ok(vec![poseidon_commit])
+        Ok(vec![])
     }
 
     pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
@@ -285,15 +288,14 @@ mod tests {
     fn gen_application_snark(
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
+        witness: &CommitteeRotationArgs<Testnet, Fr>,
     ) -> Snark {
-        let witness = load_circuit_args();
-
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             params,
             pk,
             "./config/committee_update.json",
             None::<String>,
-            &witness,
+            witness,
         )
         .unwrap()
     }
@@ -366,8 +368,8 @@ mod tests {
             false,
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
-
-        let snark = gen_application_snark(&params_app, &pk_app);
+        let witness = load_circuit_args();
+        let snark = gen_application_snark(&params_app, &pk_app, &witness);
 
         let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());
@@ -391,9 +393,12 @@ mod tests {
         )
         .unwrap();
 
-        let instances =
-            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
-        let num_instances = instances[0].len();
+        // let instances =
+        //     CommitteeUpdateCircuit::<Testnet, bn256::Fr>::instance(witness.pubkeys_compressed);
+        // let num_instances = instances[0].len();
+        
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
 
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());

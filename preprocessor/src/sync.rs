@@ -80,8 +80,6 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .hash_tree_root()
         .map_err(|e| eyre::eyre!("merkleization error: {:?}", e))?;
 
-    println!("state_root: {:?}", hex::encode(state_root.as_bytes()));
-
     let mut finality_branch =
         ssz_rs::generate_proof(&mut state, &[S::FINALIZED_HEADER_INDEX]).unwrap();
 
