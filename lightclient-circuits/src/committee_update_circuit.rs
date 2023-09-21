@@ -394,8 +394,11 @@ mod tests {
         .unwrap();
 
         // TODO: Figure out what the first 12 elements of the instances are.
-        let instances = agg_circuit.instance();
+        let instances = agg_circuit.instances();
         let num_instances = agg_circuit.num_instance();
+
+        println!("num_instances: {:?}", num_instances);
+        println!("instances: {:?}", instances);
 
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
@@ -407,6 +410,6 @@ mod tests {
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
-        evm_verify(deployment_code, vec![instances], proof);
+        evm_verify(deployment_code, instances, proof);
     }
 }

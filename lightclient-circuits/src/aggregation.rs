@@ -40,7 +40,7 @@ impl AppCircuit for AggregationCircuit {
         snark: &Self::Witness,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, halo2_proofs::plonk::Error> {
         let lookup_bits = params.k() as usize - 1;
-        let circuit = AggregationCircuit::new::<SHPLONK>(
+        let mut circuit = AggregationCircuit::new::<SHPLONK>(
             stage,
             pinning.map(|p| p.break_points),
             lookup_bits,
@@ -49,7 +49,9 @@ impl AppCircuit for AggregationCircuit {
         );
 
         match stage {
-            CircuitBuilderStage::Prover => {}
+            CircuitBuilderStage::Prover => {
+                circuit.expose_previous_instances(false);
+            }
             _ => {
                 circuit.config(params.k(), Some(10));
                 set_var("LOOKUP_BITS", lookup_bits.to_string());
