@@ -26,12 +26,12 @@ halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "dev/
 # halo2curves = { path = "../halo2curves" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "d3455345c40fdee4462e400b55b94559c6d494e9", default-features = false, features = [
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false, features = [
     "halo2-pse",
     "display",
 ] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "d3455345c40fdee4462e400b55b94559c6d494e9", default-features = false }
-poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "d3455345c40fdee4462e400b55b94559c6d494e9", default-features = false }
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false }
+poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "03c7baedeae208b21359e542b8683644b3eb1ac2", default-features = false }
 
 # halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
 #     "halo2-pse",

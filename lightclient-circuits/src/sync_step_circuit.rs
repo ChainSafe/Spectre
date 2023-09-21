@@ -16,7 +16,7 @@ use crate::{
         calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
         HashToCurveCache, HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
-    poseidon::{fq_array_poseidon, poseidon_sponge},
+    poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
@@ -37,8 +37,9 @@ use halo2_base::{
         range::{RangeConfig, RangeStrategy},
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    utils::{fs::gen_srs, CurveAffineExt},
-    AssignedValue, Context, QuantumCell,
+    utils::{decompose, fe_to_bigint, fe_to_biguint, fs::gen_srs, CurveAffineExt, ScalarField},
+    AssignedValue, Context,
+    QuantumCell::{self, Witness},
 };
 use halo2_ecc::{
     bigint::ProperCrtUint,
@@ -49,7 +50,7 @@ use halo2_ecc::{
 use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
     dev::MockProver,
-    plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
+    plonk::{Circuit, Column, ConstraintSystem, Error, Instance, ProvingKey},
     poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
@@ -101,6 +102,18 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         let execution_payload_root: HashInputChunk<QuantumCell<F>> =
             args.execution_payload_root.clone().into_witness();
+        // Verify attested header
+        let attested_header = ssz_merkleize_chunks(
+            thread_pool,
+            &sha256_chip,
+            [
+                args.attested_block.slot.into_witness(),
+                args.attested_block.proposer_index.into_witness(),
+                args.attested_block.parent_root.as_ref().into_witness(),
+                args.attested_block.state_root.as_ref().into_witness(),
+                args.attested_block.body_root.as_ref().into_witness(),
+            ],
+        )?;
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -132,6 +145,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         };
         let mut h2c_cache = HashToCurveCache::<F>::default();
 
+<<<<<<<
         // // Verify attestted header
         let attested_header = ssz_merkleize_chunks(
             thread_pool,
@@ -144,6 +158,12 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 args.attested_header.body_root.as_ref().into_witness(),
             ],
         )?;
+=======
+        let g1_neg = g1_chip.load_private_unchecked(
+            thread_pool.main(),
+            G1::generator_affine().neg().into_coordinates(),
+        );
+>>>>>>>
 
         let finilized_block_body_root = args
             .finalized_header
@@ -187,10 +207,25 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             signing_root.into(),
             &mut h2c_cache,
         )?;
+        // Public Input Commitment
+        let gate = range.gate();
 
         let res =
             bls_chip.verify_pairing(thread_pool.main(), signature, msghash, agg_pubkey, g1_neg);
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
+        let attested_slot = args.attested_block.slot.into_witness();
+        let finalized_slot = args.finalized_block.slot.into_witness();
+        let h = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(attested_slot, finalized_slot),
+            false,
+        )?;
+        // TODO: Investigate if we should hash it all concatinated in one go
+        let h = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(h.output_bytes.into(), finalized_header.into()),
+            false,
+        )?;
 
         // verify finilized block header against current beacon state merkle proof
         verify_merkle_proof(
@@ -203,6 +238,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             &beacon_state_root,
             S::FINALIZED_HEADER_INDEX,
         )?;
+        let byte_base = (0..32)
+            .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+            .collect_vec();
 
         // verify execution state root against finilized block body merkle proof
         verify_merkle_proof(
@@ -215,11 +253,153 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             &finilized_block_body_root,
             S::EXECUTION_STATE_ROOT_INDEX,
         )?;
+        let participation_sum_bytes = participation_sum
+            .value()
+            .to_bytes_le()
+            .into_iter()
+            .map(|v| thread_pool.main().load_witness(F::from(v as u64)))
+            .collect_vec();
 
-        let instances = vec![];
+        let h = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(
+                h.output_bytes.into(),
+                participation_sum_bytes.clone().into(),
+            ),
+            false,
+        )?;
+        // Constrain the participation sum bytes to be equal to the participation_sum
+        let sum_field = gate.inner_product(
+            thread_pool.main(),
+            participation_sum_bytes,
+            byte_base.clone(),
+        );
+        thread_pool
+            .main()
+            .constrain_equal(&sum_field, &participation_sum);
 
-        Ok(instances)
+        let h = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(h.output_bytes.into(), execution_state_root),
+            false,
+        )?;
+
+        let poseidon_commit_bytes = poseidon_commit
+            .value()
+            .to_bytes_le()
+            .into_iter()
+            .map(|v| thread_pool.main().load_witness(F::from(v as u64)))
+            .collect_vec();
+        // Constrain poseidon bytes to be equal to the poseidon_commit_value
+        let poseidon_commit_field = gate.inner_product(
+            thread_pool.main(),
+            poseidon_commit_bytes.clone(),
+            byte_base.clone(),
+        );
+        thread_pool
+            .main()
+            .constrain_equal(&poseidon_commit_field, &poseidon_commit);
+
+        let public_input_commitment = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(h.output_bytes.into(), poseidon_commit_bytes.into()),
+            false,
+        )?;
+
+        // Truncate the public input commitment to 253 bits and convert to one field element
+        let mut public_input_commitment_bytes = public_input_commitment.output_bytes;
+        let cleared_byte = clear_3_bits(
+            range,
+            &public_input_commitment_bytes[31],
+            thread_pool.main(),
+        );
+        public_input_commitment_bytes[31] = cleared_byte;
+
+        let pi_field =
+            gate.inner_product(thread_pool.main(), public_input_commitment_bytes, byte_base);
+        Ok(vec![pi_field])
     }
+
+    fn instances(args: SyncStepArgs<S>) -> Vec<Vec<bn256::Fr>> {
+        let mut input: [u8; 64] = [0; 64];
+
+        let mut attested_slot = args.attested_block.slot.to_le_bytes().to_vec();
+        let mut finalized_slot = args.finalized_block.slot.to_le_bytes().to_vec();
+        attested_slot.resize(32, 0);
+        finalized_slot.resize(32, 0);
+
+        input[..32].copy_from_slice(&attested_slot);
+        input[32..].copy_from_slice(&finalized_slot);
+        let h = sha2::Sha256::digest(input).to_vec();
+
+        let finalized_header_root: [u8; 32] = args
+            .finalized_block
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_bytes()
+            .try_into()
+            .unwrap();
+
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&finalized_header_root);
+        let h = sha2::Sha256::digest(input).to_vec();
+
+        let mut participation = args
+            .pariticipation_bits
+            .iter()
+            .map(|v| *v as u64)
+            .sum::<u64>()
+            .to_le_bytes()
+            .to_vec();
+        participation.resize(32, 0);
+
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&participation);
+        let h = sha2::Sha256::digest(input).to_vec();
+
+        let execution_state_root = &args.execution_state_root;
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(execution_state_root);
+        let h = sha2::Sha256::digest(input).to_vec();
+
+        let pubkey_affines = args
+            .pubkeys_uncompressed
+            .iter()
+            .cloned()
+            .map(|bytes| {
+                G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                    .unwrap()
+            })
+            .collect_vec();
+        let poseidon_commitment = g1_array_poseidon_native::<F>(&pubkey_affines).unwrap();
+        let poseidon_commitment_bytes = poseidon_commitment.to_bytes_le();
+        input[..32].copy_from_slice(&h);
+        input[32..].copy_from_slice(&poseidon_commitment_bytes);
+
+        let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
+        // Truncate to 253 bits
+        public_input_commitment[31] &= 0b00011111;
+        let pi_field = bn256::Fr::from_bytes_le(&public_input_commitment);
+        vec![vec![pi_field]]
+    }
+}
+
+/// Clears the 3 first least significat bits.
+/// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
+fn clear_3_bits<F: Field>(
+    range: &RangeChip<F>,
+    b: &AssignedValue<F>,
+    ctx: &mut Context<F>,
+) -> AssignedValue<F> {
+    let gate = range.gate();
+    // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
+    let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
+    // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
+    let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
+
+    // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
+    range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
 }
 
 impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
