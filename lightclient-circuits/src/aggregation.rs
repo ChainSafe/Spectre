@@ -1,4 +1,7 @@
-use std::{env::{var, set_var}, iter};
+use std::{
+    env::{set_var, var},
+    iter,
+};
 
 use eth_types::Testnet;
 use halo2_base::{

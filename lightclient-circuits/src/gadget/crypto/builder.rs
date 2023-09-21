@@ -4,8 +4,8 @@ use eth_types::Field;
 use halo2_base::{
     gates::{
         builder::{
-            assign_threads_in, FlexGateConfigParams, KeygenAssignments,
-            MultiPhaseThreadBreakPoints, ThreadBreakPoints, CircuitBuilderStage,
+            assign_threads_in, CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
+            MultiPhaseThreadBreakPoints, ThreadBreakPoints,
         },
         range::{RangeConfig, RangeStrategy},
     },
@@ -65,8 +65,15 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
         }
     }
 
-    pub fn from_stage(builder: ThreadBuilder, break_points: Option<MultiPhaseThreadBreakPoints>, stage: CircuitBuilderStage) -> Self {
-        Self::new(builder.unknown(stage == CircuitBuilderStage::Keygen), break_points)
+    pub fn from_stage(
+        builder: ThreadBuilder,
+        break_points: Option<MultiPhaseThreadBreakPoints>,
+        stage: CircuitBuilderStage,
+    ) -> Self {
+        Self::new(
+            builder.unknown(stage == CircuitBuilderStage::Keygen),
+            break_points,
+        )
     }
 
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
@@ -77,7 +84,6 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
     pub fn mock(builder: ThreadBuilder) -> Self {
         Self::new(builder.unknown(false), None)
-
     }
 
     /// Creates a new [ShaCircuitBuilder].

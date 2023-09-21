@@ -2,7 +2,10 @@ use crate::gadget::Expr;
 use eth_types::*;
 use halo2_base::{
     gates::{
-        builder::{FlexGateConfigParams, KeygenAssignments, MultiPhaseThreadBreakPoints, CircuitBuilderStage},
+        builder::{
+            CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
+            MultiPhaseThreadBreakPoints,
+        },
         flex_gate::FlexGateConfig,
     },
     Context,

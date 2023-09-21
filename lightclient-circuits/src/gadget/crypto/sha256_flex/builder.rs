@@ -49,7 +49,8 @@ impl<F: Field> ThreadBuilderBase<F> for ShaThreadBuilder<F> {
     }
 
     fn from_stage(stage: CircuitBuilderStage) -> Self {
-        Self::new(stage == CircuitBuilderStage::Prover).unknown(stage == CircuitBuilderStage::Keygen)
+        Self::new(stage == CircuitBuilderStage::Prover)
+            .unknown(stage == CircuitBuilderStage::Keygen)
     }
 
     fn unknown(mut self, use_unknown: bool) -> Self {

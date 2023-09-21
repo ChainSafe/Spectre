@@ -5,7 +5,6 @@ pub use common::*;
 
 use std::{cell::RefCell, path::Path, rc::Rc};
 
-
 mod constraint_builder;
 pub(crate) use constraint_builder::*;
 

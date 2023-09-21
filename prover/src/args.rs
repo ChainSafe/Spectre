@@ -24,7 +24,7 @@ pub struct Args {
     pub out: Out,
 
     #[clap(long, short)]
-    pub k: Option<u32>, 
+    pub k: Option<u32>,
 
     #[clap(
         long,
@@ -39,13 +39,17 @@ pub struct Args {
     #[clap(long, short)]
     pub input_path: Option<PathBuf>,
 
-    #[clap(long, short, help = "Beacon node URL", default_value = "http://localhost::5052")]
+    #[clap(
+        long,
+        short,
+        help = "Beacon node URL",
+        default_value = "http://localhost::5052"
+    )]
     pub node_url: String,
 
     #[clap(index = 1, help = "path to output", default_value = ".")]
     pub path_out: PathBuf,
 }
-
 
 #[derive(Clone, clap::Args)]
 pub struct AggregationArgs {

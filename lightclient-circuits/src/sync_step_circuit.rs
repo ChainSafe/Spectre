@@ -266,10 +266,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         let h = sha256_chip.digest::<64>(
             thread_pool,
-            HashInput::TwoToOne(
-                h.output_bytes.into(),
-                participation_sum_bytes.into(),
-            ),
+            HashInput::TwoToOne(h.output_bytes.into(), participation_sum_bytes.into()),
             false,
         )?;
 

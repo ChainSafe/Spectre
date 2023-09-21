@@ -396,7 +396,7 @@ mod tests {
         // let instances =
         //     CommitteeUpdateCircuit::<Testnet, bn256::Fr>::instance(witness.pubkeys_compressed);
         // let num_instances = instances[0].len();
-        
+
         let instances = agg_circuit.instances();
         let num_instances = agg_circuit.num_instance();
 
