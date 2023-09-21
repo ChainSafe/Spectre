@@ -358,7 +358,6 @@ mod tests {
         let (snark, args) = gen_application_snark(K, &params_app, &pk_app, break_points);
 
         let agg_config = AggregationConfigParams::from_path(path);
-
         let params = gen_srs(agg_config.degree);
         println!("agg_params k: {:?}", params.k());
         let lookup_bits = params.k() as usize - 1;
@@ -369,27 +368,30 @@ mod tests {
         let pk = gen_pk(&params, &agg_circuit, None);
         end_timer!(start0);
         let break_points = agg_circuit.break_points();
-        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+        let agg_circuit = AggregationCircuit::public::<SHPLONK>(
             CircuitBuilderStage::Prover,
             Some(break_points),
             lookup_bits,
             &params,
             iter::once(snark),
+            false,
         );
 
-        let instances =
-            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
-        let num_instances = instances[0].len();
+        let instances = agg_circuit.instance();
+        let num_instances = agg_circuit.num_instance();
 
-        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        println!("num_instances: {:?}", num_instances);
+        println!("instances: {:?}", instances);
+
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, vec![instances.clone()]);
         println!("proof size: {}", proof.len());
         let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
             &params,
             pk.get_vk(),
-            vec![num_instances],
+            num_instances,
             None,
         );
         println!("deployment_code size: {}", deployment_code.len());
-        evm_verify(deployment_code, instances, proof);
+        evm_verify(deployment_code, vec![instances], proof);
     }
 }
