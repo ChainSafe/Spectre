@@ -4,7 +4,7 @@ use eth_types::Spec;
 use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
-use ssz_rs::{Merkleized, Serialize};
+use ssz_rs::Merkleized;
 use sync_committee_primitives::{
     consensus_types::BeaconBlockHeader, domains::DomainType, types::LightClientState,
     util::compute_domain,
@@ -19,12 +19,6 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .fetch_beacon_state(state_id)
         .await
         .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
-
-    let mut bf = vec![];
-    state.serialize(&mut bf).unwrap();
-    fs::write("../test_data/beacon_state_head", bf)
-        .await
-        .unwrap();
 
     let mut finalized_block = client.fetch_block("finalized").await.unwrap();
 
