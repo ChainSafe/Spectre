@@ -16,7 +16,7 @@ use sha2::digest::generic_array::GenericArray;
 use std::collections::HashMap;
 use std::{cell::RefCell, char::MAX};
 
-use crate::gadget::crypto::sha256::compression::{sha256_compression, INIT_STATE};
+use crate::gadget::crypto::sha256_flex::compression::{sha256_compression, INIT_STATE};
 use crate::util::{AssignedValueCell, ThreadBuilderBase};
 use crate::witness::HashInput;
 use halo2_base::safe_types::RangeChip;
