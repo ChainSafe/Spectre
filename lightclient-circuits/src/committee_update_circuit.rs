@@ -377,6 +377,7 @@ mod tests {
             false,
         );
 
+        // TODO: Figure out what the first 12 elements of the instances are.
         let instances = agg_circuit.instance();
         let num_instances = agg_circuit.num_instance();
 
