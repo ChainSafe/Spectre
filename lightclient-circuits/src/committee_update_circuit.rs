@@ -393,11 +393,8 @@ mod tests {
         )
         .unwrap();
 
-        // let instances =
-        //     CommitteeUpdateCircuit::<Testnet, bn256::Fr>::instance(witness.pubkeys_compressed);
-        // let num_instances = instances[0].len();
-
-        let instances = agg_circuit.instances();
+        // TODO: Figure out what the first 12 elements of the instances are.
+        let instances = agg_circuit.instance();
         let num_instances = agg_circuit.num_instance();
 
         let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
@@ -410,6 +407,6 @@ mod tests {
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
-        evm_verify(deployment_code, instances, proof);
+        evm_verify(deployment_code, vec![instances], proof);
     }
 }
