@@ -1,4 +1,5 @@
 use std::env::{args, set_var, var};
+use std::fs;
 use std::{fs::File, path::Path};
 
 use halo2_base::gates::builder::{
@@ -8,7 +9,7 @@ use halo2_proofs::plonk::{Circuit, Error, VerifyingKey};
 use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use serde::{Deserialize, Serialize};
-use snark_verifier_sdk::evm::{gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk};
+use snark_verifier_sdk::evm::{gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk, encode_calldata, evm_verify};
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
@@ -217,10 +218,6 @@ pub fn write_calldata_generic<ConcreteCircuit: CircuitExt<Fr>>(
     path: impl AsRef<Path>,
     deployment_code: Option<Vec<u8>>,
 ) -> String {
-    use snark_verifier::loader::evm::encode_calldata;
-    use snark_verifier_sdk::evm::evm_verify;
-    use std::fs;
-
     let instances = circuit.instances();
     let proof = gen_evm_proof_shplonk(params, pk, circuit, instances.clone());
     // calldata as hex string
