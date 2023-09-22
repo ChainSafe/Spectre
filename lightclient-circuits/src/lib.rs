@@ -17,7 +17,7 @@ pub mod aggregation;
 pub mod committee_update_circuit;
 pub mod sync_step_circuit;
 
-mod builder;
+pub mod builder;
 mod poseidon;
 mod ssz_merkle;
 

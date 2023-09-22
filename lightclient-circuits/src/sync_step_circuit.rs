@@ -64,7 +64,7 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use sha2::{Digest, Sha256};
 use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
-use ssz_rs::{GeneralizedIndex, Merkleized, Node};
+use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -94,12 +94,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let pairing_chip = PairingChip::new(&fp_chip);
         let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
         let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
-
-        let beacon_state_root = args
-            .beacon_state_root
-            .iter()
-            .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
-            .collect_vec();
 
         let execution_payload_root: HashInputChunk<QuantumCell<F>> =
             args.execution_payload_root.clone().into_witness();
@@ -161,6 +155,14 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .collect_vec();
 
         let finalized_slot: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let attested_header_state_root = args
+            .attested_header
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+
         let finalized_header_root = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
@@ -168,7 +170,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 finalized_slot.clone(),
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
-                args.finalized_header.state_root.as_ref().into_witness(),
+                attested_header_state_root.clone().into(),
                 finalized_block_body_root.clone().into(),
             ],
         )?;
@@ -200,7 +202,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             bls_chip.verify_pairing(thread_pool.main(), signature, msghash, agg_pubkey, g1_neg);
         fp12_chip.assert_equal(thread_pool.main(), res, fp12_one);
 
-        // verify finilized block header against current beacon state merkle proof
+        // verify finalized block header against current beacon state merkle proof
         verify_merkle_proof(
             thread_pool,
             &sha256_chip,
@@ -208,7 +210,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 .iter()
                 .map(|w| w.clone().into_witness()),
             finalized_header_root.into(),
-            &beacon_state_root,
+            &attested_header_state_root,
             S::FINALIZED_HEADER_INDEX,
         )?;
 
@@ -317,7 +319,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         Ok(vec![pi_field])
     }
 
-    fn instances(args: SyncStepArgs<S>) -> Vec<Vec<bn256::Fr>> {
+    pub fn instance(args: SyncStepArgs<S>) -> bn256::Fr {
         let mut input: [u8; 64] = [0; 64];
 
         let mut attested_slot = args.attested_header.slot.to_le_bytes().to_vec();
@@ -377,8 +379,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
         // Truncate to 253 bits
         public_input_commitment[31] &= 0b00011111;
-        let pi_field = bn256::Fr::from_bytes_le(&public_input_commitment);
-        vec![vec![pi_field]]
+        bn256::Fr::from_bytes_le(&public_input_commitment)
     }
 }
 
@@ -412,9 +413,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     }
 
     /// Takes a list of pubkeys and aggregates them.
-    fn aggregate_pubkeys<'a>(
+    fn aggregate_pubkeys(
         ctx: &mut Context<F>,
-        fp_chip: &FpChip<'a, F>,
+        fp_chip: &FpChip<'_, F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
         assigned_affines: &mut Vec<G1Point<F>>,

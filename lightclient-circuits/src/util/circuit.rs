@@ -9,7 +9,9 @@ use halo2_proofs::plonk::{Circuit, Error, VerifyingKey};
 use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use serde::{Deserialize, Serialize};
-use snark_verifier_sdk::evm::{gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk, encode_calldata, evm_verify};
+use snark_verifier_sdk::evm::{
+    encode_calldata, evm_verify, gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
+};
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};

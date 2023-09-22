@@ -62,11 +62,11 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
             ..Default::default()
         };
-        let finilized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
+        let finalized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
 
         let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
-        let beacon_state_root = compute_root(finilized_header, &state_merkle_branch);
+        let beacon_state_root = compute_root(finalized_header, &state_merkle_branch);
 
         Self {
             signature_compressed: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
