@@ -420,9 +420,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     }
 
     /// Takes a list of pubkeys and aggregates them.
-    fn aggregate_pubkeys<'a>(
+    fn aggregate_pubkeys(
         ctx: &mut Context<F>,
-        fp_chip: &FpChip<'a, F>,
+        fp_chip: &FpChip<'_, F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
         assigned_affines: &mut Vec<G1Point<F>>,
