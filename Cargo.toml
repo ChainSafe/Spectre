@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "eth-types"]
+members = ["lightclient-circuits", "prover", "preprocessor", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
@@ -46,12 +46,16 @@ poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9
 snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
 snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
 
-
 # [patch."https://github.com/timoftime/halo2curves"]
 # halo2curves = { path = "../halo2curves" }
 
 [patch."https://github.com/ralexstokes/ssz-rs"]
-ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }
+ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main", default-features = false }
 
-# [patch.crates-io]
-# ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }
+[patch."https://github.com/polytope-labs/sync-committee-rs"]
+sync-committee-prover = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz", features = [
+    "testnet",
+] }
+sync-committee-primitives = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz", features = [
+    "testnet",
+] }

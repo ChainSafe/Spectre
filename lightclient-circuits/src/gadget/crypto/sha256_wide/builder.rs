@@ -76,6 +76,11 @@ impl<F: Field> ThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
         }
     }
 
+    fn from_stage(stage: CircuitBuilderStage) -> Self {
+        Self::new(stage == CircuitBuilderStage::Prover)
+            .unknown(stage == CircuitBuilderStage::Keygen)
+    }
+
     fn unknown(mut self, use_unknown: bool) -> Self {
         self.gate_builder = self.gate_builder.unknown(use_unknown);
         self

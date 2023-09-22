@@ -252,7 +252,7 @@ mod test {
 
     use super::*;
     use ark_std::{end_timer, start_timer};
-    use eth_types::Test;
+    use eth_types::Testnet;
     use halo2_base::gates::builder::FlexGateConfigParams;
     use halo2_base::gates::range::RangeConfig;
     use halo2_base::utils::fs::gen_srs;

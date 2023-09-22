@@ -107,7 +107,7 @@ let beaconBlockBody = {
 
 let beaconBlockTree = ssz.capella.BeaconBlockBody.toView(beaconBlockBody);
 
-let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload", "stateRoot"]).gindex;
+let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload"]).gindex;
 
 let execMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execRootGindex }) as SingleProof;
 
@@ -170,12 +170,12 @@ let input = {
     pubkeysUncompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], false))),
     pariticipationBits: Array.from(beaconState.validators.entries()).map((_) => true),
     domain: Array.from(domain),
-    attestedBlock: attestedBlockJson,
-    finalizedBlock: finilizedBlockJson,
+    attestedHeader: attestedBlockJson,
+    finalizedHeader: finilizedBlockJson,
     signatureCompressed: syncSigBytes,
-    executionMerkleBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
+    executionPayloadBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
     executionStateRoot: beaconBlockBody.executionPayload.stateRoot,
-    finalityMerkleBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
+    finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
     beaconStateRoot: Array.from(beaconStateRoot),
 };
 
@@ -186,5 +186,5 @@ fs.writeFileSync(
 
 fs.writeFileSync(
     `../test_data/committee_pubkeys.json`,
-    serialize( Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true))))
+    serialize(Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true))))
 );

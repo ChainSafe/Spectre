@@ -1,6 +1,6 @@
 use eth_types::Field;
 use halo2_base::{
-    gates::builder::{FlexGateConfigParams, MultiPhaseThreadBreakPoints},
+    gates::builder::{CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints},
     AssignedValue,
 };
 use halo2_proofs::{
@@ -11,7 +11,7 @@ use log::debug;
 
 use crate::{
     gadget::crypto::{SHAConfig, ShaCircuitBuilder, ShaThreadBuilder},
-    util::{ThreadBuilderBase, ThreadBuilderConfigBase},
+    util::{Eth2ConfigPinning, PinnableCircuit, ThreadBuilderBase, ThreadBuilderConfigBase},
 };
 
 #[derive(Clone, Debug)]
@@ -28,6 +28,28 @@ pub struct Eth2CircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
 }
 
 impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Eth2CircuitBuilder<F, ThreadBuilder> {
+    pub fn new(
+        assigned_instances: Vec<AssignedValue<F>>,
+        builder: ShaCircuitBuilder<F, ThreadBuilder>,
+    ) -> Self {
+        Self {
+            assigned_instances,
+            inner: builder,
+        }
+    }
+
+    pub fn from_stage(
+        assigned_instances: Vec<AssignedValue<F>>,
+        builder: ThreadBuilder,
+        break_points: Option<MultiPhaseThreadBreakPoints>,
+        stage: CircuitBuilderStage,
+    ) -> Self {
+        Self::new(
+            assigned_instances,
+            ShaCircuitBuilder::from_stage(builder, break_points, stage),
+        )
+    }
+
     /// Creates a new [Eth2CircuitBuilder] with `use_unknown` of [ThreadBuilder] set to true.
     pub fn keygen(assigned_instances: Vec<AssignedValue<F>>, builder: ThreadBuilder) -> Self {
         Self {
@@ -125,5 +147,15 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> snark_verifier_sdk::CircuitE
 
     fn instances(&self) -> Vec<Vec<F>> {
         vec![self.instance()]
+    }
+}
+
+impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> PinnableCircuit<F>
+    for Eth2CircuitBuilder<F, ThreadBuilder>
+{
+    type Pinning = Eth2ConfigPinning;
+
+    fn break_points(&self) -> MultiPhaseThreadBreakPoints {
+        self.inner.break_points.borrow().clone()
     }
 }
