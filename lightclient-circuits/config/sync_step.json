@@ -1,1 +1,33 @@
-{ "strategy": "Vertical", "k": 20, "num_advice_per_phase": [14, 0, 0], "num_lookup_advice_per_phase": [2, 0, 0], "num_fixed": 1 }
+{
+  "params": {
+    "strategy": "Vertical",
+    "k": 21,
+    "num_advice_per_phase": [
+      11,
+      0,
+      0
+    ],
+    "num_lookup_advice_per_phase": [
+      2,
+      0,
+      0
+    ],
+    "num_fixed": 1
+  },
+  "break_points": [
+    [
+      2097141,
+      2097141,
+      2097141,
+      2097140,
+      2097142,
+      2097140,
+      2097141,
+      2097141,
+      2097140,
+      2097141
+    ],
+    [],
+    []
+  ]
+}

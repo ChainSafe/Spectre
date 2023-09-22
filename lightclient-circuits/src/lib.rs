@@ -13,6 +13,7 @@ pub mod gadget;
 pub mod util;
 pub mod witness;
 
+pub mod aggregation;
 pub mod committee_update_circuit;
 pub mod sync_step_circuit;
 

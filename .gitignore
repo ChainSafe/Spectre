@@ -35,3 +35,6 @@ params/
 *.pk
 *.instances
 *.proof
+*.calldata
+
+consensus-spec-tests

@@ -6,9 +6,10 @@ edition = "2021"
 [dependencies]
 # cli
 clap = { version = "=4.2", features = ["derive"] }
-strum = {version = "0.25", features = ["derive"] }
+strum = { version = "=0.25", features = ["derive"] }
 cli-batteries = "=0.4"
 eyre = "0.6"
+anstyle = "=1.0.0"
 
 
 # halo2
@@ -18,17 +19,19 @@ halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curv
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
 ] }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
     "display",
     "loader_halo2",
-    "loader_evm"
+    "loader_evm",
 ] }
 
 # local
 lightclient-circuits = { path = "../lightclient-circuits" }
+preprocessor = { path = "../preprocessor" }
 eth-types = { path = "../eth-types" }
+
 
 # misc
 serde = { version = "1.0.130", features = ["derive"] }

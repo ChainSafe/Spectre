@@ -1,17 +1,13 @@
 use std::iter;
 use std::marker::PhantomData;
 
-use super::{HashInput, Validator};
+use super::HashInput;
 use eth_types::{Field, Spec};
-use ethereum_consensus::bellatrix::mainnet;
-use ethereum_consensus::bellatrix::BeaconState;
-use ethereum_consensus::capella;
-use ethereum_consensus::phase0::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use ssz_rs::Merkleized;
-use ssz_rs::Node;
+use ssz_rs::{Merkleized, Node};
+use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
@@ -21,22 +17,22 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub pariticipation_bits: Vec<bool>,
 
-    pub attested_block: BeaconBlockHeader,
+    pub attested_header: BeaconBlockHeader,
 
-    pub finalized_block: BeaconBlockHeader,
+    pub finalized_header: BeaconBlockHeader,
 
     pub domain: [u8; 32],
 
-    pub execution_merkle_branch: Vec<Vec<u8>>,
+    pub execution_payload_branch: Vec<Vec<u8>>,
 
-    pub execution_state_root: Vec<u8>,
+    pub execution_payload_root: Vec<u8>,
 
-    pub finality_merkle_branch: Vec<Vec<u8>>,
+    pub finality_branch: Vec<Vec<u8>>,
 
     pub beacon_state_root: Vec<u8>,
 
     #[serde(skip)]
-    _spec: PhantomData<S>,
+    pub _spec: PhantomData<S>,
 }
 
 impl<S: Spec> Default for SyncStepArgs<S> {
@@ -62,7 +58,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let beacon_block_body_root =
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
-        let mut finalized_block = capella::BeaconBlockHeader {
+        let mut finalized_block = BeaconBlockHeader {
             body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
             ..Default::default()
         };
@@ -82,12 +78,12 @@ impl<S: Spec> Default for SyncStepArgs<S> {
                 7, 0, 0, 0, 48, 83, 175, 74, 95, 250, 246, 166, 104, 40, 151, 228, 42, 212, 194, 8,
                 48, 56, 232, 147, 61, 9, 41, 204, 88, 234, 56, 134,
             ],
-            attested_block: capella::BeaconBlockHeader::default(),
-            finalized_block,
-            finality_merkle_branch,
+            attested_header: BeaconBlockHeader::default(),
+            finalized_header: finalized_block,
+            finality_branch: finality_merkle_branch,
             beacon_state_root,
-            execution_merkle_branch,
-            execution_state_root,
+            execution_payload_branch: execution_merkle_branch,
+            execution_payload_root: execution_state_root,
             _spec: PhantomData,
         }
     }

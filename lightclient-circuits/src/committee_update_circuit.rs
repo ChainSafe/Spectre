@@ -1,3 +1,5 @@
+use std::{env::var, marker::PhantomData, vec};
+
 use crate::{
     builder::Eth2CircuitBuilder,
     gadget::crypto::{
@@ -7,19 +9,18 @@ use crate::{
     poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
     ssz_merkle::ssz_merkleize_chunks,
     util::{
-        decode_into_field, gen_pkey, AppCircuitExt, AssignedValueCell, Challenges, IntoWitness,
-        ThreadBuilderBase,
+        decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
+        IntoWitness, ThreadBuilderBase,
     },
     witness::{self, HashInput, HashInputChunk},
 };
 use eth_types::{AppCurveExt, Field, Spec};
-use ethereum_consensus::phase0::BeaconBlockHeader;
 use group::UncompressedEncoding;
 use halo2_base::{
     gates::{
         builder::{
-            FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints,
-            RangeCircuitBuilder,
+            CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder,
+            MultiPhaseThreadBreakPoints, RangeCircuitBuilder,
         },
         flex_gate::GateStrategy,
         range::{RangeConfig, RangeStrategy},
@@ -38,7 +39,7 @@ use halo2_proofs::{
     circuit::{Layouter, Region, SimpleFloorPlanner, Value},
     dev::MockProver,
     plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
-    poly::kzg::commitment::ParamsKZG,
+    poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
     bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
@@ -51,17 +52,7 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::Merkleized;
-use std::{
-    cell::{Ref, RefCell},
-    collections::HashMap,
-    env::{set_var, var},
-    fs, iter,
-    marker::PhantomData,
-    ops::Neg,
-    path::Path,
-    rc::Rc,
-    vec,
-};
+use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -72,7 +63,6 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     fn synthesize(
-        &self,
         thread_pool: &mut ShaBitThreadBuilder<F>,
         range: &RangeChip<F>,
         args: &witness::CommitteeRotationArgs<S, F>,
@@ -97,9 +87,10 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
         let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
-        let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
+        // let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
 
-        Ok(vec![poseidon_commit])
+        // Ok(vec![poseidon_commit])
+        Ok(vec![])
     }
 
     pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
@@ -195,33 +186,42 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     }
 }
 
-impl<S: Spec> AppCircuitExt<bn256::Fr> for CommitteeUpdateCircuit<S, bn256::Fr> {
-    fn setup(
-        k: usize,
-        out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-        MultiPhaseThreadBreakPoints,
-    ) {
-        let args = witness::CommitteeRotationArgs::<S, bn256::Fr>::default();
-        let circuit = CommitteeUpdateCircuit::<S, bn256::Fr>::default();
+impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
+    type Pinning = Eth2ConfigPinning;
+    type Witness = witness::CommitteeRotationArgs<S, bn256::Fr>;
+
+    fn create_circuit(
+        stage: CircuitBuilderStage,
+        pinning: Option<Self::Pinning>,
+        params: &ParamsKZG<bn256::Bn256>,
+        witness: &witness::CommitteeRotationArgs<S, bn256::Fr>,
+    ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
+        let mut thread_pool = ShaBitThreadBuilder::from_stage(stage);
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-        let mut thread_pool = ShaBitThreadBuilder::keygen();
 
-        let assigned_instances = circuit.synthesize(&mut thread_pool, &range, &args).unwrap();
+        let assigned_instances = Self::synthesize(&mut thread_pool, &range, witness)?;
 
-        let params = gen_srs(k as u32);
+        match stage {
+            CircuitBuilderStage::Prover => {}
+            _ => {
+                thread_pool.config(
+                    params.k() as usize,
+                    Some(
+                        var("MINIMUM_ROWS")
+                            .unwrap_or_else(|_| "0".to_string())
+                            .parse()
+                            .unwrap(),
+                    ),
+                );
+            }
+        }
 
-        let circuit = Eth2CircuitBuilder::keygen(assigned_instances, thread_pool);
-
-        circuit.config(k, None);
-
-        let pk = gen_pkey(|| "committee_update", &params, out, &circuit).unwrap();
-
-        let break_points = circuit.break_points();
-
-        (params, pk, break_points)
+        Ok(Eth2CircuitBuilder::from_stage(
+            assigned_instances,
+            thread_pool,
+            pinning.map(|p| p.break_points),
+            stage,
+        ))
     }
 }
 
@@ -233,15 +233,15 @@ mod tests {
     };
 
     use crate::{
+        aggregation::AggregationConfigPinning,
         gadget::crypto::constant_randomness,
-        util::{full_prover, full_verifier, gen_pkey},
-        witness::{CommitteeRotationArgs, SyncStepArgs, Validator},
+        util::{full_prover, full_verifier, gen_pkey, Halo2ConfigPinning, PinnableCircuit},
+        witness::{CommitteeRotationArgs, SyncStepArgs},
     };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
-    use eth_types::Test;
-    use ethereum_consensus::builder;
+    use eth_types::Testnet;
     use halo2_base::{
         gates::{
             builder::{CircuitBuilderStage, FlexGateConfigParams},
@@ -272,14 +272,8 @@ mod tests {
         CircuitExt, Snark, SHPLONK,
     };
 
-    fn load_circuit_with_data(
-        thread_pool: &mut ShaBitThreadBuilder<Fr>,
-        k: usize,
-    ) -> (
-        Vec<AssignedValue<Fr>>,
-        CommitteeRotationArgs<Test, bn256::Fr>,
-    ) {
-        let args = {
+    fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
+        {
             let pubkeys_compressed: Vec<Vec<u8>> =
                 serde_json::from_slice(&fs::read("../test_data/committee_pubkeys.json").unwrap())
                     .unwrap();
@@ -288,62 +282,73 @@ mod tests {
                 randomness: constant_randomness(),
                 _spec: PhantomData,
             }
-        };
-
-        let circuit = CommitteeUpdateCircuit::<Test, bn256::Fr>::default();
-        let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-
-        let instance = circuit.synthesize(thread_pool, &range, &args).unwrap();
-
-        let config = thread_pool.config(k, None);
-        set_var("LOOKUP_BITS", (config.k - 1).to_string());
-        println!("params used: {:?}", config);
-
-        (instance, args)
+        }
     }
 
     fn gen_application_snark(
-        k: usize,
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
-        break_points: MultiPhaseThreadBreakPoints,
-    ) -> (Snark, CommitteeRotationArgs<Test, bn256::Fr>) {
-        let mut thread_pool = ShaBitThreadBuilder::prover();
-
-        let (assigned_instances, args) = load_circuit_with_data(&mut thread_pool, k);
-
-        let circuit = Eth2CircuitBuilder::prover(assigned_instances, thread_pool, break_points);
-
-        (gen_snark_shplonk(params, pk, circuit, None::<String>), args)
+        witness: &CommitteeRotationArgs<Testnet, Fr>,
+    ) -> Snark {
+        CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
+            params,
+            pk,
+            "./config/committee_update.json",
+            None::<String>,
+            witness,
+        )
+        .unwrap()
     }
 
     #[test]
     fn test_committee_update_circuit() {
-        const K: usize = 18;
-        let mut builder = ShaBitThreadBuilder::mock();
-        let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
+        const K: u32 = 18;
+        let params = gen_srs(K);
 
-        let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
+        let witness = load_circuit_args();
+
+        let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
+
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            Some(pinning),
+            &params,
+            &witness,
+        )
+        .unwrap();
 
         let timer = start_timer!(|| "committee_update mock prover");
-        let prover = MockProver::<Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
     #[test]
     fn test_committee_update_proofgen() {
-        const K: usize = 18;
+        const K: u32 = 18;
+        let params = gen_srs(K);
 
-        let (params, pk, break_points) = CommitteeUpdateCircuit::<Test, Fr>::setup(K, None);
+        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params,
+            "../build/committee_update.pkey",
+            "./config/committee_update.json",
+            false,
+            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+        );
 
-        let mut builder = ShaBitThreadBuilder::prover();
-        let (assigned_instances, args) = load_circuit_with_data(&mut builder, K);
+        let witness = load_circuit_args();
 
-        let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+        let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
 
-        let instances =
-            CommitteeUpdateCircuit::<Test, bn256::Fr>::instance(args.pubkeys_compressed);
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(pinning),
+            &params,
+            &witness,
+        )
+        .unwrap();
+
+        let instances = circuit.instances();
         let proof = full_prover(&params, &pk, circuit, instances.clone());
 
         assert!(full_verifier(&params, pk.get_vk(), proof, instances))
@@ -351,48 +356,60 @@ mod tests {
 
     #[test]
     fn circuit_agg() {
-        let path = "./config/committee_update_aggregation.json";
-        const K: usize = 17;
-        let (params_app, pk_app, break_points) = CommitteeUpdateCircuit::<Test, Fr>::setup(K, None);
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
+        const APP_K: u32 = 18;
+        let params_app = gen_srs(APP_K);
 
-        let (snark, args) = gen_application_snark(K, &params_app, &pk_app, break_points);
+        const AGG_K: u32 = 17;
+        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params_app,
+            "../build/committee_update.pkey",
+            "./config/committee_update.json",
+            false,
+            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+        );
+        let witness = load_circuit_args();
+        let snark = gen_application_snark(&params_app, &pk_app, &witness);
 
-        let agg_config = AggregationConfigParams::from_path(path);
-        let params = gen_srs(agg_config.degree);
+        let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());
         let lookup_bits = params.k() as usize - 1;
 
-        let agg_circuit = AggregationCircuit::keygen::<SHPLONK>(&params, iter::once(snark.clone()));
-
-        let start0 = start_timer!(|| "Aggregation Circuit gen vk & pk");
-        let pk = gen_pk(&params, &agg_circuit, None);
-        end_timer!(start0);
-        let break_points = agg_circuit.break_points();
-        let agg_circuit = AggregationCircuit::public::<SHPLONK>(
-            CircuitBuilderStage::Prover,
-            Some(break_points),
-            lookup_bits,
+        let pk = AggregationCircuit::read_or_create_pk(
             &params,
-            iter::once(snark),
+            "../build/aggregation.pkey",
+            AGG_CONFIG_PATH,
             false,
+            &vec![snark.clone()],
         );
 
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &params,
+            &vec![snark.clone()],
+        )
+        .unwrap();
+
         // TODO: Figure out what the first 12 elements of the instances are.
-        let instances = agg_circuit.instance();
+        let instances = agg_circuit.instances();
         let num_instances = agg_circuit.num_instance();
 
         println!("num_instances: {:?}", num_instances);
         println!("instances: {:?}", instances);
 
-        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, vec![instances.clone()]);
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
-        let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
+        let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
             &params,
-            pk.get_vk(),
-            num_instances,
-            None,
-        );
+            &pk,
+            None::<String>,
+            &vec![snark],
+        )
+        .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
-        evm_verify(deployment_code, vec![instances], proof);
+        evm_verify(deployment_code, instances, proof);
     }
 }

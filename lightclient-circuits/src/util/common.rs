@@ -2,7 +2,10 @@ use crate::gadget::Expr;
 use eth_types::*;
 use halo2_base::{
     gates::{
-        builder::{FlexGateConfigParams, KeygenAssignments, MultiPhaseThreadBreakPoints},
+        builder::{
+            CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
+            MultiPhaseThreadBreakPoints,
+        },
         flex_gate::FlexGateConfig,
     },
     Context,
@@ -144,6 +147,8 @@ pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
     type Config: ThreadBuilderConfigBase<F>;
 
     fn new(witness_gen_only: bool) -> Self;
+
+    fn from_stage(stage: CircuitBuilderStage) -> Self;
 
     fn mock() -> Self {
         Self::new(false)

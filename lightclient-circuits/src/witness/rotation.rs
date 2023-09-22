@@ -3,13 +3,11 @@ use std::marker::PhantomData;
 
 use crate::gadget::crypto::constant_randomness;
 
-use super::{HashInput, Validator};
+use super::HashInput;
 use eth_types::AppCurveExt;
 use eth_types::{Field, Spec};
-use ethereum_consensus::bellatrix::mainnet;
-use ethereum_consensus::bellatrix::BeaconState;
-use ethereum_consensus::capella;
-use ethereum_consensus::phase0::BeaconBlockHeader;
+use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
+
 use halo2curves::bls12_381::Fq;
 use halo2curves::bls12_381::G1;
 use itertools::Itertools;

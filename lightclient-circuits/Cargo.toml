@@ -39,7 +39,7 @@ group = "0.12"
 sha2 = { version = "0.10.6", features = ["compress"] }
 
 # ethereum
-ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "46ca171" }
+sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0" }
 ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
 
 # local

@@ -1,9 +1,9 @@
 //! Common utility traits and functions.
 
 mod common;
-use std::{cell::RefCell, path::Path, rc::Rc};
-
 pub use common::*;
+
+use std::{cell::RefCell, path::Path, rc::Rc};
 
 mod constraint_builder;
 pub(crate) use constraint_builder::*;
@@ -14,6 +14,9 @@ pub(crate) use conversion::*;
 mod proof;
 use halo2curves::bn256;
 pub use proof::*;
+
+mod circuit;
+pub use circuit::*;
 
 use halo2_base::{
     gates::builder::{FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints},
@@ -64,21 +67,6 @@ pub(crate) fn query_expression<F: Field, T>(
         Some(0.expr())
     });
     expr.unwrap()
-}
-
-pub trait AppCircuitExt<F: Field>: Default {
-    fn setup(
-        k: usize,
-        out: Option<&Path>,
-    ) -> (
-        ParamsKZG<bn256::Bn256>,
-        ProvingKey<bn256::G1Affine>,
-        MultiPhaseThreadBreakPoints,
-    );
-
-    fn instances(&self) -> Vec<Vec<F>> {
-        vec![]
-    }
 }
 
 /// Randomness used in circuits.
