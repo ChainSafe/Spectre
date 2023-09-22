@@ -50,8 +50,8 @@ snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", bran
 # [patch."https://github.com/timoftime/halo2curves"]
 # halo2curves = { path = "../halo2curves" }
 
-# [patch."https://github.com/ralexstokes/ssz-rs"]
-# ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }
+[patch."https://github.com/ralexstokes/ssz-rs"]
+ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }
 
 # [patch.crates-io]
 # ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "seun/ssz-merkle-multi-proof-phase-1" }

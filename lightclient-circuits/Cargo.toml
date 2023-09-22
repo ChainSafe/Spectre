@@ -39,8 +39,8 @@ group = "0.12"
 sha2 = { version = "0.10.6", features = ["compress"] }
 
 # ethereum
-ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "87f962e23e5af975bce9bdd793ee7615f8690bea" }
-ssz_rs =  "0.9"
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus", rev = "46ca171" }
+ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
 
 # local
 eth-types = { path = "../eth-types" }
@@ -62,9 +62,9 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 [dev-dependencies]
 rstest = "0.18.2"
-test-utils = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "b9152dc" }
-ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "b9152dc" }
-light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "b9152dc" }
+test-utils = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
 
 [features]
 default = []
