@@ -10,16 +10,19 @@ use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::util::gen_srs;
+use lightclient_circuits::util::AppCircuit;
 use lightclient_circuits::util::Eth2ConfigPinning;
 use lightclient_circuits::util::Halo2ConfigPinning;
 use lightclient_circuits::util::{full_prover, full_verifier};
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
+use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use ssz_rs::Node;
 use std::path::PathBuf;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+
 use test_utils::{load_snappy_ssz, load_yaml};
 #[derive(Debug, serde::Deserialize)]
 struct TestMeta {
