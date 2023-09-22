@@ -6,6 +6,7 @@ use ethereum_consensus_types::presets::minimal::{
 };
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
+use halo2_base::gates::builder::CircuitBuilderStage;
 use halo2_base::gates::range::{RangeConfig, RangeStrategy};
 use halo2_base::safe_types::RangeChip;
 use halo2_base::AssignedValue;
@@ -17,7 +18,12 @@ use light_client_verifier::{ZiplineUpdateWitness, ZiplineUpdateWitnessCapella};
 use lightclient_circuits::builder::Eth2CircuitBuilder;
 use lightclient_circuits::gadget::crypto::ShaThreadBuilder;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
-use lightclient_circuits::util::{AppCircuitExt, ThreadBuilderBase};
+use lightclient_circuits::util::gen_srs;
+use lightclient_circuits::util::AppCircuit;
+use lightclient_circuits::util::Eth2ConfigPinning;
+use lightclient_circuits::util::Halo2ConfigPinning;
+use lightclient_circuits::util::ThreadBuilderBase;
+use lightclient_circuits::util::{full_prover, full_verifier};
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::fixture;
 use rstest::rstest;
@@ -27,6 +33,7 @@ use ssz_rs::Merkleized;
 use ssz_rs::Node;
 use std::ops::Deref;
 use std::path::PathBuf;
+use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use test_utils::{load_snappy_ssz, load_yaml};
 #[derive(Debug, serde::Deserialize)]
 struct TestMeta {
@@ -190,7 +197,7 @@ fn to_witness<
         .iter()
         .map(|b| *b)
         .collect();
-    args.attested_block = ethereum_consensus::phase0::BeaconBlockHeader {
+    args.attested_header = BeaconBlockHeader {
         slot: zipline_witness
             .light_client_update
             .attested_header
@@ -200,7 +207,7 @@ fn to_witness<
             .light_client_update
             .attested_header
             .beacon
-            .proposer_index,
+            .proposer_index as u64,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
@@ -229,7 +236,7 @@ fn to_witness<
         )
         .unwrap(),
     };
-    args.finalized_block = ethereum_consensus::phase0::BeaconBlockHeader {
+    args.finalized_header = BeaconBlockHeader {
         slot: zipline_witness
             .light_client_update
             .finalized_header
@@ -239,7 +246,7 @@ fn to_witness<
             .light_client_update
             .finalized_header
             .beacon
-            .proposer_index,
+            .proposer_index as u64,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
@@ -274,14 +281,14 @@ fn to_witness<
     };
     let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
     args.domain = signing_domain;
-    args.execution_merkle_branch = zipline_witness
+    args.execution_payload_branch = zipline_witness
         .light_client_update
         .finalized_header
         .execution_branch
         .iter()
         .map(|b| b.0.as_ref().to_vec())
         .collect();
-    args.execution_state_root = {
+    args.execution_payload_root = {
         let mut execution_payload_header: ExecutionPayloadHeader<
             BYTES_PER_LOGS_BLOOM,
             MAX_EXTRA_DATA_BYTES,
@@ -298,7 +305,7 @@ fn to_witness<
             .as_ref()
             .to_vec()
     };
-    args.finality_merkle_branch = zipline_witness
+    args.finality_branch = zipline_witness
         .light_client_update
         .finality_branch
         .iter()
@@ -352,15 +359,22 @@ fn test_step_mock(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    let spectre_args = read_test_files_and_gen_witness(path);
-    const K: usize = 20;
-    let mut builder = ShaThreadBuilder::mock();
-    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
+    const K: u32 = 21;
+    let params = gen_srs(K);
 
-    let circuit = Eth2CircuitBuilder::mock(assigned_instances, builder);
+    let witness = read_test_files_and_gen_witness(path);
+    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-    let timer = start_timer!(|| "sync circuit mock prover");
-    let prover = MockProver::<bn256::Fr>::run(K as u32, &circuit, circuit.instances()).unwrap();
+    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+        CircuitBuilderStage::Mock,
+        Some(pinning),
+        &params,
+        &witness,
+    )
+    .unwrap();
+
+    let timer = start_timer!(|| "sync_step mock prover");
+    let prover = MockProver::<bn256::Fr>::run(K, &circuit, circuit.instances()).unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
 }
@@ -371,27 +385,32 @@ fn test_step_proofgen(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    const K: usize = 20;
-    let spectre_args = read_test_files_and_gen_witness(path);
+    const K: u32 = 20;
+    let witness = read_test_files_and_gen_witness(path);
 
-    let (params, pk, break_points) = SyncStepCircuit::<Minimal, bn256::Fr>::setup(K, None);
-
-    let mut builder = ShaThreadBuilder::prover();
-    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
-    let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
-
-    let instances = SyncStepCircuit::<Minimal, bn256::Fr>::instance(spectre_args);
-    let timer = start_timer!(|| "sync circuit prover");
-    let proof = lightclient_circuits::util::full_prover(&params, &pk, circuit, instances.clone());
-    end_timer!(timer);
-    let timer = start_timer!(|| "sync circuit verifier");
-    assert!(lightclient_circuits::util::full_verifier(
+    let params = gen_srs(K);
+    let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
         &params,
-        pk.get_vk(),
-        proof,
-        instances
-    ));
-    end_timer!(timer);
+        "../build/sync_step.pkey",
+        "./config/sync_step.json",
+        false,
+        &SyncStepArgs::<Minimal>::default(),
+    );
+
+    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+
+    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+        CircuitBuilderStage::Prover,
+        Some(pinning),
+        &params,
+        &witness,
+    )
+    .unwrap();
+
+    let instances = circuit.instances();
+    let proof = full_prover(&params, &pk, circuit, instances.clone());
+
+    assert!(full_verifier(&params, pk.get_vk(), proof, instances))
 }
 #[rstest]
 fn test_step_evm_verify(
@@ -399,46 +418,40 @@ fn test_step_evm_verify(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    const K: usize = 22;
-    let spectre_args = read_test_files_and_gen_witness(path);
+    const K: u32 = 21;
+    let params = gen_srs(K);
 
-    let (params, pk, break_points) = SyncStepCircuit::<Minimal, bn256::Fr>::setup(K, None);
+    let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
+        &params,
+        "../build/sync_step.pkey",
+        "./config/sync_step.json",
+        false,
+        &SyncStepArgs::<Minimal>::default(),
+    );
 
-    let mut builder = ShaThreadBuilder::prover();
-    let assigned_instances = load_circuit_with_data(&spectre_args, &mut builder, K);
-    let circuit = Eth2CircuitBuilder::prover(assigned_instances, builder, break_points);
+    let witness = read_test_files_and_gen_witness(path);
 
-    let instances = SyncStepCircuit::<Minimal, bn256::Fr>::instance(spectre_args);
-    let num_instance = vec![instances[0].len()];
+    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-    let timer = start_timer!(|| "sync evm prover");
+    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+        CircuitBuilderStage::Prover,
+        Some(pinning),
+        &params,
+        &witness,
+    )
+    .unwrap();
 
-    let deployment_code = snark_verifier_sdk::evm::gen_evm_verifier_shplonk::<
-        Eth2CircuitBuilder<bn256::Fr, ShaThreadBuilder<bn256::Fr>>,
-    >(&params, pk.get_vk(), num_instance, None);
-
+    let instances = circuit.instances();
     let proof =
         snark_verifier_sdk::evm::gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
-
-    end_timer!(timer);
-    let timer = start_timer!(|| "sync evm verify");
+    println!("proof size: {}", proof.len());
+    let deployment_code = SyncStepCircuit::<Minimal, bn256::Fr>::gen_evm_verifier_shplonk(
+        &params,
+        &pk,
+        None::<String>,
+        &witness,
+    )
+    .unwrap();
+    println!("deployment_code size: {}", deployment_code.len());
     snark_verifier_sdk::evm::evm_verify(deployment_code, instances, proof);
-    end_timer!(timer);
-}
-
-fn load_circuit_with_data(
-    args: &SyncStepArgs<Minimal>,
-    thread_pool: &mut ShaThreadBuilder<bn256::Fr>,
-    k: usize,
-) -> Vec<AssignedValue<bn256::Fr>> {
-    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
-    let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
-
-    let instance = circuit.synthesize(thread_pool, &range, args).unwrap();
-
-    let config = thread_pool.config(k, None);
-    set_var("LOOKUP_BITS", (config.k - 1).to_string());
-    println!("params used: {:?}", config);
-
-    instance
 }
