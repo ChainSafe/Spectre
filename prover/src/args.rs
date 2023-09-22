@@ -41,11 +41,22 @@ pub struct Args {
 
     #[clap(
         long,
-        short,
+        short='n',
         help = "Beacon node URL",
-        default_value = "http://localhost::5052"
+        default_value = "http://127.0.0.1::5052"
     )]
-    pub node_url: String,
+    pub beacon_api_url: String,
+
+    #[clap(
+        long,
+        short,
+        help = "Ethereum RPC",
+        default_value = "http://127.0.0.1:8545"
+    )]
+    pub ethereum_rpc: String,
+
+    #[clap(long, short)]
+    pub verifier_address: Option<String>,
 
     #[clap(index = 1, help = "path to output", default_value = ".")]
     pub path_out: PathBuf,
@@ -73,6 +84,8 @@ pub enum Out {
     EvmVerifier,
     #[strum(serialize = "calldata")]
     Calldata,
+    #[strum(serialize = "tx")]
+    Tx,
 }
 
 #[derive(Clone, Debug, PartialEq, EnumString)]

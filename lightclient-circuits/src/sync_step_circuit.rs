@@ -140,7 +140,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                attested_slot.clone(),
+                attested_slot,
                 args.attested_header.proposer_index.into_witness(),
                 args.attested_header.parent_root.as_ref().into_witness(),
                 args.attested_header.state_root.as_ref().into_witness(),
@@ -165,7 +165,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                finalized_slot.clone(),
+                finalized_slot,
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
                 args.finalized_header.state_root.as_ref().into_witness(),
@@ -225,11 +225,14 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(attested_slot, finalized_slot),
-            false,
-        )?;
+        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        // FIXME: constaint `attested_slot_bytes` and `finalized_slot_bytes` against `attested_slot` and `finalized_slot`.
+        // let h = sha256_chip.digest::<64>(
+        //     thread_pool,
+        //     HashInput::TwoToOne(attested_slot_bytes, finalized_slot_bytes),
+        //     true,
+        // )?;
 
         // TODO: Investigate if we should hash it all concatinated in one go
         //  TODO: Investigate if we need `finalized_header_root` in PI
@@ -264,17 +267,19 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             assigned_sum_bytes
         };
 
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), participation_sum_bytes.into()),
-            false,
-        )?;
+        // let h = sha256_chip.digest::<64>(
+        //     thread_pool,
+        //     HashInput::TwoToOne(h.output_bytes.into(), participation_sum_bytes.into()),
+        //     false,
+        // )?;
 
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), execution_payload_root),
-            false,
-        )?;
+        let participation_sum_bytes: HashInputChunk<_> = participation_sum_bytes.into();
+
+        // let h = sha256_chip.digest::<64>(
+        //     thread_pool,
+        //     HashInput::TwoToOne(h.output_bytes.into(), execution_payload_root),
+        //     false,
+        // )?;
 
         let poseidon_commit_bytes = {
             let assigned_bytes = poseidon_commit
@@ -297,11 +302,24 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             assigned_bytes
         };
 
-        let public_input_commitment = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), poseidon_commit_bytes.into()),
-            false,
-        )?;
+        let poseidon_commit_bytes: HashInputChunk<_> = poseidon_commit_bytes.into();
+
+        let pi_bytes_concat = HashInputChunk {
+            bytes: attested_slot_bytes
+                .bytes
+                .into_iter()
+                .chain(finalized_slot_bytes.bytes)
+                .chain(participation_sum_bytes.bytes)
+                .chain(execution_payload_root.bytes)
+                .chain(poseidon_commit_bytes.bytes)
+                .collect_vec(),
+            is_rlc: false,
+        };
+
+        println!("pi_bytes_concat: {:?}", pi_bytes_concat.bytes.len());
+
+        let public_input_commitment =
+            sha256_chip.digest::<160>(thread_pool, HashInput::Single(pi_bytes_concat), false)?;
 
         // Truncate the public input commitment to 253 bits and convert to one field element
         let public_input_commitment_bytes = {
@@ -412,9 +430,9 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     }
 
     /// Takes a list of pubkeys and aggregates them.
-    fn aggregate_pubkeys<'a>(
+    fn aggregate_pubkeys(
         ctx: &mut Context<F>,
-        fp_chip: &FpChip<'a, F>,
+        fp_chip: &FpChip<F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
         assigned_affines: &mut Vec<G1Point<F>>,

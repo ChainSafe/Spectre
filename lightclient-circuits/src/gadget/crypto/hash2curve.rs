@@ -325,7 +325,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
             .clone();
         let fq2_one = cache
             .fq2_one
-            .get_or_insert_with(|| fp2_chip.load_constant(ctx, C::Fq::one()))
+            .get_or_insert_with(|| fp2_chip.load_constant(ctx, <C::Fq as ff::Field>::one()))
             .deref()
             .clone();
 
@@ -415,7 +415,7 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
 
         let fq2_zero = cache
             .fq2_zero
-            .get_or_insert_with(|| fp2_chip.load_constant(ctx, C::Fq::zero()))
+            .get_or_insert_with(|| fp2_chip.load_constant(ctx, <C::Fq as ff::Field>::zero()))
             .deref()
             .clone();
 

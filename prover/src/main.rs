@@ -1,9 +1,19 @@
+#![allow(incomplete_features)]
 #![feature(associated_type_bounds)]
-use std::{fs, future::Future, path::Path};
+use std::{
+    fs::{self, File},
+    future::Future,
+    io::Write,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+};
 
 use args::{Args, Options, Out, Proof};
 use cli_batteries::version;
+use ethers::prelude::*;
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
+use itertools::Itertools;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     sync_step_circuit::SyncStepCircuit,
@@ -19,6 +29,13 @@ use snark_verifier::{
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, read_instances, Snark};
 
 mod args;
+
+ethers::contract::abigen!(
+    SnarkVerifierSol,
+    r#"[
+        function verify(uint256[1] calldata pubInputs,bytes calldata proof) public view returns (bool)
+    ]"#,
+);
 
 fn main() {
     cli_batteries::run(version!(), app);
@@ -108,7 +125,7 @@ async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let witness = fetch(args.node_url.clone()).await?;
+            let witness = fetch(args.beacon_api_url.clone()).await?;
             Circuit::gen_snark_shplonk(
                 &params,
                 &pk,
@@ -134,8 +151,16 @@ async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            Circuit::gen_evm_verifier_shplonk(&params, &pk, Some(&args.path_out), &default_witness)
+            let deplyment_code = Circuit::gen_evm_verifier_shplonk(&params, &pk, Some(&args.path_out), &default_witness)
                 .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
+            println!("yul size: {}", deplyment_code.len());
+            let sol_contract = halo2_solidity_verifier::fix_verifier_sol(args.path_out.clone(), 1)
+                .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
+            let mut sol_contract_path = args.path_out.clone();
+            sol_contract_path.set_extension("sol");
+            let mut f = File::create(sol_contract_path).unwrap();
+            f.write(sol_contract.as_bytes())
+                .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
         }
         Out::Calldata => {
             let pk = Circuit::read_or_create_pk(
@@ -145,7 +170,7 @@ async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let witness = fetch(args.node_url.clone()).await?;
+            let witness = fetch(args.beacon_api_url.clone()).await?;
 
             Circuit::gen_calldata(
                 &params,
@@ -156,6 +181,49 @@ async fn generic_circuit_cli<
                 &witness,
             )
             .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
+        }
+        Out::Tx => {
+            let pk = Circuit::read_or_create_pk(
+                &params,
+                args.build_dir.join(&pk_filename),
+                &args.config_path,
+                true,
+                &default_witness,
+            );
+            let witness = fetch(args.beacon_api_url.clone()).await?;
+
+            let (proof, instances) = Circuit::gen_evm_proof_shplonk(
+                &params,
+                &pk,
+                &args.config_path,
+                &args.path_out,
+                None,
+                &witness,
+            )
+            .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
+
+            let public_inputs = instances[0]
+                .iter()
+                .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+                .collect_vec()
+                .try_into()
+                .unwrap();
+
+            let provider = Arc::new(Provider::new(Http::new(
+                args.ethereum_rpc.parse::<url::Url>().unwrap(),
+            )));
+
+            let contract_addr = Address::from_str(
+                args.verifier_address
+                    .as_ref()
+                    .expect("verifier address is required"),
+            )
+            .unwrap();
+            let snark_verifier = SnarkVerifierSol::new(contract_addr, provider);
+
+            let result = snark_verifier.verify(public_inputs, proof.into()).await.unwrap();
+
+            assert!(result);
         }
     }
     Ok(())

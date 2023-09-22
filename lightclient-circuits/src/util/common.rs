@@ -114,7 +114,7 @@ impl CellType {
     }
 
     /// Return the storage cell of the advice column
-    pub(crate) fn storage_for_column<F: Field>(col: &Column<Advice>) -> CellType {
+    pub(crate) fn storage_for_column(col: &Column<Advice>) -> CellType {
         Self::storage_for_phase(col.column_type().phase())
     }
 }
