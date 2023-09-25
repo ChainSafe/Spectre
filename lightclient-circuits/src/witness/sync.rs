@@ -29,8 +29,6 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub finality_branch: Vec<Vec<u8>>,
 
-    pub beacon_state_root: Vec<u8>,
-
     #[serde(skip)]
     pub _spec: PhantomData<S>,
 }
@@ -66,8 +64,6 @@ impl<S: Spec> Default for SyncStepArgs<S> {
 
         let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
-        let beacon_state_root = compute_root(finalized_header, &state_merkle_branch);
-
         Self {
             signature_compressed: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
             pubkeys_uncompressed: iter::repeat(dummy_pk_bytes)
@@ -81,7 +77,6 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             attested_header: BeaconBlockHeader::default(),
             finalized_header: finalized_block,
             finality_branch: finality_merkle_branch,
-            beacon_state_root,
             execution_payload_branch: execution_merkle_branch,
             execution_payload_root: execution_state_root,
             _spec: PhantomData,
