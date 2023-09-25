@@ -15,7 +15,7 @@ use tokio::fs;
 pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStepArgs<S>> {
     let client = SyncCommitteeProver::new(node_url);
     let state_id = "head";
-    let mut state = client
+    let state = client
         .fetch_beacon_state(state_id)
         .await
         .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
@@ -46,6 +46,11 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .await
         .map_err(|e| eyre::eyre!("Error fetching light client update. Error: {}", e))?
         .expect("Light client update should be present");
+
+    let mut state = client
+        .fetch_beacon_state(&light_client_update.attested_header.slot.to_string())
+        .await
+        .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
 
     let pubkeys_uncompressed = client_state
         .current_sync_committee
@@ -157,7 +162,6 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
             .iter()
             .map(|n| n.as_bytes().to_vec())
             .collect_vec(),
-        beacon_state_root: state_root.as_bytes().to_vec(),
         _spec: PhantomData,
     };
 

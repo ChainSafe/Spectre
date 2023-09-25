@@ -130,6 +130,13 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 
         // Verify attestted header
         let attested_slot: HashInputChunk<_> = args.attested_header.slot.into_witness();
+        let attested_header_state_root = args
+            .attested_header
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
         let attested_header = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
@@ -137,7 +144,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 attested_slot.clone(),
                 args.attested_header.proposer_index.into_witness(),
                 args.attested_header.parent_root.as_ref().into_witness(),
-                args.attested_header.state_root.as_ref().into_witness(),
+                attested_header_state_root.clone().into(),
                 args.attested_header.body_root.as_ref().into_witness(),
             ],
         )?;
@@ -155,13 +162,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .collect_vec();
 
         let finalized_slot: HashInputChunk<_> = args.finalized_header.slot.into_witness();
-        let attested_header_state_root = args
-            .attested_header
-            .state_root
-            .as_ref()
-            .iter()
-            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
-            .collect_vec();
 
         let finalized_header_root = ssz_merkleize_chunks(
             thread_pool,
@@ -170,7 +170,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 finalized_slot.clone(),
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
-                attested_header_state_root.clone().into(),
+                args.finalized_header.state_root.as_ref().into_witness(),
                 finalized_block_body_root.clone().into(),
             ],
         )?;
