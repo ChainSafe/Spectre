@@ -106,7 +106,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
     fn decode_pubkeys_x<I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
         ctx: &mut Context<F>,
-        fp_chip: &FpChip<F>,
+        fp_chip: &FpChip<'_, F>,
         compressed_encodings: I,
     ) -> Vec<ProperCrtUint<F>> {
         let range = fp_chip.range();
