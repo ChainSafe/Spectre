@@ -228,19 +228,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
         let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
         // FIXME: constaint `attested_slot_bytes` and `finalized_slot_bytes` against `attested_slot` and `finalized_slot`.
-        // let h = sha256_chip.digest::<64>(
-        //     thread_pool,
-        //     HashInput::TwoToOne(attested_slot_bytes, finalized_slot_bytes),
-        //     true,
-        // )?;
 
-        // TODO: Investigate if we should hash it all concatinated in one go
         //  TODO: Investigate if we need `finalized_header_root` in PI
-        // let h = sha256_chip.digest::<64>(
-        //     thread_pool,
-        //     HashInput::TwoToOne(h.output_bytes.into(), finalized_header_root.into()),
-        //     false,
-        // )?;
 
         let byte_base = (0..32)
             .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
@@ -267,19 +256,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             assigned_sum_bytes
         };
 
-        // let h = sha256_chip.digest::<64>(
-        //     thread_pool,
-        //     HashInput::TwoToOne(h.output_bytes.into(), participation_sum_bytes.into()),
-        //     false,
-        // )?;
-
         let participation_sum_bytes: HashInputChunk<_> = participation_sum_bytes.into();
-
-        // let h = sha256_chip.digest::<64>(
-        //     thread_pool,
-        //     HashInput::TwoToOne(h.output_bytes.into(), execution_payload_root),
-        //     false,
-        // )?;
 
         let poseidon_commit_bytes = {
             let assigned_bytes = poseidon_commit
@@ -315,8 +292,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 .collect_vec(),
             is_rlc: false,
         };
-
-        println!("pi_bytes_concat: {:?}", pi_bytes_concat.bytes.len());
 
         let public_input_commitment =
             sha256_chip.digest::<160>(thread_pool, HashInput::Single(pi_bytes_concat), false)?;
