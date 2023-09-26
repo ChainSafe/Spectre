@@ -43,7 +43,7 @@ pub struct Args {
         long,
         short='n',
         help = "Beacon node URL",
-        default_value = "http://127.0.0.1::5052"
+        default_value = "http://127.0.0.1:5052"
     )]
     pub beacon_api_url: String,
 

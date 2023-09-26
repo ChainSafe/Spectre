@@ -151,8 +151,13 @@ async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let deplyment_code = Circuit::gen_evm_verifier_shplonk(&params, &pk, Some(&args.path_out), &default_witness)
-                .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
+            let deplyment_code = Circuit::gen_evm_verifier_shplonk(
+                &params,
+                &pk,
+                Some(&args.path_out),
+                &default_witness,
+            )
+            .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
             println!("yul size: {}", deplyment_code.len());
             let sol_contract = halo2_solidity_verifier::fix_verifier_sol(args.path_out.clone(), 1)
                 .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
@@ -172,17 +177,29 @@ async fn generic_circuit_cli<
             );
             let witness = fetch(args.beacon_api_url.clone()).await?;
 
+            let deplyment_code = Circuit::gen_evm_verifier_shplonk(
+                &params,
+                &pk,
+                None::<&Path>,
+                &default_witness,
+            )
+            .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
+
             Circuit::gen_calldata(
                 &params,
                 &pk,
                 &args.config_path,
                 &args.path_out,
-                None,
+                Some(deplyment_code),
                 &witness,
             )
             .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
         }
         Out::Tx => {
+            let provider = Arc::new(Provider::new(Http::new(
+                args.ethereum_rpc.parse::<url::Url>().unwrap(),
+            )));
+
             let pk = Circuit::read_or_create_pk(
                 &params,
                 args.build_dir.join(&pk_filename),
@@ -209,10 +226,6 @@ async fn generic_circuit_cli<
                 .try_into()
                 .unwrap();
 
-            let provider = Arc::new(Provider::new(Http::new(
-                args.ethereum_rpc.parse::<url::Url>().unwrap(),
-            )));
-
             let contract_addr = Address::from_str(
                 args.verifier_address
                     .as_ref()
@@ -221,7 +234,10 @@ async fn generic_circuit_cli<
             .unwrap();
             let snark_verifier = SnarkVerifierSol::new(contract_addr, provider);
 
-            let result = snark_verifier.verify(public_inputs, proof.into()).await.unwrap();
+            let result = snark_verifier
+                .verify(public_inputs, proof.into())
+                .await
+                .unwrap();
 
             assert!(result);
         }
