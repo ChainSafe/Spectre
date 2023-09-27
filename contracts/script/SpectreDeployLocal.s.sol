@@ -4,7 +4,8 @@ pragma solidity 0.8.19;
 import "forge-std/Script.sol";
 import "forge-std/safeconsole.sol";
 import {Spectre} from "../src/Spectre.sol";
-import {Verifier} from "../snark-verifiers/sync_step.sol"; 
+import {Verifier as SyncStepVerifier} from "../snark-verifiers/sync_step.sol"; 
+import {Verifier as CommitteeUpdateVerifier} from "../snark-verifiers/committee_update_aggregated.sol"; 
 
 contract SpectreDeployLocal is Script {
     bytes proof;
@@ -13,7 +14,9 @@ contract SpectreDeployLocal is Script {
     function run() external {
         vm.startBroadcast();
 
-        Verifier verifier = new Verifier();
+        new SyncStepVerifier();
+        new CommitteeUpdateVerifier();
+        
 
         vm.stopBroadcast();
     }
