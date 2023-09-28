@@ -41,7 +41,7 @@ pub struct Args {
 
     #[clap(
         long,
-        short='n',
+        short = 'n',
         help = "Beacon node URL",
         default_value = "http://127.0.0.1:5052"
     )]

@@ -177,13 +177,9 @@ async fn generic_circuit_cli<
             );
             let witness = fetch(args.beacon_api_url.clone()).await?;
 
-            let deplyment_code = Circuit::gen_evm_verifier_shplonk(
-                &params,
-                &pk,
-                None::<&Path>,
-                &default_witness,
-            )
-            .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
+            let deplyment_code =
+                Circuit::gen_evm_verifier_shplonk(&params, &pk, None::<&Path>, &default_witness)
+                    .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
 
             Circuit::gen_calldata(
                 &params,
