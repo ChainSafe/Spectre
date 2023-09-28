@@ -87,10 +87,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
         let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
-        // let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
+        let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
 
-        // Ok(vec![poseidon_commit])
-        Ok(vec![])
+        Ok(vec![poseidon_commit])
     }
 
     pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
@@ -360,7 +359,7 @@ mod tests {
         const APP_K: u32 = 18;
         let params_app = gen_srs(APP_K);
 
-        const AGG_K: u32 = 17;
+        const AGG_K: u32 = 22;
         let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
             &params_app,
             "../build/committee_update.pkey",

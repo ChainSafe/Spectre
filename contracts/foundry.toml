@@ -4,12 +4,12 @@ out = 'out'
 ffi = true
 libs = ['lib']
 optimizer = true
-optimizer_runs = 1_000_000 
+optimizer_runs = 1_000_000_000
 solc = "0.8.19"
 fs_permissions = [{ access = "read", path = "./test/data/"}]
 
 [profile.default.optimizer_details]
-constantOptimizer = false 
+constantOptimizer = true 
 yul = false 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

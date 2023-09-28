@@ -43,3 +43,5 @@ params/
 *.calldata
 
 consensus-spec-tests
+
+*.yul

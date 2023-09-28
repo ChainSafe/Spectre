@@ -182,6 +182,23 @@ pub trait AppCircuit: Sized {
         Ok(deployment_code)
     }
 
+    fn gen_evm_proof_shplonk(
+        params: &ParamsKZG<Bn256>,
+        pk: &ProvingKey<G1Affine>,
+        pinning_path: impl AsRef<Path>,
+        path: impl AsRef<Path>,
+        deployment_code: Option<Vec<u8>>,
+        witness: &Self::Witness,
+    ) -> Result<(Vec<u8>, Vec<Vec<Fr>>), Error> {
+        let pinning = Self::Pinning::from_path(pinning_path);
+        let circuit =
+            Self::create_circuit(CircuitBuilderStage::Prover, Some(pinning), params, witness)?;
+        let instances = circuit.instances();
+        let proof = gen_evm_proof_shplonk(params, pk, circuit, instances.clone());
+
+        Ok((proof, instances))
+    }
+
     fn gen_calldata(
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,

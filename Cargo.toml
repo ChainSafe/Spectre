@@ -35,6 +35,7 @@ halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5c
 halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9ed4039a497697b83eafabec62519", default-features = false }
 poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "1a2f896a5cd9ed4039a497697b83eafabec62519", default-features = false }
 
+
 # halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
 #     "halo2-pse",
 #     "display",
