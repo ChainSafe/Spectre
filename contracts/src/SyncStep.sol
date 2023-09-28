@@ -7,17 +7,27 @@ library SyncStep {
     struct SyncStepArgs {
         uint256 attestedSlot;
         uint256 finalizedSlot;
+        // bytes32 finalizedHeaderRoot;  // not sure why this is skipped right now
         uint256 participation;
-        // bytes32 executionPayloadRoot; // not sure why this is skipped right now
-        bytes32 finalizedHeaderRoot;
+        bytes32 executionPayloadRoot;
     }
 
     /**
-    * @notice Compute the public input commitment for the sync step given this input
+    * @notice Compute the public input commitment for the sync step given this input.
+    *         This must always match the prodecure used in lightclient-circuits/src/sync_step_circuit.rs - SyncStepCircuit::instance()
     * @param args The arguments for the sync step
     * @param keysPoseidonCommitment The commitment to the keys used in the sync step
      */
-    function toInputCommitment(SyncStepArgs memory args, bytes32 keysPoseidonCommitment) internal pure returns (bytes32) {
-        return bytes32(0x0);
+    function toInputCommitment(SyncStepArgs memory args, bytes32 keysPoseidonCommitment) internal pure returns (uint256 comm) {
+        // May need to convert to LE
+        bytes32 attestedSlotBytes = bytes32(args.attestedSlot);
+        bytes32 finalizedSlotBytes = bytes32(args.finalizedSlot);
+        bytes32 participationBytes = bytes32(args.participation);
+
+        bytes32 h = sha256(bytes.concat(attestedSlotBytes, finalizedSlotBytes));
+        h = sha256(bytes.concat(participationBytes, h));
+        h = sha256(bytes.concat(args.executionPayloadRoot, h));
+        h = sha256(bytes.concat(keysPoseidonCommitment, h));
+        comm = uint256(h) & ((uint256(1) << 253) - 1); // truncate to 253 bits
     }
 }
