@@ -1,3 +1,3 @@
 fn main() {
-    cli_batteries::build_rs().unwrap()
+    // cli_batteries::build_rs().unwrap()
 }
