@@ -9,14 +9,9 @@ import {SyncStep} from "../src/SyncStep.sol";
 contract SyncStepInputEncoding is Test {
     using SyncStep for SyncStep.SyncStepArgs;
 
-    // attested_slot: 40
-    // finalized_slot: 24
-    // participation: 32
-    // executionPayloadRoot: d11151b7c53e3ed79401bcdbb74845bc99ed0de99d32ebee241fc58c1e8c68cb
-    // keys poseidon commitment: 02b0a3b579953718463ac4baa9987225c5d74b0a7b4193e51ae091f5a0aa1c11
-    // input_commitment: 8d387254c3f6a8074f1f4d78f99eec52a2a93104494d69ac6f52884780426019
-
     function testToInputCommitment() public {
+        // test data obtained from minimal spec test. 
+        // TODO: read these from file fixtures
         SyncStep.SyncStepArgs memory args = SyncStep.SyncStepArgs({
             attestedSlot: 40,
             finalizedSlot: 24,
