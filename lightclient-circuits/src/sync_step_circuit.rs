@@ -243,7 +243,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         )?;
 
         let participation_sum_bytes =
-            to_bytes_le::<_, 8>(thread_pool.main(), gate, &participation_sum);
+            to_bytes_le::<_, 32>(thread_pool.main(), gate, &participation_sum);
 
         let h = sha256_chip.digest::<64>(
             thread_pool,
