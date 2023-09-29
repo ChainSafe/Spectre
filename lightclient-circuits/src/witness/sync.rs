@@ -21,13 +21,13 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub finalized_header: BeaconBlockHeader,
 
-    pub domain: [u8; 32],
-
-    pub execution_payload_branch: Vec<Vec<u8>>,
+    pub finality_branch: Vec<Vec<u8>>,
 
     pub execution_payload_root: Vec<u8>,
 
-    pub finality_branch: Vec<Vec<u8>>,
+    pub execution_payload_branch: Vec<Vec<u8>>,
+
+    pub domain: [u8; 32],
 
     #[serde(skip)]
     pub _spec: PhantomData<S>,
