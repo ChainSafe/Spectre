@@ -5,16 +5,18 @@ use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
 use halo2_base::gates::builder::CircuitBuilderStage;
 use halo2_proofs::dev::MockProver;
-use halo2curves::bn256;
+use halo2curves::bn256::{self, Fr};
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
+use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
+use lightclient_circuits::gadget::crypto;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::util::gen_srs;
 use lightclient_circuits::util::AppCircuit;
 use lightclient_circuits::util::Eth2ConfigPinning;
 use lightclient_circuits::util::Halo2ConfigPinning;
 use lightclient_circuits::util::{full_prover, full_verifier};
-use lightclient_circuits::witness::SyncStepArgs;
+use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use rstest::rstest;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::prelude::*;
@@ -24,6 +26,7 @@ use std::path::PathBuf;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 use test_utils::{load_snappy_ssz, load_yaml};
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 struct TestMeta {
     genesis_validators_root: String,
@@ -32,6 +35,7 @@ struct TestMeta {
     store_fork_digest: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum TestStep {
@@ -47,12 +51,14 @@ enum TestStep {
     },
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 struct Checks {
     finalized_header: RootAtSlot,
     optimistic_header: RootAtSlot,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 struct RootAtSlot {
     slot: u64,
@@ -134,7 +140,7 @@ impl<const BYTES_PER_LOGS_BLOOM: usize, const MAX_EXTRA_DATA_BYTES: usize>
     }
 }
 
-fn to_witness<
+fn to_sync_ciruit_witness<
     const SYNC_COMMITTEE_SIZE: usize,
     const NEXT_SYNC_COMMITTEE_GINDEX: usize,
     const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
@@ -154,13 +160,16 @@ fn to_witness<
     >,
     genesis_validators_root: Root,
 ) -> SyncStepArgs<Minimal> {
-    let mut args = SyncStepArgs::<Minimal>::default();
-    args.signature_compressed = zipline_witness
-        .light_client_update
-        .sync_aggregate
-        .sync_committee_signature
-        .to_bytes()
-        .to_vec();
+    let mut args = SyncStepArgs::<Minimal> {
+        signature_compressed: zipline_witness
+            .light_client_update
+            .sync_aggregate
+            .sync_committee_signature
+            .to_bytes()
+            .to_vec(),
+        ..Default::default()
+    };
+
     args.signature_compressed.reverse();
     let pubkeys_uncompressed = zipline_witness
         .committee
@@ -168,8 +177,8 @@ fn to_witness<
         .iter()
         .map(|pk| {
             let p = pk.decompressed_bytes();
-            let mut x = (&p[0..48]).clone().to_vec();
-            let mut y = (&p[48..96]).clone().to_vec();
+            let mut x = p[0..48].to_vec();
+            let mut y = p[48..96].to_vec();
             x.reverse();
             y.reverse();
             let mut res = vec![];
@@ -266,7 +275,7 @@ fn to_witness<
     };
     let fork_data = ForkData {
         fork_version: [3, 0, 0, 1],
-        genesis_validators_root: genesis_validators_root.clone(),
+        genesis_validators_root,
     };
     let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
     args.domain = signing_domain;
@@ -305,11 +314,13 @@ fn to_witness<
     args
 }
 
-fn read_test_files_and_gen_witness(path: PathBuf) -> SyncStepArgs<Minimal> {
+fn read_test_files_and_gen_witness(
+    path: PathBuf,
+) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
     let bootstrap: LightClientBootstrap =
-        load_snappy_ssz(&path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
-    let meta: TestMeta = load_yaml(&path.join("meta.yaml").to_str().unwrap());
-    let steps: Vec<TestStep> = load_yaml(&path.join("steps.yaml").to_str().unwrap());
+        load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
+    let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
+    let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
 
     let genesis_validators_root = Root::try_from(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
@@ -324,8 +335,7 @@ fn read_test_files_and_gen_witness(path: PathBuf) -> SyncStepArgs<Minimal> {
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
                 let update: LightClientUpdateCapella = load_snappy_ssz(
-                    &path
-                        .join(format!("{}.ssz_snappy", update))
+                    path.join(format!("{}.ssz_snappy", update))
                         .to_str()
                         .unwrap(),
                 )
@@ -337,13 +347,26 @@ fn read_test_files_and_gen_witness(path: PathBuf) -> SyncStepArgs<Minimal> {
         .collect::<Vec<_>>();
 
     let zipline_witness = light_client_verifier::ZiplineUpdateWitnessCapella {
-        committee: bootstrap.current_sync_committee.clone(),
+        committee: bootstrap.current_sync_committee,
         light_client_update: updates[0].clone(),
     };
-    to_witness(&zipline_witness, genesis_validators_root.clone())
+    let sync_wit = to_sync_ciruit_witness(&zipline_witness, genesis_validators_root);
+    let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
+        pubkeys_compressed: zipline_witness
+            .committee
+            .pubkeys
+            .iter()
+            .cloned()
+            .map(|pk| pk.to_bytes().to_vec())
+            .collect_vec(),
+        randomness: crypto::constant_randomness(),
+        _spec: Default::default(),
+    };
+    (sync_wit, rotation_wit)
 }
+
 #[rstest]
-fn test_step_mock(
+fn test_eth2_spec_mock(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
     #[exclude("deneb*")]
     path: PathBuf,
@@ -351,31 +374,59 @@ fn test_step_mock(
     const K: u32 = 21;
     let params = gen_srs(K);
 
-    let witness = read_test_files_and_gen_witness(path);
-    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+    let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(path);
 
-    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
-        CircuitBuilderStage::Mock,
-        Some(pinning),
-        &params,
-        &witness,
+    let rotation_circuit = {
+        let pinning: Eth2ConfigPinning =
+            Eth2ConfigPinning::from_path("./config/committee_update.json");
+
+        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            Some(pinning),
+            &params,
+            &rotation_witness,
+        )
+        .unwrap()
+    };
+
+    let timer = start_timer!(|| "committee_update mock prover run");
+    let prover = MockProver::<bn256::Fr>::run(
+        K,
+        &rotation_circuit,
+        rotation_circuit.instances(), //CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(rotation_witness.pubkeys_compressed),
     )
     .unwrap();
+    prover.assert_satisfied_par();
+    end_timer!(timer);
 
-    let timer = start_timer!(|| "sync_step mock prover");
-    let prover = MockProver::<bn256::Fr>::run(K, &circuit, circuit.instances()).unwrap();
+    let sync_circuit = {
+        let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+
+        SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            Some(pinning),
+            &params,
+            &sync_witness,
+        )
+        .unwrap()
+    };
+
+    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness);
+
+    let timer = start_timer!(|| "sync_step mock prover run");
+    let prover = MockProver::<bn256::Fr>::run(K, &sync_circuit, vec![vec![sync_pi_commit]]).unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
 }
 
 #[rstest]
-fn test_step_proofgen(
+fn test_eth2_spec_proofgen(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
     const K: u32 = 20;
-    let witness = read_test_files_and_gen_witness(path);
+    let (witness, _) = read_test_files_and_gen_witness(path);
 
     let params = gen_srs(K);
     let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
@@ -401,8 +452,9 @@ fn test_step_proofgen(
 
     assert!(full_verifier(&params, pk.get_vk(), proof, instances))
 }
+
 #[rstest]
-fn test_step_evm_verify(
+fn test_eth2_spec_evm_verify(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
     #[exclude("deneb*")]
     path: PathBuf,
@@ -418,7 +470,7 @@ fn test_step_evm_verify(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let witness = read_test_files_and_gen_witness(path);
+    let (witness, _)  = read_test_files_and_gen_witness(path);
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 

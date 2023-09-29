@@ -263,7 +263,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         Ok(vec![pi_commit])
     }
 
-    pub fn instance(args: SyncStepArgs<S>) -> bn256::Fr {
+    pub fn instance_commitment(args: &SyncStepArgs<S>) -> bn256::Fr {
         const INPUT_SIZE: usize = 8 * 3 + 32 * 3;
         let mut input = [0; INPUT_SIZE];
 
@@ -557,15 +557,17 @@ mod tests {
         )
         .unwrap();
 
+        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness);
+
         let timer = start_timer!(|| "sync_step mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
     #[test]
     fn test_sync_proofgen() {
-        const K: u32 = 21;
+        const K: u32 = 22;
         let params = gen_srs(K);
 
         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
@@ -596,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_sync_evm_verify() {
-        const K: u32 = 21;
+        const K: u32 = 22;
         let params = gen_srs(K);
 
         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
