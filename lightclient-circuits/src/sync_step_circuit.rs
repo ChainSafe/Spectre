@@ -131,7 +131,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let mut h2c_cache = HashToCurveCache::<F>::default();
 
         // Verify attestted header
-        let attested_slot: HashInputChunk<_> = args.attested_header.slot.into_witness();
+        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
         let attested_header_state_root = args
             .attested_header
             .state_root
@@ -143,7 +143,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                attested_slot.clone(),
+                attested_slot_bytes.clone(),
                 args.attested_header.proposer_index.into_witness(),
                 args.attested_header.parent_root.as_ref().into_witness(),
                 attested_header_state_root.clone().into(),
@@ -163,13 +163,12 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .map(|&b| thread_pool.main().load_witness(F::from(b as u64)))
             .collect_vec();
 
-        let finalized_slot: HashInputChunk<_> = args.finalized_header.slot.into_witness();
-
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
         let finalized_header_root = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
             [
-                finalized_slot.clone(),
+                finalized_slot_bytes.clone(),
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
                 args.finalized_header.state_root.as_ref().into_witness(),
@@ -229,48 +228,38 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(attested_slot, finalized_slot),
-            false,
-        )?;
-
-        // TODO: Investigate if we should hash it all concatinated in one go
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), finalized_header_root.into()),
-            false,
-        )?;
-
         let participation_sum_bytes =
-            to_bytes_le::<_, 32>(thread_pool.main(), gate, &participation_sum);
-
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), participation_sum_bytes.into()),
-            false,
-        )?;
-
-        let h = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), execution_payload_root),
-            false,
-        )?;
+            to_bytes_le::<_, 8>(thread_pool.main(), gate, &participation_sum);
 
         let poseidon_commit_bytes =
             to_bytes_le::<_, 32>(thread_pool.main(), gate, &poseidon_commit);
 
-        let pi_hash_bytes = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(h.output_bytes.into(), poseidon_commit_bytes.into()),
-            false,
-        )?.output_bytes;
+        // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
+        let public_inputs_concat = itertools::chain![
+            attested_slot_bytes.bytes.into_iter().take(8),
+            finalized_slot_bytes.bytes.into_iter().take(8),
+            participation_sum_bytes
+                .into_iter()
+                .map(|b| QuantumCell::Existing(b)),
+            finalized_header_root
+                .into_iter()
+                .map(|b| QuantumCell::Existing(b)),
+            execution_payload_root.bytes.into_iter(),
+            poseidon_commit_bytes
+                .into_iter()
+                .map(|b| QuantumCell::Existing(b)),
+        ]
+        .collect_vec();
 
-        let pi_commit = truncate_sha256_into_signle_elem(
-            thread_pool.main(),
-            range,
-            pi_hash_bytes,
-        );
+        let pi_hash_bytes = sha256_chip
+            .digest::<{ 8 * 3 + 32 * 3 }>(
+                thread_pool,
+                HashInputChunk::new(public_inputs_concat).into(),
+                false,
+            )?
+            .output_bytes;
+
+        let pi_commit = truncate_sha256_into_signle_elem(thread_pool.main(), range, pi_hash_bytes);
 
         Ok(vec![pi_commit])
     }
