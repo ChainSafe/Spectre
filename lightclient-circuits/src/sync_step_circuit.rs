@@ -228,24 +228,23 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
-        let participation_sum_bytes =
+        let participation_sum_le =
             to_bytes_le::<_, 8>(thread_pool.main(), gate, &participation_sum);
 
-        let poseidon_commit_bytes =
-            to_bytes_le::<_, 32>(thread_pool.main(), gate, &poseidon_commit);
+        let poseidon_commit_le = to_bytes_le::<_, 32>(thread_pool.main(), gate, &poseidon_commit);
 
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
         let public_inputs_concat = itertools::chain![
             attested_slot_bytes.bytes.into_iter().take(8),
             finalized_slot_bytes.bytes.into_iter().take(8),
-            participation_sum_bytes
+            participation_sum_le
                 .into_iter()
                 .map(|b| QuantumCell::Existing(b)),
             finalized_header_root
                 .into_iter()
                 .map(|b| QuantumCell::Existing(b)),
             execution_payload_root.bytes.into_iter(),
-            poseidon_commit_bytes
+            poseidon_commit_le
                 .into_iter()
                 .map(|b| QuantumCell::Existing(b)),
         ]
@@ -265,16 +264,26 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     }
 
     pub fn instance(args: SyncStepArgs<S>) -> bn256::Fr {
-        let mut input: [u8; 64] = [0; 64];
+        const INPUT_SIZE: usize = 8 * 3 + 32 * 3;
+        let mut input = [0; INPUT_SIZE];
 
-        let mut attested_slot = args.attested_header.slot.to_le_bytes().to_vec();
-        let mut finalized_slot = args.finalized_header.slot.to_le_bytes().to_vec();
-        attested_slot.resize(32, 0);
-        finalized_slot.resize(32, 0);
+        let mut attested_slot_le = args.attested_header.slot.to_le_bytes().to_vec();
+        attested_slot_le.resize(8, 0);
+        input[..8].copy_from_slice(&attested_slot_le);
 
-        input[..32].copy_from_slice(&attested_slot);
-        input[32..].copy_from_slice(&finalized_slot);
-        let h = sha2::Sha256::digest(input).to_vec();
+        let mut finalized_slot_le = args.finalized_header.slot.to_le_bytes().to_vec();
+        finalized_slot_le.resize(8, 0);
+        input[8..16].copy_from_slice(&finalized_slot_le);
+
+        let mut participation_le = args
+            .pariticipation_bits
+            .iter()
+            .map(|v| *v as u64)
+            .sum::<u64>()
+            .to_le_bytes()
+            .to_vec();
+        participation_le.resize(8, 0);
+        input[16..24].copy_from_slice(&participation_le);
 
         let finalized_header_root: [u8; 32] = args
             .finalized_header
@@ -285,27 +294,10 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             .try_into()
             .unwrap();
 
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&finalized_header_root);
-        let h = sha2::Sha256::digest(input).to_vec();
-
-        let mut participation = args
-            .pariticipation_bits
-            .iter()
-            .map(|v| *v as u64)
-            .sum::<u64>()
-            .to_le_bytes()
-            .to_vec();
-        participation.resize(32, 0);
-
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&participation);
-        let h = sha2::Sha256::digest(input).to_vec();
+        input[24..56].copy_from_slice(&finalized_header_root);
 
         let execution_payload_root = &args.execution_payload_root;
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(execution_payload_root);
-        let h = sha2::Sha256::digest(input).to_vec();
+        input[56..88].copy_from_slice(execution_payload_root);
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -317,9 +309,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             })
             .collect_vec();
         let poseidon_commitment = g1_array_poseidon_native::<F>(&pubkey_affines).unwrap();
-        let poseidon_commitment_bytes = poseidon_commitment.to_bytes_le();
-        input[..32].copy_from_slice(&h);
-        input[32..].copy_from_slice(&poseidon_commitment_bytes);
+        let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
+        input[88..].copy_from_slice(&poseidon_commitment_le);
 
         let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
         // Truncate to 253 bits
@@ -546,7 +537,7 @@ mod tests {
     };
 
     fn load_circuit_args() -> SyncStepArgs<Testnet> {
-        serde_json::from_slice(&fs::read("../test_data/sync_step.json").unwrap()).unwrap()
+        serde_json::from_slice(&fs::read("../test_data/sync_step_512.json").unwrap()).unwrap()
     }
 
     #[test]
