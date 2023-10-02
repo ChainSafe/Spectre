@@ -37,8 +37,6 @@ pub use self::spread::SpreadChip;
 
 use super::{AssignedHashResult, HashInstructions};
 
-const SHA256_CONTEXT_ID: usize = usize::MAX;
-
 #[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: Field> {
     spread: SpreadChip<'a, F>,
