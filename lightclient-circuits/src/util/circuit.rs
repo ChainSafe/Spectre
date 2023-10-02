@@ -182,7 +182,8 @@ pub trait AppCircuit: Sized {
         Ok(deployment_code)
     }
 
-    fn gen_evm_proof_shplonk(params: &ParamsKZG<Bn256>,
+    fn gen_evm_proof_shplonk(
+        params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
         pinning_path: impl AsRef<Path>,
         path: impl AsRef<Path>,
