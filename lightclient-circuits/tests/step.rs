@@ -22,7 +22,6 @@ use ssz_rs::Merkleized;
 use ssz_rs::Node;
 use std::path::PathBuf;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
-use snark_verifier::loader::evm::{deploy_and_call, encode_calldata};
 
 use test_utils::{load_snappy_ssz, load_yaml};
 #[derive(Debug, serde::Deserialize)]
@@ -448,7 +447,6 @@ fn test_step_evm_verify(
 
 mod solidity_tests {
     use super::*;
-    use std::sync::Arc;
     use ethers::{
         contract::abigen,
         core::utils::{Anvil, AnvilInstance},
@@ -456,9 +454,10 @@ mod solidity_tests {
         providers::{Http, Provider},
         signers::{LocalWallet, Signer},
     };
-    use lightclient_circuits::poseidon::g1_array_poseidon_native;
     use halo2_base::safe_types::ScalarField;
     use halo2curves::group::UncompressedEncoding;
+    use lightclient_circuits::poseidon::g1_array_poseidon_native;
+    use std::sync::Arc;
 
     /// Ensure that the instance encoding implemented in Solidity matches exactly the instance encoding expected by the circuit
     #[rstest]
@@ -476,15 +475,21 @@ mod solidity_tests {
         let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
         let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
 
-        let result = contract.to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le).call().await?;
-        let mut result_bytes = [0_u8;32];
+        let result = contract
+            .to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le)
+            .call()
+            .await?;
+        let mut result_bytes = [0_u8; 32];
         result.to_little_endian(&mut result_bytes);
 
         assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
         Ok(())
     }
 
-    abigen!(SyncStepExternal, "../contracts/out/SyncStepExternal.sol/SyncStepExternal.json");
+    abigen!(
+        SyncStepExternal,
+        "../contracts/out/SyncStepExternal.sol/SyncStepExternal.json"
+    );
 
     // SyncStepInput type produced by abigen macro matches the solidity struct type
     impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
@@ -504,10 +509,7 @@ mod solidity_tests {
                 .try_into()
                 .unwrap();
 
-            let execution_payload_root: [u8; 32] = args
-                .execution_payload_root
-                .try_into()
-                .unwrap();
+            let execution_payload_root: [u8; 32] = args.execution_payload_root.try_into().unwrap();
 
             SyncStepInput {
                 attested_slot: args.attested_header.slot,
@@ -519,27 +521,33 @@ mod solidity_tests {
         }
     }
 
-    fn extract_poseidon_committee_commitment<Spec: eth_types::Spec>(witness: &SyncStepArgs<Spec>) -> anyhow::Result<[u8; 32]> {
+    fn extract_poseidon_committee_commitment<Spec: eth_types::Spec>(
+        witness: &SyncStepArgs<Spec>,
+    ) -> anyhow::Result<[u8; 32]> {
         let pubkey_affines = witness
-        .pubkeys_uncompressed
-        .iter()
-        .cloned()
-        .map(|bytes| {
-            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+            .pubkeys_uncompressed
+            .iter()
+            .cloned()
+            .map(|bytes| {
+                halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
+                    &bytes.as_slice().try_into().unwrap(),
+                )
                 .unwrap()
-        })
-        .collect_vec();
+            })
+            .collect_vec();
         let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines)?;
         Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
     }
 
     /// Return a fresh ethereum chain+client to test against
     fn make_client(anvil: &AnvilInstance) -> Arc<SignerMiddleware<Provider<Http>, LocalWallet>> {
-        let provider =
-            Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(std::time::Duration::from_millis(10u64));
+        let provider = Provider::<Http>::try_from(anvil.endpoint())
+            .unwrap()
+            .interval(std::time::Duration::from_millis(10u64));
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
-        let client: SignerMiddleware<Provider<Http>, _> = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        let client: SignerMiddleware<Provider<Http>, _> =
+            SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
         Arc::new(client)
     }
 }
