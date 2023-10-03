@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.16;
+
+import { SyncStepLib } from "./SyncStepLib.sol";
 
 contract Spectre {
-    
+    using SyncStepLib for SyncStepLib.SyncStepInput;
+
     address public verifierContract;
 
     constructor(address _verifierContract) {
