@@ -8,6 +8,7 @@ use crate::{
     },
     poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
     ssz_merkle::ssz_merkleize_chunks,
+    sync_step_circuit::{to_bytes_le, truncate_sha256_into_signle_elem},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
         IntoWitness, ThreadBuilderBase,
@@ -83,13 +84,28 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             })
             .collect_vec();
 
-        let root =
+        let committee_root_ssz =
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
         let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
         let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
 
-        Ok(vec![poseidon_commit])
+        let poseidon_commit_bytes =
+            to_bytes_le::<_, 32>(thread_pool.main(), range.gate(), &poseidon_commit);
+
+        let pi_hash_bytes = sha256_chip.digest::<64>(
+            thread_pool,
+            HashInput::TwoToOne(committee_root_ssz.into(), poseidon_commit_bytes.into()),
+            false,
+        )?.output_bytes;
+
+        let pi_commit = truncate_sha256_into_signle_elem(
+            thread_pool.main(),
+            range,
+            pi_hash_bytes,
+        );
+
+        Ok(vec![pi_commit])
     }
 
     pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {

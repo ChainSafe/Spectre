@@ -137,8 +137,11 @@ pub struct HashInputChunk<T> {
 }
 
 impl<T> HashInputChunk<T> {
-    pub fn new(bytes: Vec<T>, is_rlc: bool) -> Self {
-        Self { bytes, is_rlc }
+    pub fn new(bytes: Vec<T>) -> Self {
+        Self {
+            is_rlc: bytes.len() >= 32,
+            bytes,
+        }
     }
 
     pub fn map<B, F: FnMut(T) -> B>(self, f: F) -> HashInputChunk<B> {
