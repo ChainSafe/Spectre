@@ -22,6 +22,7 @@ use ssz_rs::Merkleized;
 use ssz_rs::Node;
 use std::path::PathBuf;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use snark_verifier::loader::evm::{deploy_and_call, encode_calldata};
 
 use test_utils::{load_snappy_ssz, load_yaml};
 #[derive(Debug, serde::Deserialize)]
@@ -443,4 +444,93 @@ fn test_step_evm_verify(
     .unwrap();
     println!("deployment_code size: {}", deployment_code.len());
     snark_verifier_sdk::evm::evm_verify(deployment_code, instances, proof);
+}
+
+mod solidity_tests {
+    use super::*;
+    use ethers::{
+        contract::abigen,
+        core::utils::Anvil,
+        middleware::SignerMiddleware,
+        providers::{Http, Provider},
+        signers::{LocalWallet, Signer},
+    };
+    use lightclient_circuits::poseidon::g1_array_poseidon_native;
+    use halo2_base::safe_types::ScalarField;
+    use halo2curves::group::UncompressedEncoding;
+
+    abigen!(SyncStepExternal, "../contracts/out/SyncStepExternal.sol/SyncStepExternal.json");
+
+    // SyncStepInput type produced by abigen macro matches the solidity struct type
+    impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
+        fn from(args: SyncStepArgs<Spec>) -> Self {
+            let participation = args
+                .pariticipation_bits
+                .iter()
+                .map(|v| *v as u64)
+                .sum::<u64>();
+
+            let finalized_header_root: [u8; 32] = args
+                .finalized_header
+                .clone()
+                .hash_tree_root()
+                .unwrap()
+                .as_bytes()
+                .try_into()
+                .unwrap();
+
+            let execution_payload_root: [u8; 32] = args
+                .execution_payload_root
+                .try_into()
+                .unwrap();
+
+            SyncStepInput {
+                attested_slot: args.attested_header.slot,
+                finalized_slot: args.finalized_header.slot,
+                participation: participation,
+                finalized_header_root,
+                execution_payload_root,
+            }
+        }
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_instance_commitment_evm_equivalence(
+        #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+        #[exclude("deneb*")]
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
+        let witness = read_test_files_and_gen_witness(path);
+        let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance(witness.clone());
+        
+        let anvil = Anvil::new().spawn();
+        let provider =
+            Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(std::time::Duration::from_millis(10u64));
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        let client = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        let client = std::sync::Arc::new(client);
+
+        let contract = SyncStepExternal::deploy(client, ())?.send().await?;
+
+        let pubkey_affines = witness
+            .pubkeys_uncompressed
+            .iter()
+            .cloned()
+            .map(|bytes| {
+                halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                    .unwrap()
+            })
+            .collect_vec();
+        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines)?;
+        let poseidon_commitment_le: [u8; 32] = poseidon_commitment.to_bytes_le().try_into().unwrap();
+
+        let result = contract.to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le).call().await?;
+        let mut result_bytes = [0_u8;32];
+        result.to_little_endian(&mut result_bytes);
+
+        assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
+        Ok(())
+    }
 }

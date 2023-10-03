@@ -18,7 +18,7 @@ pub mod committee_update_circuit;
 pub mod sync_step_circuit;
 
 pub mod builder;
-mod poseidon;
+pub mod poseidon;
 mod ssz_merkle;
 
 pub use halo2_base::gates::builder::FlexGateConfigParams;
