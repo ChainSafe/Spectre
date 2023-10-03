@@ -448,9 +448,10 @@ fn test_step_evm_verify(
 
 mod solidity_tests {
     use super::*;
+    use std::sync::Arc;
     use ethers::{
         contract::abigen,
-        core::utils::Anvil,
+        core::utils::{Anvil, AnvilInstance},
         middleware::SignerMiddleware,
         providers::{Http, Provider},
         signers::{LocalWallet, Signer},
@@ -458,6 +459,30 @@ mod solidity_tests {
     use lightclient_circuits::poseidon::g1_array_poseidon_native;
     use halo2_base::safe_types::ScalarField;
     use halo2curves::group::UncompressedEncoding;
+
+    /// Ensure that the instance encoding implemented in Solidity matches exactly the instance encoding expected by the circuit
+    #[rstest]
+    #[tokio::test]
+    async fn test_instance_commitment_evm_equivalence(
+        #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+        #[exclude("deneb*")]
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
+        let witness = read_test_files_and_gen_witness(path);
+        let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance(witness.clone());
+        let poseidon_commitment_le = extract_poseidon_committee_commitment(&witness)?;
+
+        let anvil_instance = Anvil::new().spawn();
+        let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
+        let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
+
+        let result = contract.to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le).call().await?;
+        let mut result_bytes = [0_u8;32];
+        result.to_little_endian(&mut result_bytes);
+
+        assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
+        Ok(())
+    }
 
     abigen!(SyncStepExternal, "../contracts/out/SyncStepExternal.sol/SyncStepExternal.json");
 
@@ -494,43 +519,27 @@ mod solidity_tests {
         }
     }
 
-    #[rstest]
-    #[tokio::test]
-    async fn test_instance_commitment_evm_equivalence(
-        #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-        #[exclude("deneb*")]
-        path: PathBuf,
-    ) -> anyhow::Result<()> {
-        let witness = read_test_files_and_gen_witness(path);
-        let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance(witness.clone());
-        
-        let anvil = Anvil::new().spawn();
+    fn extract_poseidon_committee_commitment<Spec: eth_types::Spec>(witness: &SyncStepArgs<Spec>) -> anyhow::Result<[u8; 32]> {
+        let pubkey_affines = witness
+        .pubkeys_uncompressed
+        .iter()
+        .cloned()
+        .map(|bytes| {
+            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                .unwrap()
+        })
+        .collect_vec();
+        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines)?;
+        Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    }
+
+    /// Return a fresh ethereum chain+client to test against
+    fn make_client(anvil: &AnvilInstance) -> Arc<SignerMiddleware<Provider<Http>, LocalWallet>> {
         let provider =
             Provider::<Http>::try_from(anvil.endpoint()).unwrap().interval(std::time::Duration::from_millis(10u64));
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
-        let client = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
-        let client = std::sync::Arc::new(client);
-
-        let contract = SyncStepExternal::deploy(client, ())?.send().await?;
-
-        let pubkey_affines = witness
-            .pubkeys_uncompressed
-            .iter()
-            .cloned()
-            .map(|bytes| {
-                halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
-                    .unwrap()
-            })
-            .collect_vec();
-        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines)?;
-        let poseidon_commitment_le: [u8; 32] = poseidon_commitment.to_bytes_le().try_into().unwrap();
-
-        let result = contract.to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le).call().await?;
-        let mut result_bytes = [0_u8;32];
-        result.to_little_endian(&mut result_bytes);
-
-        assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
-        Ok(())
+        let client: SignerMiddleware<Provider<Http>, _> = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        Arc::new(client)
     }
 }
