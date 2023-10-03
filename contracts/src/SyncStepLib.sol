@@ -28,7 +28,7 @@ library SyncStepLib {
     * @param keysPoseidonCommitment The commitment to the keys used in the sync step
     * @return The public input commitment that can be sent to the verifier contract.
      */
-    function toInputCommitment(SyncStepInput memory args, bytes32 keysPoseidonCommitment) internal view returns (uint256) {
+    function toInputCommitment(SyncStepInput memory args, bytes32 keysPoseidonCommitment) internal pure returns (uint256) {
         bytes32 h = sha256(abi.encodePacked(
             toLittleEndian64(args.attestedSlot),
             toLittleEndian64(args.finalizedSlot),

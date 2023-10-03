@@ -11,7 +11,7 @@ import { SyncStepLib } from "../src/SyncStepLib.sol";
 contract SyncStepExternal {
     using SyncStepLib for SyncStepLib.SyncStepInput;
 
-    function toInputCommitment(SyncStepLib.SyncStepInput calldata args, bytes32 keysPoseidonCommitment) public view returns (uint256) {
+    function toInputCommitment(SyncStepLib.SyncStepInput calldata args, bytes32 keysPoseidonCommitment) public pure returns (uint256) {
         return args.toInputCommitment(keysPoseidonCommitment);
     }
 }
