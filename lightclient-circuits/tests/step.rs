@@ -371,8 +371,9 @@ fn test_eth2_spec_mock(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    const K: u32 = 21;
-    let params = gen_srs(K);
+    const K_ROTATION: u32 = 18;
+    const K_SYNC: u32 = 21;
+    let params = gen_srs(K_ROTATION);
 
     let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(path);
 
@@ -391,13 +392,15 @@ fn test_eth2_spec_mock(
 
     let timer = start_timer!(|| "committee_update mock prover run");
     let prover = MockProver::<bn256::Fr>::run(
-        K,
+        K_ROTATION,
         &rotation_circuit,
         rotation_circuit.instances(), //CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(rotation_witness.pubkeys_compressed),
     )
     .unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
+
+    let params = gen_srs(K_SYNC);
 
     let sync_circuit = {
         let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
@@ -414,7 +417,8 @@ fn test_eth2_spec_mock(
     let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness);
 
     let timer = start_timer!(|| "sync_step mock prover run");
-    let prover = MockProver::<bn256::Fr>::run(K, &sync_circuit, vec![vec![sync_pi_commit]]).unwrap();
+    let prover =
+        MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, vec![vec![sync_pi_commit]]).unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
 }
@@ -470,7 +474,7 @@ fn test_eth2_spec_evm_verify(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let (witness, _)  = read_test_files_and_gen_witness(path);
+    let (witness, _) = read_test_files_and_gen_witness(path);
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
