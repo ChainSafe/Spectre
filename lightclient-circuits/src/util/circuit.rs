@@ -87,9 +87,9 @@ pub trait PinnableCircuit<F: ff::Field>: CircuitExt<F> {
     }
 }
 
-pub trait AppCircuit: Sized {
+pub trait AppCircuit {
     type Pinning: Halo2ConfigPinning;
-    type Witness: Clone;
+    type Witness: Clone + Default;
 
     /// Creates a [`PinnableCircuit`], auto-configuring the circuit if not in production or prover mode.
     ///

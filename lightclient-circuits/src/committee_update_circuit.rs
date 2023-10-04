@@ -56,7 +56,7 @@ use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
-pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
+pub struct CommitteeUpdateCircuit<S: Spec + ?Sized, F: Field> {
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }

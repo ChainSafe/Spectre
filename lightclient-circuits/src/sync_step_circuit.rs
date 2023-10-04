@@ -68,7 +68,7 @@ use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
-pub struct SyncStepCircuit<S: Spec, F: Field> {
+pub struct SyncStepCircuit<S: Spec + ?Sized, F: Field> {
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }

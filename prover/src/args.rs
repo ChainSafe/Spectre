@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
 #[derive(Clone, clap::Parser)]
@@ -88,7 +89,7 @@ pub enum Out {
     Tx,
 }
 
-#[derive(Clone, Debug, PartialEq, EnumString)]
+#[derive(Clone, Debug, PartialEq, EnumString, Serialize, Deserialize)]
 pub enum Spec {
     #[strum(serialize = "minimal")]
     Minimal,
