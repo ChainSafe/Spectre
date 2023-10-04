@@ -43,7 +43,7 @@ use halo2_proofs::{
     poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
-    bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2, self},
+    bls12_381::{self, Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
     bn256,
 };
 use itertools::Itertools;
@@ -93,33 +93,37 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?
         };
 
-        let poseidon_commit_bytes =
-            to_bytes_le::<_, 32>(thread_pool.main(), range.gate(), &poseidon_commit);
+        let public_inputs = iter::once(poseidon_commit)
+            .chain(committee_root_ssz)
+            .collect();
 
-        let pi_hash_bytes = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(committee_root_ssz.into(), poseidon_commit_bytes.into()),
-            false,
-        )?.output_bytes;
-
-        let pi_commit = truncate_sha256_into_signle_elem(
-            thread_pool.main(),
-            range,
-            pi_hash_bytes,
-        );
-
-        Ok(vec![pi_commit])
+        Ok(public_inputs)
     }
 
-    pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
-        let pubkey_affines = pubkeys_uncompressed
+    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>> {
+        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes[47] &= 0b11111000;
+            bls12_381::Fq::from_bytes_le(&bytes)
+        });
+
+        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+
+        let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
+            .pubkeys_compressed
             .iter()
-            .map(|bytes| {
-                G1Affine::from_compressed_unchecked(&bytes.as_slice().try_into().unwrap()).unwrap()
-            })
-            .collect_vec();
-        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-        vec![vec![poseidon_commitment]]
+            .cloned()
+            .map(|v| v.try_into().unwrap())
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let ssz_root = pk_vector.hash_tree_root().unwrap();
+
+        let instance_vec = iter::once(poseidon_commitment)
+            .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .collect();
+
+        vec![instance_vec]
     }
 
     fn decode_pubkeys_x(
