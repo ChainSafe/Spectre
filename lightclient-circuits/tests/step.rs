@@ -348,8 +348,9 @@ fn test_step_mock(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    const K: u32 = 21;
-    let params = gen_srs(K);
+    const K_ROTATION: u32 = 18;
+    const K_SYNC: u32 = 21;
+    let params = gen_srs(K_ROTATION);
 
     let witness = read_test_files_and_gen_witness(path);
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
