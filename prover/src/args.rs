@@ -4,7 +4,21 @@ use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
 #[derive(Clone, clap::Parser)]
-pub struct Options {
+#[command(name = "spectre-prover")]
+#[command(about = "Spectre prover", long_about = None)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub subcommand: Subcommands,
+}
+#[derive(Clone, clap::Parser)]
+#[allow(clippy::large_enum_variant)]
+pub enum Subcommands {
+    Rpc,
+    Circuit(CircuitOptions),
+}
+
+#[derive(Clone, clap::Parser)]
+pub struct CircuitOptions {
     #[command(subcommand)]
     pub proof: Proof,
 

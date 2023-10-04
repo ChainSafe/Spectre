@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(associated_type_bounds)]
 mod rpc;
-use args::{Args, Options, Out, Proof};
+use args::{Args, Cli, Out, Proof};
 use axum::{response::IntoResponse, routing::post, Router};
 use cli_batteries::version;
 use ethers::prelude::*;
@@ -44,12 +44,41 @@ ethers::contract::abigen!(
     ]"#,
 );
 
-async fn app(options: Options) -> eyre::Result<()> {
-    match options.spec {
-        args::Spec::Minimal => spec_app::<eth_types::Minimal>(&options.proof).await,
-        args::Spec::Testnet => spec_app::<eth_types::Testnet>(&options.proof).await,
-        args::Spec::Mainnet => spec_app::<eth_types::Testnet>(&options.proof).await,
+async fn app(options: Cli) -> eyre::Result<()> {
+    match options.subcommand {
+        args::Subcommands::Rpc => {
+            let tcp_listener = TcpListener::bind("0.0.0.0:3000").unwrap();
+            let rpc_server = Arc::new(
+                JsonRpcServer::new()
+                    .with_method(
+                        "genEvmProofAndInstancesStepSyncCircuit",
+                        gen_evm_proof_step_circuit_handler,
+                    )
+                    .with_method(
+                        "genEvmProofAndInstancesRotationCircuit",
+                        gen_evm_proof_rotation_circuit_handler,
+                    )
+                    .finish_unwrapped(),
+            );
+            let router = Router::new()
+                .route("/rpc", post(handler))
+                .with_state(rpc_server);
+
+            // log::info!("Ready for RPC connections");
+            let server = axum::Server::from_tcp(tcp_listener)
+                .unwrap()
+                .serve(router.into_make_service());
+            server.await.unwrap();
+
+            // info!("Stopped accepting RPC connections");
+        }
+        args::Subcommands::Circuit(op) => match op.spec {
+            args::Spec::Minimal => spec_app::<eth_types::Minimal>(&op.proof).await.unwrap(),
+            args::Spec::Testnet => spec_app::<eth_types::Testnet>(&op.proof).await.unwrap(),
+            args::Spec::Mainnet => spec_app::<eth_types::Testnet>(&op.proof).await.unwrap(),
+        },
     }
+    Ok(())
 }
 
 async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<()> {
@@ -265,31 +294,6 @@ async fn handler(
 #[tokio::main]
 async fn main() {
     cli_batteries::run(version!(), app);
-
-    let tcp_listener = TcpListener::bind("0.0.0.0:3000").unwrap();
-    let rpc_server = Arc::new(
-        JsonRpcServer::new()
-            .with_method(
-                "genEvmProofAndInstancesStepSyncCircuit",
-                gen_evm_proof_step_circuit_handler,
-            )
-            .with_method(
-                "genEvmProofAndInstancesRotationCircuit",
-                gen_evm_proof_rotation_circuit_handler,
-            )
-            .finish_unwrapped(),
-    );
-    let router = Router::new()
-        .route("/rpc", post(handler))
-        .with_state(rpc_server);
-
-    // log::info!("Ready for RPC connections");
-    let server = axum::Server::from_tcp(tcp_listener)
-        .unwrap()
-        .serve(router.into_make_service());
-    server.await.unwrap();
-
-    // info!("Stopped accepting RPC connections");
 
     // Ok(())
 }

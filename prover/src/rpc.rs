@@ -4,10 +4,7 @@ use super::{args, args::Spec};
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
 
-use itertools::Itertools;
-use jsonrpc_v2::{
-    Error as JsonRpcError, Params,
-};
+use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     sync_step_circuit::SyncStepCircuit,
@@ -18,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 
-use std::{path::PathBuf};
+use std::path::PathBuf;
 
 type SyncStepCircuitMainnet = SyncStepCircuit<eth_types::Mainnet, Fr>;
 type SyncStepCircuitMinimal = SyncStepCircuit<eth_types::Minimal, Fr>;
