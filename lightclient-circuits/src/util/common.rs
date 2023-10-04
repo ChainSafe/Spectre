@@ -159,7 +159,6 @@ pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
     }
 
     fn prover() -> Self {
-        println!("prver ThreadBuilderBase");
         Self::new(true)
     }
 

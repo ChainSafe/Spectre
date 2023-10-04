@@ -1,4 +1,4 @@
-use std::{env::var, marker::PhantomData, vec};
+use std::{env::var, iter, marker::PhantomData, vec};
 
 use crate::{
     builder::Eth2CircuitBuilder,
@@ -6,9 +6,9 @@ use crate::{
         calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
         HashToCurveCache, HashToCurveChip, Sha256ChipWide, ShaBitThreadBuilder, ShaCircuitBuilder,
     },
-    poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
+    poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::ssz_merkleize_chunks,
-    sync_step_circuit::{to_bytes_le, truncate_sha256_into_signle_elem},
+    sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
         IntoWitness, ThreadBuilderBase,
@@ -27,7 +27,7 @@ use halo2_base::{
         range::{RangeConfig, RangeStrategy},
     },
     safe_types::{GateInstructions, RangeChip, RangeInstructions},
-    utils::{fs::gen_srs, CurveAffineExt},
+    utils::{fs::gen_srs, CurveAffineExt, ScalarField},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -43,7 +43,7 @@ use halo2_proofs::{
     poly::{commitment::Params, kzg::commitment::ParamsKZG},
 };
 use halo2curves::{
-    bls12_381::{Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
+    bls12_381::{self, Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2},
     bn256,
 };
 use itertools::Itertools;
@@ -52,7 +52,7 @@ use num_bigint::BigUint;
 use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use snark_verifier_sdk::CircuitExt;
-use ssz_rs::Merkleized;
+use ssz_rs::{Merkleized, Vector};
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[allow(type_alias_bounds)]
@@ -87,101 +87,79 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let committee_root_ssz =
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
-        let pubkeys_x = Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
-        let poseidon_commit = fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?;
+        let poseidon_commit = {
+            let pubkeys_x =
+                Self::decode_pubkeys_x(thread_pool.main(), &fp_chip, compressed_encodings);
+            fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?
+        };
 
-        let poseidon_commit_bytes =
-            to_bytes_le::<_, 32>(thread_pool.main(), range.gate(), &poseidon_commit);
+        let public_inputs = iter::once(poseidon_commit)
+            .chain(committee_root_ssz)
+            .collect();
 
-        let pi_hash_bytes = sha256_chip.digest::<64>(
-            thread_pool,
-            HashInput::TwoToOne(committee_root_ssz.into(), poseidon_commit_bytes.into()),
-            false,
-        )?.output_bytes;
-
-        let pi_commit = truncate_sha256_into_signle_elem(
-            thread_pool.main(),
-            range,
-            pi_hash_bytes,
-        );
-
-        Ok(vec![pi_commit])
+        Ok(public_inputs)
     }
 
-    pub fn instance(pubkeys_uncompressed: Vec<Vec<u8>>) -> Vec<Vec<bn256::Fr>> {
-        let pubkey_affines = pubkeys_uncompressed
+    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>> {
+        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes[47] &= 0b11111000;
+            bls12_381::Fq::from_bytes_le(&bytes)
+        });
+
+        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+
+        let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
+            .pubkeys_compressed
             .iter()
-            .map(|bytes| {
-                G1Affine::from_compressed_unchecked(&bytes.as_slice().try_into().unwrap()).unwrap()
-            })
-            .collect_vec();
-        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines).unwrap();
-        vec![vec![poseidon_commitment]]
+            .cloned()
+            .map(|v| v.try_into().unwrap())
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let ssz_root = pk_vector.hash_tree_root().unwrap();
+
+        let instance_vec = iter::once(poseidon_commitment)
+            .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .collect();
+
+        vec![instance_vec]
     }
 
-    fn decode_pubkeys_x<I: IntoIterator<Item = Vec<AssignedValue<F>>>>(
+    fn decode_pubkeys_x(
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,
-        compressed_encodings: I,
+        compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
     ) -> Vec<ProperCrtUint<F>> {
         let range = fp_chip.range();
         let gate = fp_chip.gate();
 
-        let g1_chip = G1Chip::<F>::new(fp_chip);
+        compressed_encodings
+            .into_iter()
+            .map(|assigned_bytes| {
+                // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
+                assert_eq!(assigned_bytes.len(), G1::BYTES_COMPRESSED);
+                // masked byte from compressed representation
+                let masked_byte = &assigned_bytes[G1::BYTES_COMPRESSED - 1];
+                // clear the flag bits from a last byte of compressed pubkey.
+                // we are using [`clear_3_bits`] function which appears to be just as useful here as for public input commitment.
+                let cleared_byte = clear_3_bits(ctx, range, masked_byte);
+                // Use the cleared byte to construct the x coordinate
+                let assigned_x_bytes_cleared = [
+                    &assigned_bytes.as_slice()[..G1::BYTES_COMPRESSED - 1],
+                    &[cleared_byte],
+                ]
+                .concat();
 
-        let mut pubkeys_x = vec![];
-
-        for assigned_bytes in compressed_encodings {
-            // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
-            assert_eq!(assigned_bytes.len(), G1::BYTES_COMPRESSED);
-
-            // masked byte from compressed representation
-            let masked_byte = &assigned_bytes[G1::BYTES_COMPRESSED - 1];
-            // clear the sign bit from masked byte
-            let cleared_byte = Self::clear_flag_bits(range, masked_byte, ctx);
-            // Use the cleared byte to construct the x coordinate
-            let assigned_x_bytes_cleared = [
-                &assigned_bytes.as_slice()[..G1::BYTES_COMPRESSED - 1],
-                &[cleared_byte],
-            ]
-            .concat();
-            let x_crt = decode_into_field::<F, G1>(
-                assigned_x_bytes_cleared,
-                &fp_chip.limb_bases,
-                gate,
-                ctx,
-            );
-
-            pubkeys_x.push(x_crt);
-        }
-
-        pubkeys_x
+                decode_into_field::<F, G1>(assigned_x_bytes_cleared, &fp_chip.limb_bases, gate, ctx)
+            })
+            .collect()
     }
 
-    /// Clears the 3 first least significat bits used for flags from a last byte of compressed pubkey.
-    /// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
-    fn clear_flag_bits(
-        range: &RangeChip<F>,
-        b: &AssignedValue<F>,
-        ctx: &mut Context<F>,
-    ) -> AssignedValue<F> {
-        let gate = range.gate();
-        // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
-        let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
-        // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
-        let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
-
-        // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
-        range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
-    }
-
-    fn sync_committee_root_ssz<
-        ThreadBuilder: ThreadBuilderBase<F>,
-        I: IntoIterator<Item = Vec<AssignedValue<F>>>,
-    >(
+    fn sync_committee_root_ssz<ThreadBuilder: ThreadBuilderBase<F>>(
         thread_pool: &mut ThreadBuilder,
         hasher: &impl HashInstructions<F, ThreadBuilder>,
-        compressed_encodings: I,
+        compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let mut pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
             .into_iter()

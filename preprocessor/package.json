@@ -19,7 +19,8 @@
   "homepage": "https://github.com/ChainSafe/Spectre#readme",
   "devDependencies": {
     "@types/node": "^20.3.0",
-    "typescript": "^5.1.3"
+    "typescript": "^5.1.3",
+    "tsx": "=3.10.0"
   },
   "dependencies": {
     "@chainsafe/blst": "=0.2.8",

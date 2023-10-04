@@ -3,14 +3,12 @@ import { bls12_381 } from '@noble/curves/bls12-381'
 import {
     ssz,
 } from "@lodestar/types"
-import { createProof, ProofType, MultiProof, Node, SingleProof, TreeOffsetProof, LeafNode, BranchNode, Gindex, gindexIterator, createNodeFromProof } from "@chainsafe/persistent-merkle-tree";
-import { chunkArray, g1PointToLeBytes as g1PointToBytesLE, g2PointToLeBytes, serialize } from "./util";
-import { createNodeFromMultiProofWithTrace, printTrace } from "./merkleTrace";
-import { hexToBytes, bytesToHex, numberToBytesBE } from "@noble/curves/abstract/utils";
+import { createProof, ProofType, SingleProof, createNodeFromProof } from "@chainsafe/persistent-merkle-tree";
+import { g1PointToLeBytes as g1PointToBytesLE, g2PointToLeBytes, serialize } from "./util";
+import { hexToBytes, bytesToHex } from "@noble/curves/abstract/utils";
 import { ProjPointType } from "@noble/curves/abstract/weierstrass";
-import { createNodeFromCompactMultiProof } from "@chainsafe/persistent-merkle-tree/lib/proof/compactMulti";
-import { BeaconStateCache, computeSigningRoot } from "@lodestar/state-transition";
-import { createBeaconConfig, BeaconConfig } from "@lodestar/config";
+import { computeSigningRoot } from "@lodestar/state-transition";
+import { createBeaconConfig } from "@lodestar/config";
 import { config as chainConfig } from "@lodestar/config/default";
 import { DOMAIN_SYNC_COMMITTEE } from "@lodestar/params";
 import { BitArray } from "@chainsafe/ssz";
@@ -22,7 +20,6 @@ const N_validators = parseInt(process.argv[2]) || 512;
 
 let privKeyHexes: string[] = JSON.parse(fs.readFileSync("../test_data/private_keys.json").toString());
 
-const targetEpoch = 25;
 
 //----------------- Beacon state -----------------//
 
@@ -107,9 +104,11 @@ let beaconBlockBody = {
 
 let beaconBlockTree = ssz.capella.BeaconBlockBody.toView(beaconBlockBody);
 
-let execRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload"]).gindex;
+let execPayloadRootGindex = ssz.capella.BeaconBlockBody.getPathInfo(["executionPayload"]).gindex;
 
-let execMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execRootGindex }) as SingleProof;
+let execPayloadMerkleProof = createProof(beaconBlockTree.node, { type: ProofType.single, gindex: execPayloadRootGindex }) as SingleProof;
+
+let execPayloadRoot = ssz.capella.ExecutionPayload.hashTreeRoot(beaconBlockBody.executionPayload);
 
 let finalizedBlock = {
     slot: 0,
@@ -123,7 +122,7 @@ beaconState.finalizedCheckpoint.root = ssz.phase0.BeaconBlockHeader.hashTreeRoot
 
 const finilizedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(finalizedBlock);
 
-assert.deepStrictEqual(createNodeFromProof(execMerkleProof).root, beaconBlockTree.node.root)
+assert.deepStrictEqual(createNodeFromProof(execPayloadMerkleProof).root, beaconBlockTree.node.root)
 
 //--------------------- Sync ---------------------//
 
@@ -166,25 +165,23 @@ let finilizedBlockMerkleProof = createProof(beaconStateTree.node, { type: ProofT
 assert.deepStrictEqual(createNodeFromProof(finilizedBlockMerkleProof).root, beaconStateTree.node.root)
 
 let input = {
-    targetEpoch: targetEpoch,
+    signatureCompressed: syncSigBytes,
     pubkeysUncompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], false))),
     pariticipationBits: Array.from(beaconState.validators.entries()).map((_) => true),
-    domain: Array.from(domain),
     attestedHeader: attestedBlockJson,
     finalizedHeader: finilizedBlockJson,
-    signatureCompressed: syncSigBytes,
-    executionPayloadBranch: execMerkleProof.witnesses.map((w) => Array.from(w)),
-    executionStateRoot: beaconBlockBody.executionPayload.stateRoot,
     finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
-    beaconStateRoot: Array.from(beaconStateRoot),
+    executionPayloadBranch: execPayloadMerkleProof.witnesses.map((w) => Array.from(w)),
+    executionPayloadRoot: execPayloadRoot,
+    domain: Array.from(domain),
 };
 
 fs.writeFileSync(
-    `../test_data/sync_step.json`,
+    `../test_data/sync_step_${N_validators}.json`,
     serialize(input)
 );
 
 fs.writeFileSync(
-    `../test_data/committee_pubkeys.json`,
+    `../test_data/committee_pubkeys_${N_validators}.json`,
     serialize(Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true))))
 );

@@ -18,7 +18,7 @@ use crate::{
         calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
         HashToCurveCache, HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
     },
-    poseidon::{fq_array_poseidon, g1_array_poseidon_native, poseidon_sponge},
+    poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
@@ -257,13 +257,12 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 false,
             )?
             .output_bytes;
-
-        let pi_commit = truncate_sha256_into_signle_elem(thread_pool.main(), range, pi_hash_bytes);
+        let pi_commit = truncate_sha256_into_single_elem(thread_pool.main(), range, pi_hash_bytes);
 
         Ok(vec![pi_commit])
     }
 
-    pub fn instance(args: SyncStepArgs<S>) -> bn256::Fr {
+    pub fn instance_commitment(args: &SyncStepArgs<S>) -> bn256::Fr {
         const INPUT_SIZE: usize = 8 * 3 + 32 * 3;
         let mut input = [0; INPUT_SIZE];
 
@@ -308,7 +307,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                     .unwrap()
             })
             .collect_vec();
-        let poseidon_commitment = g1_array_poseidon_native::<F>(&pubkey_affines).unwrap();
+        let poseidon_commitment =
+            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
         let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
         input[88..].copy_from_slice(&poseidon_commitment_le);
 
@@ -320,7 +320,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 }
 
 // Truncate the SHA256 digest to 253 bits and convert to one field element.
-pub fn truncate_sha256_into_signle_elem<F: Field>(
+pub fn truncate_sha256_into_single_elem<F: Field>(
     ctx: &mut Context<F>,
     range: &impl RangeInstructions<F>,
     hash_bytes: [AssignedValue<F>; 32],
@@ -557,15 +557,17 @@ mod tests {
         )
         .unwrap();
 
+        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness);
+
         let timer = start_timer!(|| "sync_step mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }
 
     #[test]
     fn test_sync_proofgen() {
-        const K: u32 = 21;
+        const K: u32 = 22;
         let params = gen_srs(K);
 
         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
@@ -596,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_sync_evm_verify() {
-        const K: u32 = 21;
+        const K: u32 = 22;
         let params = gen_srs(K);
 
         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
