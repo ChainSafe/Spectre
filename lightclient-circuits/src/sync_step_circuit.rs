@@ -258,7 +258,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             )?
             .output_bytes;
 
-        let pi_commit = truncate_sha256_into_signle_elem(thread_pool.main(), range, pi_hash_bytes);
+        let pi_commit = truncate_sha256_into_single_elem(thread_pool.main(), range, pi_hash_bytes);
 
         Ok(vec![pi_commit])
     }
@@ -321,7 +321,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
 }
 
 // Truncate the SHA256 digest to 253 bits and convert to one field element.
-pub fn truncate_sha256_into_signle_elem<F: Field>(
+pub fn truncate_sha256_into_single_elem<F: Field>(
     ctx: &mut Context<F>,
     range: &impl RangeInstructions<F>,
     hash_bytes: [AssignedValue<F>; 32],

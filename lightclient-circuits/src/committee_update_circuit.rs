@@ -8,7 +8,7 @@ use crate::{
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::ssz_merkleize_chunks,
-    sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_signle_elem},
+    sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
         IntoWitness, ThreadBuilderBase,
