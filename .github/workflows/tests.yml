@@ -30,7 +30,16 @@ jobs:
           toolchain: nightly-2022-10-28
           override: true
           components: rustfmt
-    - name: Check
-      run: cargo check --all
-    - name: Check
-      run: RUST_LOG="lightclient-circuits=debug" cargo test --release test_eth2_spec_mock
+
+    - name: Install just
+      uses: extractions/setup-just@v1
+
+    - name: Download consensus spec
+      run: just download-spec-tests
+
+    # skip this in favour of compiling in the `Test` action.
+    # - name: Check
+    #   run: cargo check --all
+    
+    - name: Test
+      run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" cargo test --release test_eth2_spec_mock_1 -- --nocapture

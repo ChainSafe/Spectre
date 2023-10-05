@@ -36,15 +36,16 @@ impl AppCircuit for AggregationCircuit {
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        params: &ParamsKZG<halo2curves::bn256::Bn256>,
         snark: &Self::Witness,
+        k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, halo2_proofs::plonk::Error> {
-        let lookup_bits = params.k() as usize - 1;
+        let lookup_bits = k as usize - 1;
+        let params = gen_srs(k);
         let mut circuit = AggregationCircuit::new::<SHPLONK>(
             stage,
             pinning.map(|p| p.break_points),
             lookup_bits,
-            params,
+            &params,
             snark.clone(),
         );
 
@@ -53,7 +54,7 @@ impl AppCircuit for AggregationCircuit {
                 circuit.expose_previous_instances(false);
             }
             _ => {
-                circuit.config(params.k(), Some(10));
+                circuit.config(k, Some(10));
                 set_var("LOOKUP_BITS", lookup_bits.to_string());
             }
         };

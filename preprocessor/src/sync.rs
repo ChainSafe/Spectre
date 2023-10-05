@@ -195,7 +195,6 @@ mod tests {
     async fn test_sync_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step.json";
         const K: u32 = 21;
-        let params = gen_srs(K);
 
         let witness = fetch_step_args::<Testnet>("http://3.128.78.74:5052".to_string())
             .await
@@ -205,8 +204,8 @@ mod tests {
         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &witness,
+            K
         )
         .unwrap();
 
