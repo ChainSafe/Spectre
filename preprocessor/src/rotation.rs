@@ -5,6 +5,7 @@ use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
 use ssz_rs::Merkleized;
+use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use sync_committee_prover::SyncCommitteeProver;
 use tokio::fs;
 
@@ -65,18 +66,29 @@ pub async fn fetch_rotation_args<S: Spec>(
 pub async fn read_rotation_args<S: Spec>(
     path: String,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let pubkeys_compressed = serde_json::from_slice(
+    #[derive(serde::Deserialize)]
+    struct ArgsJson {
+        finalized_header: BeaconBlockHeader,
+        committee_root_branch: Vec<Vec<u8>>,
+        pubkeys_compressed: Vec<Vec<u8>>,
+    }
+
+    let ArgsJson {
+        pubkeys_compressed,
+        committee_root_branch,
+        finalized_header,
+    } = serde_json::from_slice(
         &fs::read(path)
             .await
             .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
     )
-    .map_err(|e| eyre::eyre!("Errror decoding witness {}", e))?;
+    .map_err(|e| eyre::eyre!("Error decoding witness {}", e))?;
 
     Ok(CommitteeRotationArgs::<S, Fr> {
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
-        finalized_header: todo!(),
-        sync_committee_branch: todo!(),
+        finalized_header,
+        sync_committee_branch: committee_root_branch,
         _spec: PhantomData,
     })
 }
