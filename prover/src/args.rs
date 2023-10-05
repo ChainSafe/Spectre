@@ -13,8 +13,13 @@ pub struct Cli {
 #[derive(Clone, clap::Parser)]
 #[allow(clippy::large_enum_variant)]
 pub enum Subcommands {
-    Rpc,
+    Rpc(RpcOptions),
     Circuit(CircuitOptions),
+}
+#[derive(Clone, clap::Parser)]
+pub struct RpcOptions {
+    #[clap(long, short, default_value = "3000")]
+    pub port: String,
 }
 
 #[derive(Clone, clap::Parser)]

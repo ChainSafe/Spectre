@@ -17,10 +17,6 @@ use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 
 use std::path::PathBuf;
 
-type SyncStepCircuitMainnet = SyncStepCircuit<eth_types::Mainnet, Fr>;
-type SyncStepCircuitMinimal = SyncStepCircuit<eth_types::Minimal, Fr>;
-type SyncStepCircuitTestnet = SyncStepCircuit<eth_types::Testnet, Fr>;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofRotationParams {
     spec: args::Spec,
@@ -190,7 +186,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         Spec::Minimal => {
             let pk_filename = format!("step_circuit_minimal.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
-            gen_evm_proof::<SyncStepCircuitMinimal>(
+            gen_evm_proof::<SyncStepCircuit<eth_types::Minimal, Fr>>(
                 k,
                 build_dir,
                 pk_filename,
@@ -204,7 +200,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
             let pk_filename = format!("step_circuit_testnet.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
 
-            gen_evm_proof::<SyncStepCircuitTestnet>(
+            gen_evm_proof::<SyncStepCircuit<eth_types::Testnet, Fr>>(
                 k,
                 build_dir,
                 pk_filename,
@@ -218,7 +214,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
             let pk_filename = format!("step_circuit_mainnet.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
 
-            gen_evm_proof::<SyncStepCircuitMainnet>(
+            gen_evm_proof::<SyncStepCircuit<eth_types::Mainnet, Fr>>(
                 k,
                 build_dir,
                 pk_filename,

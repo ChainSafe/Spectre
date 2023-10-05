@@ -35,6 +35,8 @@ use std::{
 };
 mod args;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
+
+use crate::args::RpcOptions;
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 ethers::contract::abigen!(
@@ -46,8 +48,10 @@ ethers::contract::abigen!(
 
 async fn app(options: Cli) -> eyre::Result<()> {
     match options.subcommand {
-        args::Subcommands::Rpc => {
-            let tcp_listener = TcpListener::bind("0.0.0.0:3000").unwrap();
+        args::Subcommands::Rpc(op) => {
+            let RpcOptions { port } = op;
+
+            let tcp_listener = TcpListener::bind(&format!("0.0.0.0:{}", port)).unwrap();
             let rpc_server = Arc::new(
                 JsonRpcServer::new()
                     .with_method(
@@ -64,13 +68,13 @@ async fn app(options: Cli) -> eyre::Result<()> {
                 .route("/rpc", post(handler))
                 .with_state(rpc_server);
 
-            // log::info!("Ready for RPC connections");
+            log::info!("Ready for RPC connections");
             let server = axum::Server::from_tcp(tcp_listener)
                 .unwrap()
                 .serve(router.into_make_service());
             server.await.unwrap();
 
-            // info!("Stopped accepting RPC connections");
+            log::info!("Stopped accepting RPC connections");
         }
         args::Subcommands::Circuit(op) => match op.spec {
             args::Spec::Minimal => spec_app::<eth_types::Minimal>(&op.proof).await.unwrap(),
@@ -294,8 +298,6 @@ async fn handler(
 #[tokio::main]
 async fn main() {
     cli_batteries::run(version!(), app);
-
-    // Ok(())
 }
 
 fn read_snark(
