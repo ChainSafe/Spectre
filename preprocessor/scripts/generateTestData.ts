@@ -153,7 +153,6 @@ console.assert(bls12_381.verify(aggSignature, msgPoint, aggregatedPubKey));
 const syncSigBytes = g2PointToLeBytes(aggSignature, true);
 const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
-
 //----------------- State tree  -----------------//
 
 let beaconStateTree = ssz.capella.BeaconState.toView(beaconState);
@@ -164,24 +163,30 @@ let finilizedBlockMerkleProof = createProof(beaconStateTree.node, { type: ProofT
 
 assert.deepStrictEqual(createNodeFromProof(finilizedBlockMerkleProof).root, beaconStateTree.node.root)
 
-let input = {
-    signatureCompressed: syncSigBytes,
-    pubkeysUncompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], false))),
-    pariticipationBits: Array.from(beaconState.validators.entries()).map((_) => true),
-    attestedHeader: attestedBlockJson,
-    finalizedHeader: finilizedBlockJson,
-    finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
-    executionPayloadBranch: execPayloadMerkleProof.witnesses.map((w) => Array.from(w)),
-    executionPayloadRoot: execPayloadRoot,
-    domain: Array.from(domain),
-};
-
 fs.writeFileSync(
     `../test_data/sync_step_${N_validators}.json`,
-    serialize(input)
+    serialize({
+        signatureCompressed: syncSigBytes,
+        pubkeysUncompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], false))),
+        pariticipationBits: Array.from(beaconState.validators.entries()).map((_) => true),
+        attestedHeader: attestedBlockJson,
+        finalizedHeader: finilizedBlockJson,
+        finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
+        executionPayloadBranch: execPayloadMerkleProof.witnesses.map((w) => Array.from(w)),
+        executionPayloadRoot: execPayloadRoot,
+        domain: Array.from(domain),
+    })
 );
 
+let committeeRootindex = ssz.capella.BeaconState.getPathInfo(["nextSyncCommittee", "pubkeys"]).gindex;
+
+let committeeRootMerkleProof = createProof(beaconStateTree.node, { type: ProofType.single, gindex: committeeRootindex }) as SingleProof;
+
 fs.writeFileSync(
-    `../test_data/committee_pubkeys_${N_validators}.json`,
-    serialize(Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true))))
+    `../test_data/rotation_${N_validators}.json`,
+    serialize({
+        finalizedHeader: attestedBlockJson,
+        committeeRootBranch: committeeRootMerkleProof.witnesses,
+        pubkeysCompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true)))
+    })
 );
