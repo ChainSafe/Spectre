@@ -73,23 +73,19 @@ fn gen_evm_proof<C: AppCircuit>(
     build_dir: PathBuf,
     pk_filename: String,
     config_path: PathBuf,
-    path_out: PathBuf,
     witness: C::Witness,
-    default_witness: C::Witness,
 ) -> (Vec<u8>, Vec<Vec<Fr>>) {
     let k = k.unwrap_or_else(|| C::get_degree(&config_path));
     let params = gen_srs(k);
 
-    let pk = C::read_or_create_pk(
+    let pk = C::read_pk(
         &params,
         build_dir.join(pk_filename),
-        &config_path,
-        true,
-        &default_witness,
+        &witness
     );
 
     let (proof, instances) =
-        C::gen_evm_proof_shplonk(&params, &pk, &config_path, path_out, None, &witness)
+        C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
             .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
             .unwrap();
 
@@ -105,13 +101,13 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         beacon_api,
     } = params;
 
+     // TODO: use config/build paths from CLI flags
     let app_config_path = PathBuf::from("./lightclient-circuits/config/committee_update.json");
     let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
 
     let config_path =
         PathBuf::from("./lightclient-circuits/config/committee_update_aggregation.json");
     let build_dir = PathBuf::from("./build");
-    let path_out = PathBuf::from(".");
 
     let (snark, pk_filename) = match spec {
         Spec::Minimal => {
@@ -141,8 +137,6 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         build_dir,
         pk_filename.to_string(),
         config_path,
-        path_out,
-        vec![snark.clone()],
         vec![snark],
     );
 
@@ -167,7 +161,6 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 
     let config_path = PathBuf::from("./lightclient-circuits/config/step_sync.json");
     let build_dir = PathBuf::from("./build");
-    let path_out = PathBuf::from(".");
 
     let (proof, instances) = match spec {
         Spec::Minimal => {
@@ -178,9 +171,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
                 build_dir,
                 pk_filename,
                 config_path,
-                path_out,
                 witness,
-                Default::default(),
             )
         }
         Spec::Testnet => {
@@ -192,9 +183,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
                 build_dir,
                 pk_filename,
                 config_path,
-                path_out,
                 witness,
-                Default::default(),
             )
         }
         Spec::Mainnet => {
@@ -206,9 +195,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
                 build_dir,
                 pk_filename,
                 config_path,
-                path_out,
                 witness,
-                Default::default(),
             )
         }
     };

@@ -186,7 +186,6 @@ pub trait AppCircuit {
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
         pinning_path: impl AsRef<Path>,
-        path: impl AsRef<Path>,
         deployment_code: Option<Vec<u8>>,
         witness: &Self::Witness,
     ) -> Result<(Vec<u8>, Vec<Vec<Fr>>), Error> {

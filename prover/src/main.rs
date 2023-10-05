@@ -51,7 +51,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
         args::Subcommands::Rpc(op) => {
             let RpcOptions { port } = op;
 
-            let tcp_listener = TcpListener::bind(&format!("0.0.0.0:{}", port)).unwrap();
+            let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
             let rpc_server = Arc::new(
                 JsonRpcServer::new()
                     .with_method(
@@ -245,7 +245,6 @@ async fn generic_circuit_cli<
                 &params,
                 &pk,
                 &args.config_path,
-                &args.path_out,
                 None,
                 &witness,
             )
