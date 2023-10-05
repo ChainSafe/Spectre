@@ -26,6 +26,7 @@ let privKeyHexes: string[] = JSON.parse(fs.readFileSync("../test_data/private_ke
 let beaconState = ssz.capella.BeaconState.deserialize(new Uint8Array(fs.readFileSync("../test_data/beacon_state_2915750")));
 beaconState.validators = [];
 beaconState.currentSyncCommittee.pubkeys = [];
+beaconState.nextSyncCommittee.pubkeys = [];
 const config = createBeaconConfig(chainConfig, beaconState.genesisValidatorsRoot);
 
 
@@ -51,6 +52,7 @@ for (let i = 0; i < N_validators; i++) {
     privKeyHexes[i] = bytesToHex(privKey);
     pubKeyPoints.push(p);
     beaconState.currentSyncCommittee.pubkeys.push(pubkey);
+    beaconState.nextSyncCommittee.pubkeys.push(pubkey);
 }
 
 
@@ -186,7 +188,7 @@ fs.writeFileSync(
     `../test_data/rotation_${N_validators}.json`,
     serialize({
         finalizedHeader: attestedBlockJson,
-        committeeRootBranch: committeeRootMerkleProof.witnesses,
+        committeeRootBranch: committeeRootMerkleProof.witnesses.map((w) => Array.from(w)),
         pubkeysCompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], true)))
     })
 );

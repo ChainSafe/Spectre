@@ -85,6 +85,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             })
             .collect_vec();
 
+        // Note: This is the root of the public keys in the SyncCommittee struct
+        // not the root of the SyncCommittee struct itself.
         let committee_root_ssz =
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
@@ -200,7 +202,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         hasher: &impl HashInstructions<F, ThreadBuilder>,
         compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        // let pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
         let pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
             .into_iter()
             .map(|bytes| {
@@ -304,15 +305,25 @@ mod tests {
     };
 
     fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
-        let pubkeys_compressed: Vec<Vec<u8>> =
-            serde_json::from_slice(&fs::read("../test_data/committee_pubkeys_512.json").unwrap())
-                .unwrap();
+        #[derive(serde::Deserialize)]
+        struct ArgsJson {
+            finalized_header: BeaconBlockHeader,
+            committee_root_branch: Vec<Vec<u8>>,
+            pubkeys_compressed: Vec<Vec<u8>>,
+        }
+
+        let ArgsJson {
+            pubkeys_compressed,
+            committee_root_branch,
+            finalized_header,
+        } = serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap();
+
         CommitteeRotationArgs {
             pubkeys_compressed,
             randomness: constant_randomness(),
             _spec: PhantomData,
-            finalized_header: todo!(),
-            sync_committee_branch: todo!(),
+            finalized_header: finalized_header,
+            sync_committee_branch: committee_root_branch,
         }
     }
 
