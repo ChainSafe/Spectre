@@ -20,6 +20,8 @@ use ssz_rs::Node;
 pub struct CommitteeRotationArgs<S: Spec, F: Field> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 
+    pub finalized_header: BeaconBlockHeader,
+
     pub randomness: F,
 
     pub _spec: PhantomData<S>,
@@ -34,6 +36,7 @@ impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
             randomness: constant_randomness(),
+            finalized_header: BeaconBlockHeader::default(),
             _spec: PhantomData,
         }
     }

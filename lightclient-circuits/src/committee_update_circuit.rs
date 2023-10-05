@@ -93,8 +93,23 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?
         };
 
+        // Finalized header
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_header_root = ssz_merkleize_chunks(
+            thread_pool,
+            &sha256_chip,
+            [
+                finalized_slot_bytes.clone(),
+                args.finalized_header.proposer_index.into_witness(),
+                args.finalized_header.parent_root.as_ref().into_witness(),
+                args.finalized_header.state_root.as_ref().into_witness(),
+                args.finalized_header.body_root.as_ref().into_witness(),
+            ],
+        )?;
+
         let public_inputs = iter::once(poseidon_commit)
             .chain(committee_root_ssz)
+            .chain(finalized_header_root)
             .collect();
 
         Ok(public_inputs)
@@ -118,6 +133,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .unwrap();
 
         let ssz_root = pk_vector.hash_tree_root().unwrap();
+
+        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
