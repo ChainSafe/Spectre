@@ -361,6 +361,8 @@ fn read_test_files_and_gen_witness(
             .collect_vec(),
         randomness: crypto::constant_randomness(),
         _spec: Default::default(),
+        finalized_header: todo!(),
+        sync_committee_branch: todo!(),
     };
     (sync_wit, rotation_wit)
 }

@@ -295,15 +295,15 @@ mod tests {
     };
 
     fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
-        {
-            let pubkeys_compressed: Vec<Vec<u8>> =
-                serde_json::from_slice(&fs::read("../test_data/committee_pubkeys.json").unwrap())
-                    .unwrap();
-            CommitteeRotationArgs {
-                pubkeys_compressed,
-                randomness: constant_randomness(),
-                _spec: PhantomData,
-            }
+        let pubkeys_compressed: Vec<Vec<u8>> =
+            serde_json::from_slice(&fs::read("../test_data/committee_pubkeys_512.json").unwrap())
+                .unwrap();
+        CommitteeRotationArgs {
+            pubkeys_compressed,
+            randomness: constant_randomness(),
+            _spec: PhantomData,
+            finalized_header: todo!(),
+            sync_committee_branch: todo!(),
         }
     }
 
