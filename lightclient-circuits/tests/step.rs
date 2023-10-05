@@ -512,7 +512,7 @@ mod solidity_tests {
     };
     use halo2_base::safe_types::ScalarField;
     use halo2curves::group::UncompressedEncoding;
-    use lightclient_circuits::poseidon::g1_array_poseidon_native;
+    use lightclient_circuits::poseidon::fq_array_poseidon_native;
     use std::sync::Arc;
 
     /// Ensure that the instance encoding implemented in Solidity matches exactly the instance encoding expected by the circuit
@@ -523,8 +523,8 @@ mod solidity_tests {
         #[exclude("deneb*")]
         path: PathBuf,
     ) -> anyhow::Result<()> {
-        let witness = read_test_files_and_gen_witness(path);
-        let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance(witness.clone());
+        let (witness, _) = read_test_files_and_gen_witness(path);
+        let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness);
         let poseidon_commitment_le = extract_poseidon_committee_commitment(&witness)?;
 
         let anvil_instance = Anvil::new().spawn();
@@ -591,7 +591,8 @@ mod solidity_tests {
                 .unwrap()
             })
             .collect_vec();
-        let poseidon_commitment = g1_array_poseidon_native::<bn256::Fr>(&pubkey_affines)?;
+        let poseidon_commitment =
+            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
         Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
     }
 
