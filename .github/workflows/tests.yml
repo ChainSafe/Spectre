@@ -41,5 +41,8 @@ jobs:
     # - name: Check
     #   run: cargo check --all
 
+    - name: Gen SRS
+      run: RUST_LOG="lightclient-circuits=debug" cargo test --release gen_srs_for_eth2_spec_mock -- --nocapture
+
     - name: Test
-      run: RUST_LOG="lightclient-circuits=debug" cargo test --release test_eth2_spec_mock_1 -- --nocapture
+      run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" cargo test --release test_eth2_spec_mock_1 -- --nocapture

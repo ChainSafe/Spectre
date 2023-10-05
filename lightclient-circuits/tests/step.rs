@@ -365,6 +365,14 @@ fn read_test_files_and_gen_witness(
     (sync_wit, rotation_wit)
 }
 
+#[test]
+fn gen_srs_for_eth2_spec_mock() {
+    const K_ROTATION: u32 = 16;
+    const K_SYNC: u32 = 20;
+    gen_srs(K_ROTATION);
+    gen_srs(K_SYNC);
+}
+
 #[rstest]
 fn test_eth2_spec_mock_1(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/light_client_sync")]
