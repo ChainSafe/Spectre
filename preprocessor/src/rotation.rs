@@ -13,7 +13,7 @@ pub async fn fetch_rotation_args<S: Spec>(
     let client = SyncCommitteeProver::new(node_url);
     let beacon_state = client.fetch_beacon_state("head").await.unwrap();
     let finalized_header_root = beacon_state.finalized_checkpoint.root;
-    let finalized_header = client
+    let mut finalized_header = client
         .fetch_header(&finalized_header_root.to_string())
         .await
         .unwrap();
@@ -25,10 +25,23 @@ pub async fn fetch_rotation_args<S: Spec>(
         .map(|pk| pk.to_vec())
         .collect_vec();
 
+    let sync_committee_branch =
+        ssz_rs::generate_proof(&mut finalized_header, &[S::SYNC_COMMITTEE_ROOT_INDEX])
+            .unwrap()
+            .iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect_vec();
+    assert!(sync_committee_branch.len() == S::FINALIZED_HEADER_DEPTH);
+    // // FIXME: `ssz_rs::generate_proof` generates branch without leaf. Why?
+    // sync_committee_branch.insert(
+    //     0,
+    //     state.finalized_checkpoint.epoch.hash_tree_root().unwrap(),
+    // );
     let args = CommitteeRotationArgs::<S, Fr> {
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
         finalized_header,
+        sync_committee_branch,
         _spec: PhantomData,
     };
 
@@ -49,6 +62,7 @@ pub async fn read_rotation_args<S: Spec>(
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
         finalized_header: todo!(),
+        sync_committee_branch: todo!(),
         _spec: PhantomData,
     })
 }

@@ -7,7 +7,7 @@ use crate::{
         HashToCurveCache, HashToCurveChip, Sha256ChipWide, ShaBitThreadBuilder, ShaCircuitBuilder,
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
-    ssz_merkle::ssz_merkleize_chunks,
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
@@ -105,6 +105,18 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 args.finalized_header.state_root.as_ref().into_witness(),
                 args.finalized_header.body_root.as_ref().into_witness(),
             ],
+        )?;
+
+        // Verify that the sync committee root is in the finalized header
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.sync_committee_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            committee_root_ssz.clone().into(),
+            &finalized_header_root,
+            S::SYNC_COMMITTEE_ROOT_INDEX,
         )?;
 
         let public_inputs = iter::once(poseidon_commit)

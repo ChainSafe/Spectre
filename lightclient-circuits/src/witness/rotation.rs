@@ -22,6 +22,8 @@ pub struct CommitteeRotationArgs<S: Spec, F: Field> {
 
     pub finalized_header: BeaconBlockHeader,
 
+    pub sync_committee_branch: Vec<Vec<u8>>,
+
     pub randomness: F,
 
     pub _spec: PhantomData<S>,
@@ -35,8 +37,9 @@ impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
+            sync_committee_branch: todo!(),
             randomness: constant_randomness(),
-            finalized_header: BeaconBlockHeader::default(),
+            finalized_header: todo!(),
             _spec: PhantomData,
         }
     }
