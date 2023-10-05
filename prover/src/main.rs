@@ -295,8 +295,7 @@ async fn handler(
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     cli_batteries::run(version!(), app);
 }
 

@@ -1,4 +1,3 @@
-use super::read_snark;
 use super::{args, args::Spec};
 
 use ethers::prelude::*;
@@ -10,7 +9,7 @@ use lightclient_circuits::{
     sync_step_circuit::SyncStepCircuit,
     util::{gen_srs, AppCircuit},
 };
-use preprocessor::fetch_step_args;
+use preprocessor::{fetch_rotation_args, fetch_step_args};
 use serde::{Deserialize, Serialize};
 
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
@@ -22,15 +21,8 @@ pub struct GenProofRotationParams {
     spec: args::Spec,
 
     k: Option<u32>,
-    app_config_path: PathBuf,
-    app_pk_path: PathBuf,
-    config_path: PathBuf,
-    #[serde(default = "default_build_dir")]
-    build_dir: PathBuf,
-
-    #[serde(default = "default_path_out")]
-    path_out: PathBuf,
-    aggregation_input_path: PathBuf,
+    #[serde(default = "default_beacon_api")]
+    beacon_api: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,13 +30,8 @@ pub struct GenProofStepParams {
     spec: args::Spec,
 
     k: Option<u32>,
-    config_path: PathBuf,
-    #[serde(default = "default_build_dir")]
-    build_dir: PathBuf,
     #[serde(default = "default_beacon_api")]
     beacon_api: String,
-    #[serde(default = "default_path_out")]
-    path_out: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,23 +40,18 @@ pub struct EvmProofResult {
     public_inputs: Vec<U256>,
 }
 
-fn default_build_dir() -> PathBuf {
-    PathBuf::from("./build")
-}
 fn default_beacon_api() -> String {
     String::from("http://127.0.0.1:5052")
-}
-
-fn default_path_out() -> PathBuf {
-    PathBuf::from(".")
 }
 
 fn gen_app_snark<S: eth_types::Spec>(
     app_config_path: PathBuf,
     app_pk_path: PathBuf,
-    aggregation_input_path: PathBuf,
-) -> Snark {
-    let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(app_config_path));
+    witness: <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness,
+) -> eyre::Result<Snark> {
+    let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(
+        &app_config_path,
+    ));
 
     let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
         &params,
@@ -77,8 +59,13 @@ fn gen_app_snark<S: eth_types::Spec>(
         &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
     );
 
-    let snark = read_snark(&params, app_pk.get_vk(), &aggregation_input_path).unwrap();
-    snark
+    Ok(CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+        &params,
+        &app_pk,
+        app_config_path,
+        None::<PathBuf>,
+        &witness,
+    )?)
 }
 
 fn gen_evm_proof<C: AppCircuit>(
@@ -115,40 +102,39 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     let GenProofRotationParams {
         spec,
         k,
-        config_path,
-        build_dir,
-
-        path_out,
-        app_config_path,
-        app_pk_path,
-        aggregation_input_path,
+        beacon_api,
     } = params;
 
+    let app_config_path = PathBuf::from("./lightclient-circuits/config/committee_update.json");
+    let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
+
+    let config_path =
+        PathBuf::from("./lightclient-circuits/config/committee_update_aggregation.json");
+    let build_dir = PathBuf::from("./build");
+    let path_out = PathBuf::from(".");
+
     let (snark, pk_filename) = match spec {
-        Spec::Minimal => (
-            gen_app_snark::<eth_types::Minimal>(
-                app_config_path,
-                app_pk_path,
-                aggregation_input_path,
-            ),
-            "agg_rotation_circuit_minimal.pkey",
-        ),
-        Spec::Testnet => (
-            gen_app_snark::<eth_types::Testnet>(
-                app_config_path,
-                app_pk_path,
-                aggregation_input_path,
-            ),
-            "agg_rotation_circuit_testnet.pkey",
-        ),
-        Spec::Mainnet => (
-            gen_app_snark::<eth_types::Mainnet>(
-                app_config_path,
-                app_pk_path,
-                aggregation_input_path,
-            ),
-            "agg_rotation_circuit_mainnet.pkey",
-        ),
+        Spec::Minimal => {
+            let witness = fetch_rotation_args(beacon_api).await?;
+            (
+                gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_minimal.pkey",
+            )
+        }
+        Spec::Testnet => {
+            let witness = fetch_rotation_args(beacon_api).await?;
+            (
+                gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_testnet.pkey",
+            )
+        }
+        Spec::Mainnet => {
+            let witness = fetch_rotation_args(beacon_api).await?;
+            (
+                gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_mainnet.pkey",
+            )
+        }
     };
     let (proof, instances) = gen_evm_proof::<AggregationCircuit>(
         k,
@@ -176,11 +162,12 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
     let GenProofStepParams {
         spec,
         k,
-        config_path,
-        build_dir,
         beacon_api,
-        path_out,
     } = params.clone();
+
+    let config_path = PathBuf::from("./lightclient-circuits/config/step_sync.json");
+    let build_dir = PathBuf::from("./build");
+    let path_out = PathBuf::from(".");
 
     let (proof, instances) = match spec {
         Spec::Minimal => {
