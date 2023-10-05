@@ -78,6 +78,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .pubkeys_compressed
             .iter()
             .map(|bytes| {
+                assert_eq!(bytes.len(), 48);
                 thread_pool
                     .main()
                     .assign_witnesses(bytes.iter().map(|&b| F::from(b as u64)))
@@ -95,6 +96,13 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         // Finalized header
         let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_state_root = args
+            .finalized_header
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
         let finalized_header_root = ssz_merkleize_chunks(
             thread_pool,
             &sha256_chip,
@@ -102,12 +110,11 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 finalized_slot_bytes.clone(),
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
-                args.finalized_header.state_root.as_ref().into_witness(),
+                finalized_state_root.clone().into(),
                 args.finalized_header.body_root.as_ref().into_witness(),
             ],
         )?;
-
-        // Verify that the sync committee root is in the finalized header
+        // Verify that the sync committee root is in the finalized state root
         verify_merkle_proof(
             thread_pool,
             &sha256_chip,
@@ -115,8 +122,11 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .iter()
                 .map(|w| w.clone().into_witness()),
             committee_root_ssz.clone().into(),
-            &finalized_header_root,
-            S::SYNC_COMMITTEE_ROOT_INDEX,
+            &finalized_state_root,
+            // Note: we multiple by 2 here because we actually do the merkle proof from
+            // the pubkey field inside of the SyncCommittee struct.
+            // TODO: Change the constant to reflect this.
+            S::SYNC_COMMITTEE_ROOT_INDEX * 2,
         )?;
 
         let public_inputs = iter::once(poseidon_commit)
@@ -190,11 +200,11 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         hasher: &impl HashInstructions<F, ThreadBuilder>,
         compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        let mut pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
+        // let pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
+        let pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
             .into_iter()
-            .take(1)
             .map(|bytes| {
-                let input = bytes
+                let input: HashInputChunk<_> = bytes
                     .into_iter()
                     .pad_using(64, |_| thread_pool.main().load_zero())
                     .into();
@@ -203,7 +213,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .map(|r| r.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
-
         ssz_merkleize_chunks(thread_pool, hasher, pubkeys_hashes)
     }
 }
