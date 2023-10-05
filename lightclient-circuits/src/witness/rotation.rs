@@ -37,9 +37,9 @@ impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
-            sync_committee_branch: todo!(),
+            sync_committee_branch: Default::default(),
             randomness: constant_randomness(),
-            finalized_header: todo!(),
+            finalized_header: Default::default(),
             _spec: PhantomData,
         }
     }

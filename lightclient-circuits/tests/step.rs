@@ -351,9 +351,18 @@ fn read_test_files_and_gen_witness(
         light_client_update: updates[0].clone(),
     };
     let sync_wit = to_sync_ciruit_witness(&zipline_witness, genesis_validators_root);
+
+    let sync_committee_branch = zipline_witness
+        .light_client_update
+        .next_sync_committee_branch
+        .iter()
+        .map(|n| n.as_ref().to_vec())
+        .collect_vec();
+
     let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
         pubkeys_compressed: zipline_witness
-            .committee
+            .light_client_update
+            .next_sync_committee
             .pubkeys
             .iter()
             .cloned()
@@ -361,8 +370,8 @@ fn read_test_files_and_gen_witness(
             .collect_vec(),
         randomness: crypto::constant_randomness(),
         _spec: Default::default(),
-        finalized_header: todo!(),
-        sync_committee_branch: todo!(),
+        finalized_header: sync_wit.finalized_header.clone(),
+        sync_committee_branch,
     };
     (sync_wit, rotation_wit)
 }
