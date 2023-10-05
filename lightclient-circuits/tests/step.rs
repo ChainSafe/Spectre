@@ -309,8 +309,6 @@ fn to_sync_ciruit_witness<
         .iter()
         .map(|b| b.as_ref().to_vec())
         .collect();
-    // args.beacon_state_root = zipline_witness.light_client_update.finalized_header.state_root.clone().as_ref().to_vec();
-    // args.beacon_state_root = args.attested_block.state_root.as_ref().to_vec();
     args
 }
 
