@@ -1,11 +1,11 @@
 use crate::gadget::crypto::G1Point;
-use eth_types::{AppCurveExt, Field};
+use eth_types::{AppCurveExt, Field, Spec};
 use halo2_base::safe_types::ScalarField;
 use halo2_base::{safe_types::GateInstructions, AssignedValue, Context};
 use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
 use halo2_proofs::plonk::Error;
-use halo2curves::bls12_381::G1Affine;
 use halo2curves::bls12_381::G1;
+use halo2curves::bls12_381::{self, G1Affine};
 use itertools::Itertools;
 use poseidon::PoseidonChip;
 use poseidon_native::Poseidon as PoseidonNative;
@@ -42,21 +42,17 @@ pub fn fq_array_poseidon<'a, F: Field>(
     Ok(current_poseidon_hash.unwrap())
 }
 
-pub fn g1_array_poseidon_native<F: Field>(points: &[G1Affine]) -> Result<F, Error> {
-    let limbs = points
-        .iter()
-        // Converts the point (usually in Fq) to limbs.
-        .flat_map(|point| {
-            point
-                .x
-                .to_bytes_le()
-                .chunks(14)
+pub fn fq_array_poseidon_native<F: Field>(
+    elems: impl Iterator<Item = bls12_381::Fq>,
+) -> Result<F, Error> {
+    let limbs = elems
+        // Converts Fq elements to Fr limbs.
+        .flat_map(|x| {
+            x.to_bytes_le()
+                .chunks(bls12_381::G1::LIMB_BITS / 8)
                 .map(F::from_bytes_le)
                 .collect_vec()
         })
-        // Converts the Fq point to a circuit field. It is safe because the limbs should be smaller
-        // even if the bits in the Field of the point are larger than the bits of the circuit field.
-        .map(|fq_limbs| F::from_bytes_le_unsecure(&fq_limbs.to_bytes_le()))
         .collect_vec();
 
     let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
