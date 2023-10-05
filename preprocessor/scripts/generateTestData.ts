@@ -183,6 +183,7 @@ fs.writeFileSync(
 let committeeRootindex = ssz.capella.BeaconState.getPathInfo(["nextSyncCommittee", "pubkeys"]).gindex;
 
 let committeeRootMerkleProof = createProof(beaconStateTree.node, { type: ProofType.single, gindex: committeeRootindex }) as SingleProof;
+assert.deepStrictEqual(createNodeFromProof(committeeRootMerkleProof).root, beaconStateTree.node.root)
 
 fs.writeFileSync(
     `../test_data/rotation_${N_validators}.json`,

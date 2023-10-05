@@ -109,7 +109,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             thread_pool,
             &sha256_chip,
             [
-                finalized_slot_bytes.clone(),
+                finalized_slot_bytes,
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
                 finalized_state_root.clone().into(),
@@ -350,7 +350,6 @@ mod tests {
         let witness = load_circuit_args();
 
         let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
-
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),

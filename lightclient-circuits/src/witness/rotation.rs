@@ -33,11 +33,13 @@ impl<S: Spec, F: Field> Default for CommitteeRotationArgs<S, F> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect();
 
+        let sync_committee_branch = vec![vec![0; 32]; S::SYNC_COMMITTEE_DEPTH + 1];
+
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
-            sync_committee_branch: Default::default(),
+            sync_committee_branch,
             randomness: constant_randomness(),
             finalized_header: Default::default(),
             _spec: PhantomData,
