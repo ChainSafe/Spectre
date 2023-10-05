@@ -40,5 +40,5 @@ jobs:
     - name: Check
       run: cargo check --all
 
-    - name: Check
+    - name: Test
       run: RUST_LOG="lightclient-circuits=debug" cargo test --release test_eth2_spec_mock
