@@ -101,9 +101,7 @@ mod tests {
     use halo2curves::bn256::Fr;
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
-        util::{
-            full_prover, full_verifier, gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning,
-        },
+        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use snark_verifier_sdk::CircuitExt;
 
