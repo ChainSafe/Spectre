@@ -365,14 +365,6 @@ fn read_test_files_and_gen_witness(
     (sync_wit, rotation_wit)
 }
 
-#[test]
-fn gen_srs_for_eth2_spec_mock() {
-    const K_ROTATION: u32 = 16;
-    const K_SYNC: u32 = 20;
-    gen_srs(K_ROTATION);
-    gen_srs(K_SYNC);
-}
-
 #[rstest]
 fn test_eth2_spec_mock_1(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/light_client_sync")]
@@ -391,11 +383,7 @@ fn test_eth2_spec_mock_3(
     run_test_eth2_spec_mock::<17, 20>(path)
 }
 
-fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(
-    path: PathBuf,
-) {
-    let params = gen_srs(K_ROTATION);
-
+fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
     let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(path);
 
     let rotation_circuit = {
@@ -405,8 +393,8 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(
         CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &rotation_witness,
+            K_ROTATION,
         )
         .unwrap()
     };
@@ -421,16 +409,14 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(
     prover.assert_satisfied_par();
     end_timer!(timer);
 
-    let params = gen_srs(K_SYNC);
-
     let sync_circuit = {
         let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
         SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &sync_witness,
+            K_SYNC,
         )
         .unwrap()
     };
@@ -467,8 +453,8 @@ fn test_eth2_spec_proofgen(
     let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
         CircuitBuilderStage::Prover,
         Some(pinning),
-        &params,
         &witness,
+        K,
     )
     .unwrap();
 
@@ -502,8 +488,8 @@ fn test_eth2_spec_evm_verify(
     let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
         CircuitBuilderStage::Prover,
         Some(pinning),
-        &params,
         &witness,
+        K,
     )
     .unwrap();
 
