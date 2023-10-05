@@ -41,4 +41,4 @@ jobs:
       run: cargo check --all
 
     - name: Test
-      run: RUST_LOG="lightclient-circuits=debug" cargo test --release test_eth2_spec_mock_1
+      run: RUST_LOG="lightclient-circuits=debug" cargo test --release test_eth2_spec_mock_1 -- --nocapture

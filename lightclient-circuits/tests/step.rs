@@ -371,7 +371,7 @@ fn test_eth2_spec_mock_1(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    run_test_eth2_spec_mock::<17, 20>(path)
+    run_test_eth2_spec_mock::<16, 20>(path)
 }
 
 #[rstest]
