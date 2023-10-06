@@ -121,8 +121,8 @@ mod tests {
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &witness,
+            K,
         )
         .unwrap();
 
