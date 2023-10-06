@@ -396,9 +396,9 @@ mod tests {
     }
 
     #[test]
-    fn circuit_agg() {
+    fn test_circuit_aggregation_proofgen() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 18;
+        const APP_K: u32 = 19;
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 22;
@@ -434,7 +434,53 @@ mod tests {
         )
         .unwrap();
 
-        // TODO: Figure out what the first 12 elements of the instances are.
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
+
+        let proof = full_prover(&params, &pk, agg_circuit, instances.clone());
+
+        assert!(full_verifier(&params, pk.get_vk(), proof, instances));
+    }
+
+    #[test]
+    fn test_circuit_aggregation_evm() {
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
+        const APP_K: u32 = 19;
+        let params_app = gen_srs(APP_K);
+
+        const AGG_K: u32 = 22;
+        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params_app,
+            "../build/committee_update.pkey",
+            "./config/committee_update.json",
+            false,
+            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+        );
+        let witness = load_circuit_args();
+        let snark = gen_application_snark(&params_app, &pk_app, &witness);
+
+        let params = gen_srs(AGG_K);
+        println!("agg_params k: {:?}", params.k());
+        let lookup_bits = params.k() as usize - 1;
+
+        let pk = AggregationCircuit::read_or_create_pk(
+            &params,
+            "../build/aggregation.pkey",
+            AGG_CONFIG_PATH,
+            false,
+            &vec![snark.clone()],
+        );
+
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &vec![snark.clone()],
+            AGG_K,
+        )
+        .unwrap();
+
         let instances = agg_circuit.instances();
         let num_instances = agg_circuit.num_instance();
 
@@ -446,7 +492,7 @@ mod tests {
         let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
             &params,
             &pk,
-            None::<String>,
+            Some("contractyul"),
             &vec![snark],
         )
         .unwrap();
