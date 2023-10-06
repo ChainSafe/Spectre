@@ -54,6 +54,7 @@ impl AppCircuit for AggregationCircuit {
                 circuit.expose_previous_instances(false);
             }
             _ => {
+                circuit.expose_previous_instances(false);
                 circuit.config(k, Some(10));
                 set_var("LOOKUP_BITS", lookup_bits.to_string());
             }
