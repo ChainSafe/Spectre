@@ -225,8 +225,8 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        params: &ParamsKZG<bn256::Bn256>,
         witness: &witness::CommitteeRotationArgs<S, bn256::Fr>,
+        k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut thread_pool = ShaBitThreadBuilder::from_stage(stage);
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
@@ -237,7 +237,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
             CircuitBuilderStage::Prover => {}
             _ => {
                 thread_pool.config(
-                    params.k() as usize,
+                    k as usize,
                     Some(
                         var("MINIMUM_ROWS")
                             .unwrap_or_else(|_| "0".to_string())
@@ -353,8 +353,8 @@ mod tests {
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &witness,
+            params.k(),
         )
         .unwrap();
 
@@ -384,8 +384,8 @@ mod tests {
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            &params,
             &witness,
+            K,
         )
         .unwrap();
 
@@ -429,8 +429,8 @@ mod tests {
         let agg_circuit = AggregationCircuit::create_circuit(
             CircuitBuilderStage::Prover,
             Some(agg_config),
-            &params,
             &vec![snark.clone()],
+            AGG_K,
         )
         .unwrap();
 

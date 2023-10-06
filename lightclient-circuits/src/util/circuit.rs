@@ -6,6 +6,7 @@ use halo2_base::gates::builder::{
     CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints,
 };
 use halo2_proofs::plonk::{Circuit, Error, VerifyingKey};
+use halo2_proofs::poly::commitment::Params;
 use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use serde::{Deserialize, Serialize};
@@ -87,7 +88,7 @@ pub trait PinnableCircuit<F: ff::Field>: CircuitExt<F> {
     }
 }
 
-pub trait AppCircuit: Sized {
+pub trait AppCircuit {
     type Pinning: Halo2ConfigPinning;
     type Witness: Clone;
 
@@ -99,8 +100,8 @@ pub trait AppCircuit: Sized {
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        params: &ParamsKZG<Bn256>,
         args: &Self::Witness,
+        k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error>;
 
     /// Reads the proving key for the pre-circuit.
@@ -111,7 +112,7 @@ pub trait AppCircuit: Sized {
         args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
         let circuit =
-            Self::create_circuit(CircuitBuilderStage::Keygen, None, params, args).unwrap();
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, args, params.k()).unwrap();
         custom_read_pk(path, &circuit)
     }
 
@@ -124,7 +125,7 @@ pub trait AppCircuit: Sized {
         witness: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
         let circuit =
-            Self::create_circuit(CircuitBuilderStage::Keygen, None, params, witness).unwrap();
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness, params.k()).unwrap();
 
         let pk_exists = pk_path.as_ref().exists();
         let pk = gen_pk(params, &circuit, Some(pk_path.as_ref()));
@@ -162,8 +163,12 @@ pub trait AppCircuit: Sized {
         witness: &Self::Witness,
     ) -> Result<Snark, Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
-        let circuit =
-            Self::create_circuit(CircuitBuilderStage::Prover, Some(pinning), params, witness)?;
+        let circuit = Self::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(pinning),
+            witness,
+            params.k(),
+        )?;
         let snark = gen_snark_shplonk(params, pk, circuit, path);
 
         Ok(snark)
@@ -175,7 +180,7 @@ pub trait AppCircuit: Sized {
         yul_path: Option<impl AsRef<Path>>,
         witness: &Self::Witness,
     ) -> Result<Vec<u8>, Error> {
-        let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, params, witness)?;
+        let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, witness, params.k())?;
         let deployment_code =
             custom_gen_evm_verifier_shplonk(params, pk.get_vk(), &circuit, yul_path);
 
@@ -186,13 +191,16 @@ pub trait AppCircuit: Sized {
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
         pinning_path: impl AsRef<Path>,
-        path: impl AsRef<Path>,
         deployment_code: Option<Vec<u8>>,
         witness: &Self::Witness,
     ) -> Result<(Vec<u8>, Vec<Vec<Fr>>), Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
-        let circuit =
-            Self::create_circuit(CircuitBuilderStage::Prover, Some(pinning), params, witness)?;
+        let circuit = Self::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(pinning),
+            witness,
+            params.k(),
+        )?;
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(params, pk, circuit, instances.clone());
 
@@ -208,8 +216,12 @@ pub trait AppCircuit: Sized {
         witness: &Self::Witness,
     ) -> Result<String, Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
-        let circuit =
-            Self::create_circuit(CircuitBuilderStage::Prover, Some(pinning), params, witness)?;
+        let circuit = Self::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(pinning),
+            witness,
+            params.k(),
+        )?;
         let calldata = write_calldata_generic(params, pk, circuit, path, deployment_code);
 
         Ok(calldata)
