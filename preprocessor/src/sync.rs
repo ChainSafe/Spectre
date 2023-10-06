@@ -205,7 +205,7 @@ mod tests {
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
-            K
+            K,
         )
         .unwrap();
 

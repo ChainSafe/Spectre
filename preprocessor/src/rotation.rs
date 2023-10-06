@@ -111,7 +111,6 @@ mod tests {
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-        let params = gen_srs(K);
 
         let witness = fetch_rotation_args::<Testnet>("http://3.128.78.74:5052".to_string())
             .await

@@ -78,16 +78,11 @@ fn gen_evm_proof<C: AppCircuit>(
     let k = k.unwrap_or_else(|| C::get_degree(&config_path));
     let params = gen_srs(k);
 
-    let pk = C::read_pk(
-        &params,
-        build_dir.join(pk_filename),
-        &witness
-    );
+    let pk = C::read_pk(&params, build_dir.join(pk_filename), &witness);
 
-    let (proof, instances) =
-        C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
-            .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
-            .unwrap();
+    let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
+        .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
+        .unwrap();
 
     (proof, instances)
 }
@@ -101,7 +96,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         beacon_api,
     } = params;
 
-     // TODO: use config/build paths from CLI flags
+    // TODO: use config/build paths from CLI flags
     let app_config_path = PathBuf::from("./lightclient-circuits/config/committee_update.json");
     let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
 

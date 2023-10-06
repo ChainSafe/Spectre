@@ -241,14 +241,9 @@ async fn generic_circuit_cli<
             );
             let witness = fetch(args.beacon_api_url.clone()).await?;
 
-            let (proof, instances) = Circuit::gen_evm_proof_shplonk(
-                &params,
-                &pk,
-                &args.config_path,
-                None,
-                &witness,
-            )
-            .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
+            let (proof, instances) =
+                Circuit::gen_evm_proof_shplonk(&params, &pk, &args.config_path, None, &witness)
+                    .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
 
             let public_inputs = instances[0]
                 .iter()
