@@ -126,7 +126,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             committee_root_ssz.clone().into(),
             &finalized_state_root,
             // Note: we multiple by 2 here because we actually do the merkle proof from
-            // the pubkey field inside of the SyncCommittee struct.
+            // the pubkeys field inside of the SyncCommittee struct.
             // TODO: Change the constant to reflect this.
             S::SYNC_COMMITTEE_ROOT_INDEX * 2,
         )?;
