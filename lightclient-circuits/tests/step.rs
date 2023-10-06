@@ -327,7 +327,6 @@ fn read_test_files_and_gen_witness(
     )
     .unwrap();
 
-    // let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::default();
     let updates = steps
         .iter()
         .filter_map(|step| match step {
@@ -357,17 +356,16 @@ fn read_test_files_and_gen_witness(
         .map(|n| n.as_ref().to_vec())
         .collect_vec();
 
-    let mut pubkeys_compressed = zipline_witness
+    let agg_pubkeys_compressed = zipline_witness
         .light_client_update
         .next_sync_committee
         .aggregate_pubkey
         .to_bytes()
         .to_vec();
-    pubkeys_compressed.reverse();
 
-    let mut pk: ByteVector<48> = ByteVector(Vector::try_from(pubkeys_compressed).unwrap());
+    let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
-    sync_committee_branch.insert(0, pk.hash_tree_root().unwrap().as_ref().to_vec());
+    sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().as_ref().to_vec());
 
     let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
         pubkeys_compressed: zipline_witness
@@ -380,7 +378,7 @@ fn read_test_files_and_gen_witness(
             .collect_vec(),
         randomness: crypto::constant_randomness(),
         _spec: Default::default(),
-        finalized_header: sync_wit.finalized_header.clone(),
+        finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
     };
     (sync_wit, rotation_wit)
