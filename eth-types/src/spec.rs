@@ -4,6 +4,9 @@ pub trait Spec: 'static + Sized + Copy + Default + Debug {
     const SYNC_COMMITTEE_SIZE: usize;
     const SYNC_COMMITTEE_ROOT_INDEX: usize;
     const SYNC_COMMITTEE_DEPTH: usize;
+    const SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX: usize;
+    const SYNC_COMMITTEE_PUBKEYS_DEPTH: usize;
+
     const DST: &'static [u8];
     const EXECUTION_STATE_ROOT_INDEX: usize;
     const EXECUTION_STATE_ROOT_DEPTH: usize;
@@ -18,6 +21,8 @@ impl Spec for Minimal {
     const SYNC_COMMITTEE_SIZE: usize = 32;
     const SYNC_COMMITTEE_DEPTH: usize = 5;
     const SYNC_COMMITTEE_ROOT_INDEX: usize = 55;
+    const SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX: usize = Self::SYNC_COMMITTEE_ROOT_INDEX * 2;
+    const SYNC_COMMITTEE_PUBKEYS_DEPTH: usize = Self::SYNC_COMMITTEE_DEPTH + 1;
 
     const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
     const EXECUTION_STATE_ROOT_INDEX: usize = 9;
@@ -33,7 +38,8 @@ impl Spec for Testnet {
     const SYNC_COMMITTEE_SIZE: usize = 512;
     const SYNC_COMMITTEE_DEPTH: usize = 5;
     const SYNC_COMMITTEE_ROOT_INDEX: usize = 55;
-
+    const SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX: usize = Self::SYNC_COMMITTEE_ROOT_INDEX * 2;
+    const SYNC_COMMITTEE_PUBKEYS_DEPTH: usize = Self::SYNC_COMMITTEE_DEPTH + 1;
     const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
     const EXECUTION_STATE_ROOT_INDEX: usize = 25;
     const EXECUTION_STATE_ROOT_DEPTH: usize = 4;
@@ -48,7 +54,8 @@ impl Spec for Mainnet {
     const SYNC_COMMITTEE_SIZE: usize = 512;
     const SYNC_COMMITTEE_DEPTH: usize = 5;
     const SYNC_COMMITTEE_ROOT_INDEX: usize = 55;
-
+    const SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX: usize = Self::SYNC_COMMITTEE_ROOT_INDEX * 2;
+    const SYNC_COMMITTEE_PUBKEYS_DEPTH: usize = Self::SYNC_COMMITTEE_DEPTH + 1;
     const DST: &'static [u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_";
     const EXECUTION_STATE_ROOT_INDEX: usize = 25;
     const EXECUTION_STATE_ROOT_DEPTH: usize = 4;

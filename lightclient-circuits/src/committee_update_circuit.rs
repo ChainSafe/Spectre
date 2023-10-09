@@ -125,10 +125,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .map(|w| w.clone().into_witness()),
             committee_root_ssz.clone().into(),
             &finalized_state_root,
-            // Note: we multiple by 2 here because we actually do the merkle proof from
-            // the pubkeys field inside of the SyncCommittee struct.
-            // TODO: Change the constant to reflect this.
-            S::SYNC_COMMITTEE_ROOT_INDEX * 2,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         )?;
 
         let public_inputs = iter::once(poseidon_commit)
@@ -398,7 +395,7 @@ mod tests {
     #[test]
     fn test_circuit_aggregation_proofgen() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 19;
+        const APP_K: u32 = 20;
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 22;
@@ -445,10 +442,10 @@ mod tests {
     #[test]
     fn test_circuit_aggregation_evm() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 19;
+        const APP_K: u32 = 20;
         let params_app = gen_srs(APP_K);
 
-        const AGG_K: u32 = 22;
+        const AGG_K: u32 = 23;
         let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
             &params_app,
             "../build/committee_update.pkey",
