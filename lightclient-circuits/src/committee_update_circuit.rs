@@ -259,6 +259,7 @@ mod tests {
     use std::{
         env::{set_var, var},
         fs,
+        path::PathBuf,
     };
 
     use crate::{
@@ -494,6 +495,106 @@ mod tests {
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
+    }
+
+    #[test]
+    fn test_circuit_aggregation_evm_2() {
+        const K0: u32 = 20;
+        const K1: u32 = 20;
+        const K2: u32 = 23;
+
+        const APP_CONFIG_PATH: &str = "./config/committee_update.json";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
+        const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_final.json";
+
+        // Layer 0 snark gen
+        let l0_snark = {
+            let p0 = gen_srs(K0);
+            let pk_l0 = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+                &p0,
+                "../build/committee_update.pkey",
+                APP_CONFIG_PATH,
+                false,
+                &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            );
+            let witness = load_circuit_args();
+            let snark = gen_application_snark(&p0, &pk_l0, &witness);
+            println!(
+                "L0 num instances: {:?}",
+                snark.instances.iter().map(|i| i.len()).collect_vec()
+            );
+            println!("L0 snark size: {}", snark.proof.len());
+            snark
+        };
+
+        // Layer 1 snark gen
+        let l1_snark = {
+            let p1 = gen_srs(K1);
+            let mut circuit = AggregationCircuit::keygen::<SHPLONK>(&p1, vec![l0_snark.clone()]);
+            circuit.expose_previous_instances(false);
+
+            println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
+            println!("L1 Keygen num_breakpoints: {:?}", circuit.break_points().iter().map(|b| b.len()).collect_vec());
+
+            let pk_l1 = gen_pk(&p1, &circuit, Some(&PathBuf::from("../build/agg_l1.pkey")));
+            circuit.write_pinning(AGG_CONFIG_PATH);
+            let pinning = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+            let lookup_bits = K1 as usize - 1;
+            println!("L1 Breakpoints Pinned = {:?}", pinning.break_points.iter().map(|b| b.len()).collect_vec());
+            let mut circuit = AggregationCircuit::new::<SHPLONK>(
+                CircuitBuilderStage::Prover,
+                Some(pinning.break_points),
+                lookup_bits,
+                &p1,
+
+                iter::once(l0_snark.clone()),
+            );
+            circuit.expose_previous_instances(false);
+
+            println!("L1 Prover num_instances: {:?}", circuit.num_instance());
+            // println!("L1 instances: {:?}", circuit);
+            gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>)
+        };
+
+        let p2 = gen_srs(K2);
+        // Layer 2 snark gen
+        let (proof, deployment_code, instances) = {
+            let mut circuit =
+                AggregationCircuit::keygen::<SHPLONK>(&p2, iter::once(l1_snark.clone()));
+            circuit.expose_previous_instances(true);
+
+            let num_instances = circuit.num_instance();
+            println!("L2 Keygen num_instances: {:?}", num_instances);
+
+            let pk_l2 = gen_pk(&p2, &circuit, Some(&PathBuf::from("../build/agg_l2.pkey")));
+            circuit.write_pinning(AGG_FINAL_CONFIG_PATH);
+            let pinning = AggregationConfigPinning::from_path(AGG_FINAL_CONFIG_PATH);
+
+            let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
+                &p2,
+                pk_l2.get_vk(),
+                num_instances,
+                Some(&PathBuf::from("contractyul")),
+            );
+            let mut circuit = AggregationCircuit::prover::<SHPLONK>(
+                &p2,
+                iter::once(l1_snark.clone()),
+                pinning.break_points,
+            );
+            circuit.expose_previous_instances(true);
+
+            let num_instances = circuit.num_instance();
+            let instances = circuit.instances();
+            println!("L2 Prover num_instances: {:?}", num_instances);
+            // println!("L2 instances: {:?}", instances);
+
+            let proof = gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
+            println!("L2 proof size: {}", proof.len());
+            println!("L2 Deployment Code Size: {}", deployment_code.len());
+            (proof, deployment_code, instances)
+        };
+
         evm_verify(deployment_code, instances, proof);
     }
 }
