@@ -500,8 +500,8 @@ mod tests {
 
     #[test]
     fn test_circuit_aggregation_evm_2() {
-        const K0: u32 = 20;
-        const K1: u32 = 20;
+        const K0: u32 = 18;
+        const K1: u32 = 23;
         const K2: u32 = 23;
 
         const APP_CONFIG_PATH: &str = "./config/committee_update.json";
@@ -535,13 +535,11 @@ mod tests {
             circuit.expose_previous_instances(false);
 
             println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
-            println!("L1 Keygen num_breakpoints: {:?}", circuit.break_points().iter().map(|b| b.len()).collect_vec());
 
-            let pk_l1 = gen_pk(&p1, &circuit, Some(&PathBuf::from("../build/agg_l1.pkey")));
+            let pk_l1 = gen_pk(&p1, &circuit, None);
             circuit.write_pinning(AGG_CONFIG_PATH);
             let pinning = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
             let lookup_bits = K1 as usize - 1;
-            println!("L1 Breakpoints Pinned = {:?}", pinning.break_points.iter().map(|b| b.len()).collect_vec());
             let mut circuit = AggregationCircuit::new::<SHPLONK>(
                 CircuitBuilderStage::Prover,
                 Some(pinning.break_points),
@@ -553,8 +551,10 @@ mod tests {
             circuit.expose_previous_instances(false);
 
             println!("L1 Prover num_instances: {:?}", circuit.num_instance());
-            // println!("L1 instances: {:?}", circuit);
-            gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>)
+            let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
+            println!("L1 snark size: {}", snark.proof.len());
+ 
+            snark
         };
 
         let p2 = gen_srs(K2);
@@ -567,7 +567,7 @@ mod tests {
             let num_instances = circuit.num_instance();
             println!("L2 Keygen num_instances: {:?}", num_instances);
 
-            let pk_l2 = gen_pk(&p2, &circuit, Some(&PathBuf::from("../build/agg_l2.pkey")));
+            let pk_l2 = gen_pk(&p2, &circuit, None);
             circuit.write_pinning(AGG_FINAL_CONFIG_PATH);
             let pinning = AggregationConfigPinning::from_path(AGG_FINAL_CONFIG_PATH);
 
@@ -587,7 +587,6 @@ mod tests {
             let num_instances = circuit.num_instance();
             let instances = circuit.instances();
             println!("L2 Prover num_instances: {:?}", num_instances);
-            // println!("L2 instances: {:?}", instances);
 
             let proof = gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
             println!("L2 proof size: {}", proof.len());
