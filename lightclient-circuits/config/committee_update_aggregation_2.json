@@ -3,7 +3,7 @@
     "strategy": "Vertical",
     "k": 23,
     "num_advice_per_phase": [
-      4,
+      1,
       0,
       0
     ],
@@ -15,11 +15,7 @@
     "num_fixed": 1
   },
   "break_points": [
-    [
-      8388596,
-      8388597,
-      8388598
-    ],
+    [],
     [],
     []
   ]

@@ -505,8 +505,8 @@ mod tests {
         const K2: u32 = 23;
 
         const APP_CONFIG_PATH: &str = "./config/committee_update.json";
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_final.json";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation_1.json";
+        const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_2.json";
 
         // Layer 0 snark gen
         let l0_snark = {
