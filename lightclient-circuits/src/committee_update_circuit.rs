@@ -442,8 +442,8 @@ mod tests {
 
     #[test]
     fn test_circuit_aggregation_evm() {
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 20;
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
+        const APP_K: u32 = 21;
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 23;
@@ -454,6 +454,7 @@ mod tests {
             false,
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
+
         let witness = load_circuit_args();
         let snark = gen_application_snark(&params_app, &pk_app, &witness);
 
@@ -499,12 +500,12 @@ mod tests {
     }
 
     #[test]
-    fn test_circuit_aggregation_evm_2() {
-        const K0: u32 = 18;
-        const K1: u32 = 23;
-        const K2: u32 = 23;
+    fn test_circuit_aggregation_2_evm() {
+        const K0: u32 = 20;
+        const K1: u32 = 24;
+        const K2: u32 = 24;
 
-        const APP_CONFIG_PATH: &str = "./config/committee_update.json";
+        const APP_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation_1.json";
         const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_2.json";
 
@@ -545,7 +546,6 @@ mod tests {
                 Some(pinning.break_points),
                 lookup_bits,
                 &p1,
-
                 iter::once(l0_snark.clone()),
             );
             circuit.expose_previous_instances(false);
@@ -553,13 +553,13 @@ mod tests {
             println!("L1 Prover num_instances: {:?}", circuit.num_instance());
             let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
             println!("L1 snark size: {}", snark.proof.len());
- 
+
             snark
         };
 
-        let p2 = gen_srs(K2);
         // Layer 2 snark gen
         let (proof, deployment_code, instances) = {
+            let p2 = gen_srs(K2);
             let mut circuit =
                 AggregationCircuit::keygen::<SHPLONK>(&p2, iter::once(l1_snark.clone()));
             circuit.expose_previous_instances(true);

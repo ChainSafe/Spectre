@@ -1,7 +1,7 @@
 {
   "params": {
     "strategy": "Vertical",
-    "k": 23,
+    "k": 24,
     "num_advice_per_phase": [
       1,
       0,
