@@ -257,7 +257,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
                 false,
             )?
             .output_bytes;
-
         let pi_commit = truncate_sha256_into_single_elem(thread_pool.main(), range, pi_hash_bytes);
 
         Ok(vec![pi_commit])

@@ -25,6 +25,9 @@ gen-step-evm-verifier:
 gen-rotation-evm-verifier:
     cargo run -r -- aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o evm-verifier ./contracts/snark-verifiers/committee_update_aggregated.yul 
 
+build-contracts:
+    cd contracts && forge build
+
 # downloads spec tests and copies them to the right locations.
 download-spec-tests: clean-spec-tests
     #!/usr/bin/env bash

@@ -37,6 +37,12 @@ jobs:
     - name: Download consensus spec
       run: just download-spec-tests
 
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+
+    - name: Build contracts
+      run: just build-contracts   
+
     # skip this in favour of compiling in the `Test` action.
     # - name: Check
     #   run: cargo check --all
