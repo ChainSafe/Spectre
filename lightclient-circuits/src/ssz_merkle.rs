@@ -19,7 +19,6 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     let mut chunks = chunks.into_iter().collect_vec();
     let len_even = chunks.len() + chunks.len() % 2;
     let height = (len_even as f64).log2().ceil() as usize;
-
     for depth in 0..height {
         // Pad to even length using 32 zero bytes assigned as constants.
         let len_even = chunks.len() + chunks.len() % 2;
@@ -31,7 +30,6 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
         chunks = padded_chunks
             .into_iter()
             .tuples()
-            .take(3)
             .map(|(left, right)| {
                 hasher
                     .digest::<64>(thread_pool, HashInput::TwoToOne(left, right), false)

@@ -1,9 +1,9 @@
 {
   "params": {
     "strategy": "Vertical",
-    "k": 21,
+    "k": 24,
     "num_advice_per_phase": [
-      2,
+      1,
       0,
       0
     ],
@@ -15,9 +15,7 @@
     "num_fixed": 1
   },
   "break_points": [
-    [
-      2097139
-    ],
+    [],
     [],
     []
   ]

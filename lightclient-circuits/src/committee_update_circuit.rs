@@ -7,7 +7,7 @@ use crate::{
         HashToCurveCache, HashToCurveChip, Sha256ChipWide, ShaBitThreadBuilder, ShaCircuitBuilder,
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
-    ssz_merkle::ssz_merkleize_chunks,
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{
         decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
@@ -78,12 +78,15 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .pubkeys_compressed
             .iter()
             .map(|bytes| {
+                assert_eq!(bytes.len(), 48);
                 thread_pool
                     .main()
                     .assign_witnesses(bytes.iter().map(|&b| F::from(b as u64)))
             })
             .collect_vec();
 
+        // Note: This is the root of the public keys in the SyncCommittee struct
+        // not the root of the SyncCommittee struct itself.
         let committee_root_ssz =
             Self::sync_committee_root_ssz(thread_pool, &sha256_chip, compressed_encodings.clone())?;
 
@@ -93,8 +96,41 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             fq_array_poseidon(thread_pool.main(), range.gate(), &pubkeys_x)?
         };
 
+        // Finalized header
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_state_root = args
+            .finalized_header
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| thread_pool.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+        let finalized_header_root = ssz_merkleize_chunks(
+            thread_pool,
+            &sha256_chip,
+            [
+                finalized_slot_bytes,
+                args.finalized_header.proposer_index.into_witness(),
+                args.finalized_header.parent_root.as_ref().into_witness(),
+                finalized_state_root.clone().into(),
+                args.finalized_header.body_root.as_ref().into_witness(),
+            ],
+        )?;
+        // Verify that the sync committee root is in the finalized state root
+        verify_merkle_proof(
+            thread_pool,
+            &sha256_chip,
+            args.sync_committee_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            committee_root_ssz.clone().into(),
+            &finalized_state_root,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+        )?;
+
         let public_inputs = iter::once(poseidon_commit)
             .chain(committee_root_ssz)
+            .chain(finalized_header_root)
             .collect();
 
         Ok(public_inputs)
@@ -118,6 +154,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .unwrap();
 
         let ssz_root = pk_vector.hash_tree_root().unwrap();
+
+        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
@@ -161,11 +199,10 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         hasher: &impl HashInstructions<F, ThreadBuilder>,
         compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        let mut pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
+        let pubkeys_hashes: Vec<HashInputChunk<QuantumCell<F>>> = compressed_encodings
             .into_iter()
-            .take(1)
             .map(|bytes| {
-                let input = bytes
+                let input: HashInputChunk<_> = bytes
                     .into_iter()
                     .pad_using(64, |_| thread_pool.main().load_zero())
                     .into();
@@ -174,7 +211,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .map(|r| r.output_bytes.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
-
         ssz_merkleize_chunks(thread_pool, hasher, pubkeys_hashes)
     }
 }
@@ -223,6 +259,7 @@ mod tests {
     use std::{
         env::{set_var, var},
         fs,
+        path::PathBuf,
     };
 
     use crate::{
@@ -266,15 +303,25 @@ mod tests {
     };
 
     fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
-        {
-            let pubkeys_compressed: Vec<Vec<u8>> =
-                serde_json::from_slice(&fs::read("../test_data/committee_pubkeys.json").unwrap())
-                    .unwrap();
-            CommitteeRotationArgs {
-                pubkeys_compressed,
-                randomness: constant_randomness(),
-                _spec: PhantomData,
-            }
+        #[derive(serde::Deserialize)]
+        struct ArgsJson {
+            finalized_header: BeaconBlockHeader,
+            committee_root_branch: Vec<Vec<u8>>,
+            pubkeys_compressed: Vec<Vec<u8>>,
+        }
+
+        let ArgsJson {
+            pubkeys_compressed,
+            committee_root_branch,
+            finalized_header,
+        } = serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap();
+
+        CommitteeRotationArgs {
+            pubkeys_compressed,
+            randomness: constant_randomness(),
+            _spec: PhantomData,
+            finalized_header: finalized_header,
+            sync_committee_branch: committee_root_branch,
         }
     }
 
@@ -301,7 +348,6 @@ mod tests {
         let witness = load_circuit_args();
 
         let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
-
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
@@ -348,9 +394,9 @@ mod tests {
     }
 
     #[test]
-    fn circuit_agg() {
+    fn test_circuit_aggregation_proofgen() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 18;
+        const APP_K: u32 = 20;
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 22;
@@ -386,7 +432,54 @@ mod tests {
         )
         .unwrap();
 
-        // TODO: Figure out what the first 12 elements of the instances are.
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
+
+        let proof = full_prover(&params, &pk, agg_circuit, instances.clone());
+
+        assert!(full_verifier(&params, pk.get_vk(), proof, instances));
+    }
+
+    #[test]
+    fn test_circuit_aggregation_evm() {
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
+        const APP_K: u32 = 21;
+        let params_app = gen_srs(APP_K);
+
+        const AGG_K: u32 = 23;
+        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params_app,
+            "../build/committee_update.pkey",
+            "./config/committee_update.json",
+            false,
+            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+        );
+
+        let witness = load_circuit_args();
+        let snark = gen_application_snark(&params_app, &pk_app, &witness);
+
+        let params = gen_srs(AGG_K);
+        println!("agg_params k: {:?}", params.k());
+        let lookup_bits = params.k() as usize - 1;
+
+        let pk = AggregationCircuit::read_or_create_pk(
+            &params,
+            "../build/aggregation.pkey",
+            AGG_CONFIG_PATH,
+            false,
+            &vec![snark.clone()],
+        );
+
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &vec![snark.clone()],
+            AGG_K,
+        )
+        .unwrap();
+
         let instances = agg_circuit.instances();
         let num_instances = agg_circuit.num_instance();
 
@@ -398,11 +491,109 @@ mod tests {
         let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
             &params,
             &pk,
-            None::<String>,
+            Some("contractyul"),
             &vec![snark],
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
+    }
+
+    #[test]
+    fn test_circuit_aggregation_2_evm() {
+        const K0: u32 = 20;
+        const K1: u32 = 24;
+        const K2: u32 = 24;
+
+        const APP_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation_1.json";
+        const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_2.json";
+
+        // Layer 0 snark gen
+        let l0_snark = {
+            let p0 = gen_srs(K0);
+            let pk_l0 = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+                &p0,
+                "../build/committee_update.pkey",
+                APP_CONFIG_PATH,
+                false,
+                &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            );
+            let witness = load_circuit_args();
+            let snark = gen_application_snark(&p0, &pk_l0, &witness);
+            println!(
+                "L0 num instances: {:?}",
+                snark.instances.iter().map(|i| i.len()).collect_vec()
+            );
+            println!("L0 snark size: {}", snark.proof.len());
+            snark
+        };
+
+        // Layer 1 snark gen
+        let l1_snark = {
+            let p1 = gen_srs(K1);
+            let mut circuit = AggregationCircuit::keygen::<SHPLONK>(&p1, vec![l0_snark.clone()]);
+            circuit.expose_previous_instances(false);
+
+            println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
+
+            let pk_l1 = gen_pk(&p1, &circuit, None);
+            circuit.write_pinning(AGG_CONFIG_PATH);
+            let pinning = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+            let lookup_bits = K1 as usize - 1;
+            let mut circuit = AggregationCircuit::new::<SHPLONK>(
+                CircuitBuilderStage::Prover,
+                Some(pinning.break_points),
+                lookup_bits,
+                &p1,
+                iter::once(l0_snark.clone()),
+            );
+            circuit.expose_previous_instances(false);
+
+            println!("L1 Prover num_instances: {:?}", circuit.num_instance());
+            let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
+            println!("L1 snark size: {}", snark.proof.len());
+
+            snark
+        };
+
+        // Layer 2 snark gen
+        let (proof, deployment_code, instances) = {
+            let p2 = gen_srs(K2);
+            let mut circuit =
+                AggregationCircuit::keygen::<SHPLONK>(&p2, iter::once(l1_snark.clone()));
+            circuit.expose_previous_instances(true);
+
+            let num_instances = circuit.num_instance();
+            println!("L2 Keygen num_instances: {:?}", num_instances);
+
+            let pk_l2 = gen_pk(&p2, &circuit, None);
+            circuit.write_pinning(AGG_FINAL_CONFIG_PATH);
+            let pinning = AggregationConfigPinning::from_path(AGG_FINAL_CONFIG_PATH);
+
+            let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
+                &p2,
+                pk_l2.get_vk(),
+                num_instances,
+                Some(&PathBuf::from("contractyul")),
+            );
+            let mut circuit = AggregationCircuit::prover::<SHPLONK>(
+                &p2,
+                iter::once(l1_snark.clone()),
+                pinning.break_points,
+            );
+            circuit.expose_previous_instances(true);
+
+            let num_instances = circuit.num_instance();
+            let instances = circuit.instances();
+            println!("L2 Prover num_instances: {:?}", num_instances);
+
+            let proof = gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
+            println!("L2 proof size: {}", proof.len());
+            println!("L2 Deployment Code Size: {}", deployment_code.len());
+            (proof, deployment_code, instances)
+        };
+
         evm_verify(deployment_code, instances, proof);
     }
 }
