@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
-import {SSZ} from "telepathy-libs/SimpleSerialize.sol";
 import "forge-std/console.sol";
 
 
@@ -21,6 +20,19 @@ library SyncStepLib {
         return bytes8(v);
     }
 
+    function toLittleEndian(uint256 v) internal pure returns (bytes32) {
+        v = ((v & 0xFF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00) >> 8)
+            | ((v & 0x00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF00FF) << 8);
+        v = ((v & 0xFFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000) >> 16)
+            | ((v & 0x0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000FFFF) << 16);
+        v = ((v & 0xFFFFFFFF00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF00000000) >> 32)
+            | ((v & 0x00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF00000000FFFFFFFF) << 32);
+        v = ((v & 0xFFFFFFFFFFFFFFFF0000000000000000FFFFFFFFFFFFFFFF0000000000000000) >> 64)
+            | ((v & 0x0000000000000000FFFFFFFFFFFFFFFF0000000000000000FFFFFFFFFFFFFFFF) << 64);
+        v = (v >> 128) | (v << 128);
+        return bytes32(v);
+    }
+
     /**
     * @notice Compute the public input commitment for the sync step given this input.
     *         This must always match the prodecure used in lightclient-circuits/src/sync_step_circuit.rs - SyncStepCircuit::instance()
@@ -37,7 +49,7 @@ library SyncStepLib {
             args.executionPayloadRoot,
             keysPoseidonCommitment
         ));
-        uint256 commitment = uint256(SSZ.toLittleEndian(uint256(h)));
+        uint256 commitment = uint256(toLittleEndian(uint256(h)));
         return commitment & ((uint256(1) << 253) - 1); // truncated to 253 bits
     }
 }
