@@ -5,7 +5,7 @@ ffi = true
 libs = ['lib']
 optimizer = true
 optimizer_runs = 1_000_000_000
-solc = "0.8.16"
+solc = "0.8.19"
 fs_permissions = [{ access = "read", path = "./test/data/"}]
 
 [profile.default.optimizer_details]
