@@ -70,7 +70,7 @@ use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
-pub struct SyncStepCircuit<S: Spec, F: Field> {
+pub struct SyncStepCircuit<S: Spec + ?Sized, F: Field> {
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
@@ -460,8 +460,8 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        params: &ParamsKZG<Bn256>,
         args: &Self::Witness,
+        k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut thread_pool = ShaThreadBuilder::from_stage(stage);
         let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
@@ -472,7 +472,7 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
             CircuitBuilderStage::Prover => {}
             _ => {
                 thread_pool.config(
-                    params.k() as usize,
+                    k as usize,
                     Some(
                         var("MINIMUM_ROWS")
                             .unwrap_or_else(|_| "0".to_string())
@@ -552,8 +552,8 @@ mod tests {
         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
-            &params,
             &witness,
+            K,
         )
         .unwrap();
 
@@ -585,8 +585,8 @@ mod tests {
         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            &params,
             &witness,
+            K,
         )
         .unwrap();
 
@@ -616,8 +616,8 @@ mod tests {
         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            &params,
             &witness,
+            K,
         )
         .unwrap();
 

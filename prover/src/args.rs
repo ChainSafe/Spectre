@@ -1,9 +1,29 @@
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
 #[derive(Clone, clap::Parser)]
-pub struct Options {
+#[command(name = "spectre-prover")]
+#[command(about = "Spectre prover", long_about = None)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub subcommand: Subcommands,
+}
+#[derive(Clone, clap::Parser)]
+#[allow(clippy::large_enum_variant)]
+pub enum Subcommands {
+    Rpc(RpcOptions),
+    Circuit(CircuitOptions),
+}
+#[derive(Clone, clap::Parser)]
+pub struct RpcOptions {
+    #[clap(long, short, default_value = "3000")]
+    pub port: String,
+}
+
+#[derive(Clone, clap::Parser)]
+pub struct CircuitOptions {
     #[command(subcommand)]
     pub proof: Proof,
 
@@ -88,7 +108,7 @@ pub enum Out {
     Tx,
 }
 
-#[derive(Clone, Debug, PartialEq, EnumString)]
+#[derive(Clone, Debug, PartialEq, EnumString, Serialize, Deserialize)]
 pub enum Spec {
     #[strum(serialize = "minimal")]
     Minimal,
