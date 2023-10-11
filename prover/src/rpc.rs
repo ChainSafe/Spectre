@@ -1,4 +1,4 @@
-use super::{args, args::Spec};
+use super::args::Spec;
 
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
@@ -83,9 +83,9 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_2.json");
     let agg_l1_config_path =
         PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_1.json");
-    let build_dir = PathBuf::from("./build");
+    let _build_dir = PathBuf::from("./build");
 
-    let (l0_snark, pk_filename) = match spec {
+    let (l0_snark, _pk_filename) = match spec {
         Spec::Minimal => {
             let witness = fetch_rotation_args(beacon_api).await?;
             (
@@ -125,7 +125,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
             Some(pinning.break_points),
             lookup_bits,
             &p1,
-            std::iter::once(l0_snark.clone()),
+            std::iter::once(l0_snark),
         );
         circuit.expose_previous_instances(false);
 
@@ -148,7 +148,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 
         let mut circuit = AggregationCircuit::prover::<SHPLONK>(
             &p2,
-            std::iter::once(l1_snark.clone()),
+            std::iter::once(l1_snark),
             pinning.break_points,
         );
         circuit.expose_previous_instances(true);

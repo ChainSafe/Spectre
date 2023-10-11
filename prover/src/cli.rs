@@ -1,5 +1,5 @@
 use crate::args::{Args, Out, Proof};
-use axum::{response::IntoResponse, routing::post, Router};
+
 use ethers::abi::Address;
 use ethers::providers::{Http, Provider};
 use halo2curves::bn256::{Bn256, Fr, G1Affine};
@@ -22,7 +22,6 @@ use std::{
     fs::{self, File},
     future::Future,
     io::Write,
-    net::TcpListener,
     path::Path,
     sync::Arc,
 };

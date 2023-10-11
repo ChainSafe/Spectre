@@ -5,11 +5,10 @@ mod rpc;
 mod rpc_api;
 pub mod rpc_client;
 
-use args::{Args, Cli, Out, Proof};
+use args::Cli;
 use axum::{response::IntoResponse, routing::post, Router};
 use cli_batteries::version;
-use ethers::prelude::*;
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
+
 use http::StatusCode;
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 
@@ -17,22 +16,7 @@ use crate::cli::spec_app;
 
 use rpc::{gen_evm_proof_rotation_circuit_handler, gen_evm_proof_step_circuit_handler};
 
-use snark_verifier::{
-    loader::halo2::halo2_ecc::halo2_base::halo2_proofs::{
-        plonk::VerifyingKey, poly::kzg::commitment::ParamsKZG,
-    },
-    system::halo2::Config,
-};
-use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, read_instances, Snark};
-use std::str::FromStr;
-use std::{
-    fs::{self, File},
-    future::Future,
-    io::Write,
-    net::TcpListener,
-    path::Path,
-    sync::Arc,
-};
+use std::{net::TcpListener, sync::Arc};
 mod args;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 
