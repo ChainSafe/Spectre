@@ -1,6 +1,9 @@
 #![allow(incomplete_features)]
 #![feature(associated_type_bounds)]
 mod rpc;
+mod rpc_api;
+pub mod rpc_client;
+
 use args::{Args, Cli, Out, Proof};
 use axum::{response::IntoResponse, routing::post, Router};
 use cli_batteries::version;
@@ -36,7 +39,10 @@ use std::{
 mod args;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 
-use crate::args::RpcOptions;
+use crate::{
+    args::RpcOptions,
+    rpc_api::{EVM_PROOF_ROTATION_CIRCUIT, EVM_PROOF_STEP_CIRCUIT},
+};
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 ethers::contract::abigen!(
@@ -54,12 +60,9 @@ async fn app(options: Cli) -> eyre::Result<()> {
             let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
             let rpc_server = Arc::new(
                 JsonRpcServer::new()
+                    .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
                     .with_method(
-                        "genEvmProofAndInstancesStepSyncCircuit",
-                        gen_evm_proof_step_circuit_handler,
-                    )
-                    .with_method(
-                        "genEvmProofAndInstancesRotationCircuit",
+                        EVM_PROOF_ROTATION_CIRCUIT,
                         gen_evm_proof_rotation_circuit_handler,
                     )
                     .finish_unwrapped(),

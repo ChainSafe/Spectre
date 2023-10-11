@@ -11,11 +11,9 @@ use lightclient_circuits::{
     util::{gen_srs, AppCircuit, Halo2ConfigPinning},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
-use serde::{Deserialize, Serialize};
 
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
 use snark_verifier_sdk::{
-    evm::gen_evm_verifier_shplonk,
     gen_pk,
     halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
     CircuitExt, Snark, SHPLONK,
@@ -23,33 +21,7 @@ use snark_verifier_sdk::{
 
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofRotationParams {
-    spec: args::Spec,
-
-    k: Option<u32>,
-    #[serde(default = "default_beacon_api")]
-    beacon_api: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofStepParams {
-    spec: args::Spec,
-
-    k: Option<u32>,
-    #[serde(default = "default_beacon_api")]
-    beacon_api: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvmProofResult {
-    proof: Vec<u8>,
-    public_inputs: Vec<U256>,
-}
-
-fn default_beacon_api() -> String {
-    String::from("http://127.0.0.1:5052")
-}
+use crate::rpc_api::{EvmProofResult, GenProofRotationParams, GenProofStepParams};
 
 fn gen_app_snark<S: eth_types::Spec>(
     app_config_path: PathBuf,
