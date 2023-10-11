@@ -361,7 +361,11 @@ fn read_test_files_and_gen_witness(
         .next_sync_committee
         .aggregate_pubkey
         .to_bytes()
-        .to_vec();
+        .iter()
+        // Reverse bytes because of endieness
+        .copied()
+        .rev()
+        .collect_vec();
 
     let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
@@ -374,7 +378,10 @@ fn read_test_files_and_gen_witness(
             .pubkeys
             .iter()
             .cloned()
-            .map(|pk| pk.to_bytes().to_vec())
+            .map(|pk| {
+                // Reverse bytes because of endieness
+                pk.to_bytes().iter().copied().rev().collect_vec()
+            })
             .collect_vec(),
         randomness: crypto::constant_randomness(),
         _spec: Default::default(),
@@ -551,7 +558,8 @@ mod solidity_tests {
     ) -> anyhow::Result<()> {
         let (witness, _) = read_test_files_and_gen_witness(path);
         let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness);
-        let poseidon_commitment_le = extract_poseidon_committee_commitment(&witness.pubkeys_uncompressed)?;
+        let poseidon_commitment_le =
+            extract_poseidon_committee_commitment(&witness.pubkeys_uncompressed)?;
 
         let anvil_instance = Anvil::new().spawn();
         let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
@@ -577,7 +585,14 @@ mod solidity_tests {
     ) -> anyhow::Result<()> {
         let (_, witness) = read_test_files_and_gen_witness(path);
         let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness);
-        let finalized_block_root = witness.finalized_header.clone().hash_tree_root().unwrap().as_bytes().try_into().unwrap();
+        let finalized_block_root = witness
+            .finalized_header
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_bytes()
+            .try_into()
+            .unwrap();
 
         let anvil_instance = Anvil::new().spawn();
         let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
@@ -589,11 +604,14 @@ mod solidity_tests {
             .await?;
 
         // convert each of the returned values to a field element
-        let result_decoded: Vec<_> = result.iter().map(|v| {
-            let mut b = [0_u8; 32];
-            v.to_little_endian(&mut b);
-            bn256::Fr::from_bytes(&b).unwrap()
-        }).collect();
+        let result_decoded: Vec<_> = result
+            .iter()
+            .map(|v| {
+                let mut b = [0_u8; 32];
+                v.to_little_endian(&mut b);
+                bn256::Fr::from_bytes(&b).unwrap()
+            })
+            .collect();
 
         assert_eq!(vec![result_decoded], instance);
         Ok(())
@@ -642,8 +660,9 @@ mod solidity_tests {
     // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
     impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput {
         fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
-            let poseidon_commitment_le = extract_poseidon_committee_commitment(&args.pubkeys_compressed).unwrap();
-            
+            let poseidon_commitment_le =
+                extract_poseidon_committee_commitment(&args.pubkeys_compressed).unwrap();
+
             let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
                 .pubkeys_compressed
                 .iter()
@@ -653,7 +672,12 @@ mod solidity_tests {
                 .try_into()
                 .unwrap();
 
-            let sync_committee_ssz = pk_vector.hash_tree_root().unwrap().as_bytes().try_into().unwrap();
+            let sync_committee_ssz = pk_vector
+                .hash_tree_root()
+                .unwrap()
+                .as_bytes()
+                .try_into()
+                .unwrap();
 
             RotateInput {
                 sync_committee_ssz,
@@ -663,7 +687,7 @@ mod solidity_tests {
     }
 
     fn extract_poseidon_committee_commitment(
-        pubkeys_uncompressed: &Vec<Vec<u8>>
+        pubkeys_uncompressed: &Vec<Vec<u8>>,
     ) -> anyhow::Result<[u8; 32]> {
         let pubkey_affines = pubkeys_uncompressed
             .iter()
