@@ -159,6 +159,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .chain(finalized_header_root.0.map(|b| bn256::Fr::from(b as u64)))
             .collect();
 
         vec![instance_vec]

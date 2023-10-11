@@ -544,14 +544,14 @@ mod solidity_tests {
     /// Ensure that the instance encoding implemented in Solidity matches exactly the instance encoding expected by the circuit
     #[rstest]
     #[tokio::test]
-    async fn test_instance_commitment_evm_equivalence(
+    async fn test_step_instance_commitment_evm_equivalence(
         #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
         #[exclude("deneb*")]
         path: PathBuf,
     ) -> anyhow::Result<()> {
         let (witness, _) = read_test_files_and_gen_witness(path);
         let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness);
-        let poseidon_commitment_le = extract_poseidon_committee_commitment(&witness)?;
+        let poseidon_commitment_le = extract_poseidon_committee_commitment(&witness.pubkeys_uncompressed)?;
 
         let anvil_instance = Anvil::new().spawn();
         let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
@@ -565,6 +565,37 @@ mod solidity_tests {
         result.to_little_endian(&mut result_bytes);
 
         assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
+        Ok(())
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_rotate_public_input_evm_equivalence(
+        #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+        #[exclude("deneb*")]
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
+        let (_, witness) = read_test_files_and_gen_witness(path);
+        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness);
+        let finalized_block_root = witness.finalized_header.clone().hash_tree_root().unwrap().as_bytes().try_into().unwrap();
+
+        let anvil_instance = Anvil::new().spawn();
+        let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
+        let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
+
+        let result = contract
+            .to_input_commitment(RotateInput::from(witness), finalized_block_root)
+            .call()
+            .await?;
+
+        // convert each of the returned values to a field element
+        let result_decoded: Vec<_> = result.iter().map(|v| {
+            let mut b = [0_u8; 32];
+            v.to_little_endian(&mut b);
+            bn256::Fr::from_bytes(&b).unwrap()
+        }).collect();
+
+        assert_eq!(vec![result_decoded], instance);
         Ok(())
     }
 
@@ -603,11 +634,38 @@ mod solidity_tests {
         }
     }
 
-    fn extract_poseidon_committee_commitment<Spec: eth_types::Spec>(
-        witness: &SyncStepArgs<Spec>,
+    abigen!(
+        RotateExternal,
+        "../contracts/out/RotateExternal.sol/RotateExternal.json"
+    );
+
+    // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
+    impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput {
+        fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
+            let poseidon_commitment_le = extract_poseidon_committee_commitment(&args.pubkeys_compressed).unwrap();
+            
+            let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
+                .pubkeys_compressed
+                .iter()
+                .cloned()
+                .map(|v| v.try_into().unwrap())
+                .collect_vec()
+                .try_into()
+                .unwrap();
+
+            let sync_committee_ssz = pk_vector.hash_tree_root().unwrap().as_bytes().try_into().unwrap();
+
+            RotateInput {
+                sync_committee_ssz,
+                sync_committee_poseidon: poseidon_commitment_le,
+            }
+        }
+    }
+
+    fn extract_poseidon_committee_commitment(
+        pubkeys_uncompressed: &Vec<Vec<u8>>
     ) -> anyhow::Result<[u8; 32]> {
-        let pubkey_affines = witness
-            .pubkeys_uncompressed
+        let pubkey_affines = pubkeys_uncompressed
             .iter()
             .cloned()
             .map(|bytes| {
