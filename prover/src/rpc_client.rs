@@ -30,6 +30,7 @@ pub enum JsonRpcResponse<R> {
     },
 }
 
+/// RPC client to send JSON-RPC requests to the prover
 pub struct Client {
     client: reqwest::Client,
     api_url: Url,
@@ -42,6 +43,7 @@ impl Client {
             api_url: url.into_url().unwrap(),
         }
     }
+    /// Generates a proof along with instance values for committee Rotation circuit
     pub async fn gen_evm_proof_rotation_circuit(
         &self,
         params: GenProofRotationParams,
@@ -49,6 +51,7 @@ impl Client {
         self.call(EVM_PROOF_ROTATION_CIRCUIT, params).await
     }
 
+    /// Generates a proof along with instance values for Step circuit
     pub async fn gen_evm_proof_step_circuit(
         &self,
         params: GenProofStepParams,
