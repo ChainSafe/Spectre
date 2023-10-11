@@ -230,3 +230,14 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         public_inputs,
     })
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::rpc_api::GenProofRotationParams;
+//     use jsonrpc_v2::Error as JsonRpcError;
+//     use primitive_types::U256;
+//     use serde_json::json;
+// #[test]
+
+// }
