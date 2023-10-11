@@ -12,18 +12,13 @@ use cli_batteries::version;
 use http::StatusCode;
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 
-use crate::cli::spec_app;
-
-use rpc::{gen_evm_proof_rotation_circuit_handler, gen_evm_proof_step_circuit_handler};
+use crate::{cli::spec_app, rpc::jsonrpc_server};
 
 use std::{net::TcpListener, sync::Arc};
 mod args;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 
-use crate::{
-    args::RpcOptions,
-    rpc_api::{EVM_PROOF_ROTATION_CIRCUIT, EVM_PROOF_STEP_CIRCUIT},
-};
+use crate::args::RpcOptions;
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 async fn app(options: Cli) -> eyre::Result<()> {
@@ -32,15 +27,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
             let RpcOptions { port } = op;
 
             let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
-            let rpc_server = Arc::new(
-                JsonRpcServer::new()
-                    .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
-                    .with_method(
-                        EVM_PROOF_ROTATION_CIRCUIT,
-                        gen_evm_proof_rotation_circuit_handler,
-                    )
-                    .finish_unwrapped(),
-            );
+            let rpc_server = Arc::new(jsonrpc_server());
             let router = Router::new()
                 .route("/rpc", post(handler))
                 .with_state(rpc_server);

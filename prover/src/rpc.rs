@@ -12,16 +12,19 @@ use lightclient_circuits::{
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
 
+use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
 use snark_verifier_sdk::{
     gen_pk,
     halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
     CircuitExt, Snark, SHPLONK,
 };
-
 use std::path::PathBuf;
 
-use crate::rpc_api::{EvmProofResult, GenProofRotationParams, GenProofStepParams};
+use crate::rpc_api::{
+    EvmProofResult, GenProofRotationParams, GenProofStepParams, EVM_PROOF_ROTATION_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT,
+};
 
 fn gen_app_snark<S: eth_types::Spec>(
     app_config_path: PathBuf,
@@ -231,13 +234,12 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
     })
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::rpc_api::GenProofRotationParams;
-//     use jsonrpc_v2::Error as JsonRpcError;
-//     use primitive_types::U256;
-//     use serde_json::json;
-// #[test]
-
-// }
+pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
+    JsonRpcServer::new()
+        .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
+        .with_method(
+            EVM_PROOF_ROTATION_CIRCUIT,
+            gen_evm_proof_rotation_circuit_handler,
+        )
+        .finish_unwrapped()
+}
