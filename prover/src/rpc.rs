@@ -60,7 +60,7 @@ fn gen_evm_proof<C: AppCircuit>(
     let k = k.unwrap_or_else(|| C::get_degree(&config_path));
     let params = gen_srs(k);
 
-    let pk = C::read_pk(&params, build_dir.join(pk_filename), &witness);
+    let pk = C::create_pk(&params, build_dir.join(pk_filename), &config_path, &witness);
 
     let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
         .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
