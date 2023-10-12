@@ -35,9 +35,10 @@ fn gen_app_snark<S: eth_types::Spec>(
         &app_config_path,
     ));
 
-    let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
+    let app_pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
         &params,
         app_pk_path,
+        &app_config_path,
         &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
     );
 
@@ -79,13 +80,13 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     } = params;
 
     // TODO: use config/build paths from CLI flags
-    let app_config_path = PathBuf::from("./lightclient-circuits/config/committee_update.json");
+    let app_config_path = PathBuf::from("../lightclient-circuits/config/committee_update.json");
     let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
 
     let agg_l2_config_path =
-        PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_2.json");
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_2.json");
     let agg_l1_config_path =
-        PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_1.json");
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_1.json");
     let _build_dir = PathBuf::from("./build");
 
     let (l0_snark, _pk_filename) = match spec {
@@ -183,7 +184,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         beacon_api,
     } = params.clone();
 
-    let config_path = PathBuf::from("./lightclient-circuits/config/step_sync.json");
+    let config_path = PathBuf::from("../lightclient-circuits/config/sync_step.json");
     let build_dir = PathBuf::from("./build");
 
     let (proof, instances) = match spec {
