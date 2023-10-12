@@ -1,8 +1,10 @@
 use std::os::unix::thread;
 
 use eth_types::Field;
-use halo2_base::{AssignedValue, Context, QuantumCell};
-use halo2_proofs::{circuit::Region, plonk::Error};
+use halo2_base::{
+    halo2_proofs::{circuit::Region, plonk::Error},
+    AssignedValue, Context, QuantumCell,
+};
 use itertools::Itertools;
 
 use crate::{
@@ -13,7 +15,7 @@ use crate::{
 
 pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     thread_pool: &mut ThreadBuilder,
-    hasher: &impl HashInstructions<F, ThreadBuilder>,
+    hasher: &impl HashInstructions<F, ThreadManager = ThreadBuilder>,
     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 ) -> Result<Vec<AssignedValue<F>>, Error> {
     let mut chunks = chunks.into_iter().collect_vec();
@@ -50,7 +52,7 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
 
 pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     thread_pool: &mut ThreadBuilder,
-    hasher: &impl HashInstructions<F, ThreadBuilder>,
+    hasher: &impl HashInstructions<F, ThreadManager = ThreadBuilder>,
     proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
     leaf: HashInputChunk<QuantumCell<F>>,
     root: &[AssignedValue<F>],

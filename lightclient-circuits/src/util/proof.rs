@@ -2,9 +2,8 @@ use std::fs;
 use std::{fs::File, path::Path};
 
 use ark_std::{end_timer, start_timer};
-use halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
-use halo2_proofs::poly::VerificationStrategy;
-use halo2_proofs::{
+use halo2_base::halo2_proofs::{
+    halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
     poly::{
         commitment::{Params, ParamsProver},
@@ -17,6 +16,7 @@ use halo2_proofs::{
     transcript::{
         Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
     },
+    SerdeFormat::RawBytesUnchecked,
 };
 use rand::rngs::OsRng;
 use snark_verifier_sdk::CircuitExt;
@@ -34,11 +34,8 @@ pub fn read_vkey<C: Circuit<Fr>>(path: &Path) -> Result<VerifyingKey<G1Affine>, 
 
     let mut file = File::open(path).map_err(|_| "failed to read file")?;
 
-    let vk = VerifyingKey::<G1Affine>::read::<_, C>(
-        &mut file,
-        halo2_proofs::SerdeFormat::RawBytesUnchecked,
-    )
-    .map_err(|_| "failed to decode vkey");
+    let vk = VerifyingKey::<G1Affine>::read::<_, C>(&mut file, RawBytesUnchecked)
+        .map_err(|_| "failed to decode vkey");
 
     end_timer!(timer);
 
@@ -66,17 +63,14 @@ pub fn gen_pkey<C: Circuit<Fr>>(
         match File::open(&vkey_path) {
             Ok(mut file) => (
                 start_timer!(|| "Loading vkey"),
-                VerifyingKey::<G1Affine>::read::<_, C>(
-                    &mut file,
-                    halo2_proofs::SerdeFormat::RawBytesUnchecked,
-                )
-                .expect("failed to read vkey"),
+                VerifyingKey::<G1Affine>::read::<_, C>(&mut file, RawBytesUnchecked)
+                    .expect("failed to read vkey"),
             ),
             Err(_) => {
                 let timer = start_timer!(|| "Creating and writting vkey");
                 let vk = keygen_vk(params, circuit).expect("vk generation should not fail");
                 let mut file = File::create(vkey_path).expect("couldn't create vkey file");
-                vk.write(&mut file, halo2_proofs::SerdeFormat::RawBytesUnchecked)
+                vk.write(&mut file, RawBytesUnchecked)
                     .expect("Failed to write vkey");
                 (timer, vk)
             }

@@ -19,8 +19,14 @@ mod circuit;
 pub use circuit::*;
 
 use halo2_base::{
-    gates::builder::{FlexGateConfigParams, GateThreadBuilder, MultiPhaseThreadBreakPoints},
-    safe_types::{GateInstructions, RangeChip, RangeInstructions},
+    halo2_proofs::{
+        circuit::{Layouter, Region, Value},
+        plonk::{
+            Challenge, ConstraintSystem, Error, Expression, FirstPhase, ProvingKey, SecondPhase,
+            VirtualCells,
+        },
+        poly::kzg::commitment::ParamsKZG,
+    },
     utils::ScalarField,
     AssignedValue, Context, QuantumCell,
 };
@@ -31,24 +37,9 @@ use halo2_ecc::{
 
 use itertools::Itertools;
 use num_bigint::BigUint;
-use snark_verifier_sdk::CircuitExt;
 
-use crate::{
-    gadget::{
-        crypto::{Fp2Point, FpPoint},
-        Expr,
-    },
-    witness,
-};
+use crate::{gadget::Expr, witness};
 use eth_types::*;
-use halo2_proofs::{
-    circuit::{Layouter, Region, Value},
-    plonk::{
-        Challenge, ConstraintSystem, Error, Expression, FirstPhase, ProvingKey, SecondPhase,
-        VirtualCells,
-    },
-    poly::kzg::commitment::ParamsKZG,
-};
 
 /// Helper trait that implements functionality to represent a generic type as
 /// array of N-bits.
@@ -113,7 +104,7 @@ impl<T: Clone> Challenges<T> {
 pub mod to_bytes {
     use crate::gadget::Expr;
     use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use halo2_base::halo2_proofs::plonk::Expression;
 
     pub(crate) fn expr<F: Field>(bits: &[Expression<F>]) -> Vec<Expression<F>> {
         debug_assert!(bits.len() % 8 == 0, "bits not a multiple of 8");
@@ -144,55 +135,6 @@ pub mod to_bytes {
     }
 }
 
-/// Converts assigned bytes into biginterger
-/// Warning: method does not perform any checks on input `bytes`.
-pub fn decode_into_field<F: Field, C: AppCurveExt>(
-    bytes: impl IntoIterator<Item = AssignedValue<F>>,
-    limb_bases: &[F],
-    gate: &impl GateInstructions<F>,
-    ctx: &mut Context<F>,
-) -> ProperCrtUint<F> {
-    let bytes = bytes.into_iter().collect_vec();
-    let limb_bytes = C::LIMB_BITS / 8;
-    let bits = C::NUM_LIMBS * C::LIMB_BITS;
-
-    let value = BigUint::from_bytes_le(
-        &bytes
-            .iter()
-            .map(|v| v.value().get_lower_32() as u8)
-            .collect_vec(),
-    );
-
-    // inputs is a bool or uint8.
-    let assigned_uint = if bits == 1 || limb_bytes == 8 {
-        ProperUint::new(bytes)
-    } else {
-        let byte_base = (0..limb_bytes)
-            .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
-            .collect_vec();
-        let limbs = bytes
-            .chunks(limb_bytes)
-            .map(|chunk| gate.inner_product(ctx, chunk.to_vec(), byte_base[..chunk.len()].to_vec()))
-            .collect::<Vec<_>>();
-        ProperUint::new(limbs)
-    };
-
-    assigned_uint.into_crt(ctx, gate, value, limb_bases, C::LIMB_BITS)
-}
-
-pub fn decode_into_field_be<F: Field, C: AppCurveExt, I: IntoIterator<Item = AssignedValue<F>>>(
-    bytes: I,
-    limb_bases: &[F],
-    gate: &impl GateInstructions<F>,
-    ctx: &mut Context<F>,
-) -> ProperCrtUint<F>
-where
-    I::IntoIter: DoubleEndedIterator,
-{
-    let bytes = bytes.into_iter().rev().collect_vec();
-    decode_into_field::<F, C>(bytes, limb_bases, gate, ctx)
-}
-
 pub fn bigint_to_le_bytes<F: Field>(
     limbs: impl IntoIterator<Item = F>,
     limb_bits: usize,
@@ -204,32 +146,6 @@ pub fn bigint_to_le_bytes<F: Field>(
         .flat_map(|x| x.to_bytes_le()[..limb_bytes].to_vec())
         .take(total_bytes)
         .collect()
-}
-
-pub fn print_fq_dev<C: AppCurveExt, F: Field>(x: &FpPoint<F>, label: &str) {
-    let bytes = bigint_to_le_bytes(
-        x.limbs().iter().map(|e| *e.value()),
-        C::LIMB_BITS,
-        C::BYTES_COMPRESSED,
-    );
-    let bn = BigUint::from_bytes_le(&bytes);
-    println!("{label}: {}", bn);
-}
-
-pub fn print_fq2_dev<C: AppCurveExt, F: Field>(u: &Fp2Point<F>, label: &str) {
-    let c0_bytes = bigint_to_le_bytes(
-        u.0[0].limbs().iter().map(|e| *e.value()),
-        C::LIMB_BITS,
-        C::BYTES_COMPRESSED / 2,
-    );
-    let c1_bytes = bigint_to_le_bytes(
-        u.0[1].limbs().iter().map(|e| *e.value()),
-        C::LIMB_BITS,
-        C::BYTES_COMPRESSED / 2,
-    );
-    let c0 = BigUint::from_bytes_le(&c0_bytes);
-    let c1 = BigUint::from_bytes_le(&c1_bytes);
-    println!("{label}: ({}, {})", c0, c1);
 }
 
 pub fn pad_to_ssz_chunk(le_bytes: &[u8]) -> Vec<u8> {

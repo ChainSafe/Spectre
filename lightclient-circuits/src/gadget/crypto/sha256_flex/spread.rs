@@ -1,35 +1,29 @@
 use std::marker::PhantomData;
 
-use crate::util::{ThreadBuilderBase, ThreadBuilderConfigBase};
-
-use super::builder::ShaContexts;
-use super::ShaThreadBuilder;
-use super::{compression::SpreadU32, util::*};
-use eth_types::Field;
-use halo2_base::gates::builder::FlexGateConfigParams;
-use halo2_base::halo2_proofs::halo2curves::FieldExt;
-use halo2_base::halo2_proofs::{
-    circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{
-        Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, Selector, TableColumn,
-        VirtualCells,
-    },
-    poly::Rotation,
-};
-use halo2_base::safe_types::RangeChip;
-use halo2_base::utils::decompose;
+use halo2_base::utils::{decompose, ScalarField};
 use halo2_base::QuantumCell;
 use halo2_base::{
-    gates::{flex_gate::FlexGateConfig, range::RangeConfig, GateInstructions, RangeInstructions},
-    utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus},
+    gates::RangeChip,
+    halo2_proofs::{
+        circuit::{Layouter, Region, Value},
+        plonk::{Advice, Column, ConstraintSystem, Error, TableColumn},
+        poly::Rotation,
+    },
+    utils::BigPrimeField,
+};
+use halo2_base::{
+    gates::{GateInstructions, RangeInstructions},
     AssignedValue, Context,
 };
-use halo2_proofs::plonk::Any;
 use itertools::Itertools;
-use num_bigint::BigUint;
+
+use crate::gadget::crypto::ShaCircuitBuilder;
+
+use super::ShaThreadBuilder;
+use super::util::{fe_to_bits_le, bits_le_to_fe};
 
 #[derive(Debug, Clone)]
-pub struct SpreadConfig<F: Field> {
+pub struct SpreadConfig<F: BigPrimeField> {
     pub denses: Vec<Column<Advice>>,
     pub spreads: Vec<Column<Advice>>,
     pub table_dense: TableColumn,
@@ -39,7 +33,7 @@ pub struct SpreadConfig<F: Field> {
     _f: PhantomData<F>,
 }
 
-impl<F: Field> SpreadConfig<F> {
+impl<F: BigPrimeField> SpreadConfig<F> {
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         num_bits_lookup: usize,
@@ -64,7 +58,7 @@ impl<F: Field> SpreadConfig<F> {
 
         let table_dense = meta.lookup_table_column();
         let table_spread = meta.lookup_table_column();
-        for (idx, (dense, spread)) in denses.iter().zip(spreads.iter()).enumerate() {
+        for (dense, spread) in denses.iter().zip(spreads.iter()) {
             meta.lookup("spread lookup", |meta| {
                 let dense = meta.query_advice(*dense, Rotation::cur());
                 let spread = meta.query_advice(*spread, Rotation::cur());
@@ -82,22 +76,7 @@ impl<F: Field> SpreadConfig<F> {
         }
     }
 
-    pub fn annotate_columns_in_region(&self, region: &mut Region<F>) {
-        for (i, col) in self.denses.iter().copied().enumerate() {
-            region.name_column(|| format!("dense_{}", i), col);
-        }
-        for (i, col) in self.spreads.iter().copied().enumerate() {
-            region.name_column(|| format!("spread_{}", i), col);
-        }
-    }
-}
-
-impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
-    fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
-        Self::configure(meta, 8, 1) // TODO configure num_advice_columns
-    }
-
-    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+    pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         layouter.assign_table(
             || "spread table",
             |mut table| {
@@ -128,7 +107,7 @@ impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
         Ok(())
     }
 
-    fn annotate_columns_in_region(&self, region: &mut Region<F>) {
+    pub fn annotate_columns_in_region(&self, region: &mut Region<F>) {
         for (i, &column) in self.spreads.iter().enumerate() {
             region.name_column(|| format!("spread_{i}"), column);
         }
@@ -140,11 +119,11 @@ impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpreadChip<'a, F: Field> {
+pub struct SpreadChip<'a, F: ScalarField> {
     range: &'a RangeChip<F>,
 }
 
-impl<'a, F: Field> SpreadChip<'a, F> {
+impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
         debug_assert_eq!(16 % range.lookup_bits(), 0);
 
@@ -152,7 +131,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
     }
     pub fn spread(
         &self,
-        thread_pool: &mut ShaThreadBuilder<F>,
+        thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
         dense: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
@@ -205,7 +184,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
     fn spread_limb(
         &self,
-        thread_pool: &mut ShaThreadBuilder<F>,
+        thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
         limb: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let (ctx_base, (ctx_dense, ctx_spread)) = thread_pool.sha_contexts_pair();
@@ -222,9 +201,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
 
         let assigned_spread = ctx_base.load_witness(spread_value);
         let assigned_spread_vanila = ctx_spread.load_witness(*assigned_spread.value());
-        thread_pool
-            .main()
-            .constrain_equal(&assigned_spread_vanila, &assigned_spread);
+        ctx_base.constrain_equal(&assigned_spread_vanila, &assigned_spread);
 
         Ok(assigned_spread)
     }

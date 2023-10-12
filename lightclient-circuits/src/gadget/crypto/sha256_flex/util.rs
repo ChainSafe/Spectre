@@ -1,6 +1,5 @@
 use eth_types::Field;
 use halo2_base::utils::{biguint_to_fe, fe_to_biguint};
-use halo2_proofs::circuit::AssignedCell;
 use itertools::Itertools;
 use num_bigint::BigUint;
 

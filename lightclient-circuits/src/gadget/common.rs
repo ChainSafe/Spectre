@@ -1,12 +1,10 @@
 //! Utility traits, functions used in the crate.
 use eth_types::Field;
-use halo2_proofs::plonk::Expression;
+use halo2_base::halo2_proofs::plonk::Expression;
 
 /// Returns the sum of the passed in cells
 pub mod sum {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression for the sum of the list of expressions.
     pub fn expr<F: Field, E: Expr<F>, I: IntoIterator<Item = E>>(inputs: I) -> Expression<F> {
@@ -26,9 +24,7 @@ pub mod sum {
 /// Returns `1` when `expr[0] && expr[1] && ... == 1`, and returns `0`
 /// otherwise. Inputs need to be boolean
 pub mod and {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that evaluates to 1 only if all the expressions in
     /// the given list are 1, else returns 0.
@@ -47,10 +43,8 @@ pub mod and {
 /// Returns `1` when `expr[0] || expr[1] || ... == 1`, and returns `0`
 /// otherwise. Inputs need to be boolean
 pub mod or {
-    use super::Expr;
     use super::{and, not};
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that evaluates to 1 if any expression in the given
     /// list is 1. Returns 0 if all the expressions were 0.
@@ -67,9 +61,7 @@ pub mod or {
 /// Returns `1` when `b == 0`, and returns `0` otherwise.
 /// `b` needs to be boolean
 pub mod not {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that represents the NOT of the given expression.
     pub fn expr<F: Field, E: Expr<F>>(b: E) -> Expression<F> {
@@ -85,9 +77,7 @@ pub mod not {
 /// Returns `a ^ b`.
 /// `a` and `b` needs to be boolean
 pub mod xor {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that represents the XOR of the given expression.
     pub fn expr<F: Field, E: Expr<F>>(a: E, b: E) -> Expression<F> {
@@ -103,9 +93,7 @@ pub mod xor {
 /// Returns `when_true` when `selector == 1`, and returns `when_false` when
 /// `selector == 0`. `selector` needs to be boolean.
 pub mod select {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns the `when_true` expression when the selector is true, else
     /// returns the `when_false` expression.
@@ -221,10 +209,8 @@ pub fn pow_of_two<F: Field>(by: usize) -> F {
 pub mod rlc {
     use std::ops::{Add, Mul};
 
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_base::{safe_types::GateInstructions, AssignedValue, Context, QuantumCell};
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
+    use halo2_base::{AssignedValue, Context, QuantumCell, gates::GateInstructions};
 
     /// Returns an expression that represents the random linear combination.
     pub fn expr<F: Field, E: Expr<F>>(expressions: &[E], randomness: E) -> Expression<F> {

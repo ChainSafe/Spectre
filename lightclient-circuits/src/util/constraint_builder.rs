@@ -1,6 +1,6 @@
 use crate::gadget::Expr;
 use eth_types::Field;
-use halo2_proofs::plonk::Expression;
+use halo2_base::halo2_proofs::plonk::Expression;
 
 use super::{Cell, CellType};
 

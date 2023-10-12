@@ -1,13 +1,12 @@
 use crate::gadget::crypto::G1Point;
-use eth_types::{AppCurveExt, Field, Spec};
-use halo2_base::safe_types::ScalarField;
-use halo2_base::{safe_types::GateInstructions, AssignedValue, Context};
+use eth_types::{Field, Spec};
+use halo2_base::{
+    gates::GateInstructions, halo2_proofs::plonk::Error, poseidon::PoseidonChip, AssignedValue,
+    Context,
+};
 use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
-use halo2_proofs::plonk::Error;
-use halo2curves::bls12_381::G1;
-use halo2curves::bls12_381::{self, G1Affine};
+use halo2curves::bls12_381::{Fq, G1Affine, G1};
 use itertools::Itertools;
-use poseidon::PoseidonChip;
 use poseidon_native::Poseidon as PoseidonNative;
 
 const POSEIDON_SIZE: usize = 16;
@@ -43,13 +42,14 @@ pub fn fq_array_poseidon<'a, F: Field>(
 }
 
 pub fn fq_array_poseidon_native<F: Field>(
-    elems: impl Iterator<Item = bls12_381::Fq>,
+    elems: impl Iterator<Item = Fq>,
+    limb_bits: usize,
 ) -> Result<F, Error> {
     let limbs = elems
         // Converts Fq elements to Fr limbs.
         .flat_map(|x| {
             x.to_bytes_le()
-                .chunks(bls12_381::G1::LIMB_BITS / 8)
+                .chunks(limb_bits / 8)
                 .map(F::from_bytes_le)
                 .collect_vec()
         })

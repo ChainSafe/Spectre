@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 use crate::gadget::crypto::constant_randomness;
 
 use super::HashInput;
-use eth_types::AppCurveExt;
 use eth_types::{Field, Spec};
 use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
 

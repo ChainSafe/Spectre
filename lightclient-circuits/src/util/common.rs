@@ -2,20 +2,18 @@ use crate::gadget::Expr;
 use eth_types::*;
 use halo2_base::{
     gates::{
-        builder::{
-            CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
-            MultiPhaseThreadBreakPoints,
+        circuit::CircuitBuilderStage,
+        flex_gate::{FlexGateConfig, MultiPhaseThreadBreakPoints},
+    },
+    halo2_proofs::{
+        circuit::{AssignedCell, Cell as Halo2Cell, Layouter, Region, Value},
+        plonk::{
+            Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
         },
-        flex_gate::FlexGateConfig,
+        poly::Rotation,
     },
+    virtual_region::manager::VirtualRegionManager,
     Context,
-};
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{
-        Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
-    },
-    poly::Rotation,
 };
 
 use std::hash::Hash;
@@ -121,12 +119,12 @@ impl CellType {
 
 #[derive(Clone, Debug)]
 pub struct AssignedValueCell<F: Field> {
-    pub cell: halo2_proofs::circuit::Cell,
+    pub cell: Halo2Cell,
     pub value: F,
 }
 
 impl<F: Field> AssignedValueCell<F> {
-    pub fn cell(&self) -> halo2_proofs::circuit::Cell {
+    pub fn cell(&self) -> Halo2Cell {
         self.cell
     }
 
@@ -136,70 +134,52 @@ impl<F: Field> AssignedValueCell<F> {
 }
 
 pub trait ThreadBuilderConfigBase<F: Field>: Clone + Sized {
-    fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self;
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self;
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error>;
 
     fn annotate_columns_in_region(&self, region: &mut Region<F>);
 }
 
-pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
-    type Config: ThreadBuilderConfigBase<F>;
+pub trait ThreadBuilderBase<F: Field>: VirtualRegionManager<F> + Clone {
+    type CustomContext;
 
-    fn new(witness_gen_only: bool) -> Self;
-
-    fn from_stage(stage: CircuitBuilderStage) -> Self;
-
-    fn mock() -> Self {
-        Self::new(false)
-    }
-
-    fn keygen() -> Self {
-        Self::new(false).unknown(true)
-    }
-
-    fn prover() -> Self {
-        Self::new(true)
-    }
-
-    fn unknown(self, use_unknown: bool) -> Self;
-
-    fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams;
-
-    /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
-    /// * `phase`: The challenge phase (as an index) of the gate thread.
-    fn main(&mut self) -> &mut Context<F>;
-
-    fn witness_gen_only(&self) -> bool;
-
-    /// Returns the `use_unknown` flag.
-    fn use_unknown(&self) -> bool;
-
-    /// Returns the current number of threads in the [GateThreadBuilder].
-    fn thread_count(&self) -> usize;
-
-    /// Creates a new thread id by incrementing the `thread count`
-    fn get_new_thread_id(&mut self) -> usize;
-
-    /// Assigns all advice and fixed cells, turns on selectors, imposes equality constraints.
-    /// This should only be called during keygen.
-    fn assign_all(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        q_lookup: &[Option<Selector>],
-        config: &Self::Config,
-        region: &mut Region<F>,
-        assignments: KeygenAssignments<F>,
-    ) -> Result<KeygenAssignments<F>, Error>;
-
-    /// Assigns witnesses. This should only be called during proof generation.
-    fn assign_witnesses(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        config: &Self::Config,
-        region: &mut Region<F>,
-        break_points: &mut MultiPhaseThreadBreakPoints,
-    ) -> Result<(), Error>;
+    fn custom_context(&mut self) -> &mut Self::CustomContext;
 }
+
+// pub trait ThreadBuilderBase<F: Field>: VirtualRegionManager<F> + Clone + Sized {
+//     type Config: ThreadBuilderConfigBase<F>;
+
+//     fn new(witness_gen_only: bool) -> Self;
+
+//     fn from_stage(stage: CircuitBuilderStage) -> Self;
+
+//     fn mock() -> Self {
+//         Self::new(false)
+//     }
+
+//     fn keygen() -> Self {
+//         Self::new(false).unknown(true)
+//     }
+
+//     fn prover() -> Self {
+//         Self::new(true)
+//     }
+
+//     fn unknown(self, use_unknown: bool) -> Self;
+
+//     /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
+//     /// * `phase`: The challenge phase (as an index) of the gate thread.
+//     fn main(&mut self) -> &mut Context<F>;
+
+//     fn witness_gen_only(&self) -> bool;
+
+//     /// Returns the `use_unknown` flag.
+//     fn use_unknown(&self) -> bool;
+
+//     /// Returns the current number of threads in the [GateThreadBuilder].
+//     fn thread_count(&self) -> usize;
+
+//     /// Creates a new thread id by incrementing the `thread count`
+//     fn get_new_thread_id(&mut self) -> usize;
+// }

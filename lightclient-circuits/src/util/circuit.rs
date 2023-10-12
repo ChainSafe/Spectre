@@ -2,13 +2,15 @@ use std::env::{args, set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
-use halo2_base::gates::builder::{
-    CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints,
+use halo2_base::gates::circuit::CircuitBuilderStage;
+use halo2_base::gates::flex_gate::{MultiPhaseThreadBreakPoints, FlexGateConfigParams};
+use halo2_base::halo2_proofs::{
+    halo2curves::bn256::{Bn256, Fr, G1Affine},
+    plonk::ProvingKey,
+    plonk::{Circuit, Error, VerifyingKey},
+    poly::commitment::Params,
+    poly::kzg::commitment::ParamsKZG,
 };
-use halo2_proofs::plonk::{Circuit, Error, VerifyingKey};
-use halo2_proofs::poly::commitment::Params;
-use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
     encode_calldata, evm_verify, gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,

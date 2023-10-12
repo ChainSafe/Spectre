@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "prover", "preprocessor", "eth-types"]
+members = ["lightclient-circuits", "preprocessor", "eth-types"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
@@ -21,32 +21,34 @@ rpath = false
 lto = "thin"
 incremental = true
 
-[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
-# halo2curves = { path = "../halo2curves" }
+[patch."https://github.com/axiom-crypto/halo2curves"]
+halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "bls12-381/hash_to_curve" }
+# halo2curves = { path = "../halo2curves" 
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496", default-features = false, features = [
-    "halo2-pse",
-    "display",
-] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496", default-features = false }
-poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496", default-features = false }
-
-
-# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+# halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "765f52c", default-features = false, features = [
 #     "halo2-pse",
 #     "display",
 # ] }
-# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false }
+# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "765f52c", default-features = false, features = [
+#     "halo2-pse",
+# ] }
+
+
+halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+    "halo2-axiom",
+    "display",
+] }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+    "halo2-axiom",
+] }
 # poseidon = { path = "../halo2-lib/hashes/poseidon", default-features = false }
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
-snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
-
-# [patch."https://github.com/timoftime/halo2curves"]
-# halo2curves = { path = "../halo2curves" }
+# snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
+# snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
+# snark-verifier = { path = "../snark-verifier/snark-verifier", default-features = false }
+# snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk", default-features = false }
 
 [patch."https://github.com/ralexstokes/ssz-rs"]
 ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main", default-features = false }

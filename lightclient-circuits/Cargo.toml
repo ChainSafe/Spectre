@@ -7,29 +7,29 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # halo2
-halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
-    "dev-graph",
-] }
-halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
+# halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
+#     "dev-graph",
+# ] }
+halo2curves = { git = "https://github.com/axiom-crypto/halo2curves" }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
-    "halo2-pse",
+    "halo2-axiom",
     "display",
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
-poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
+# poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
 
 # verifier SDK 
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "develop", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
-    "halo2-pse"
+    "halo2-axiom"
 ] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "develop", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
-    "halo2-pse",
+    "halo2-axiom"
 ] }
 # crypto
 num-bigint = { version = "0.4", features = ["rand"] }
@@ -58,6 +58,7 @@ log = "0.4"
 hex = "0.4"
 rayon = "1.7.0"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
+getset="0.1.2"
 
 poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 [dev-dependencies]

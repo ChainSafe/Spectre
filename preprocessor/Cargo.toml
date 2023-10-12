@@ -32,14 +32,14 @@ halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.gi
     "dev-graph",
 ] }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
-    "halo2-pse",
+    "halo2-axiom",
     "display",
 ] }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
-    "halo2-pse",
+    "halo2-axiom",
 ] }
 ark-std = { version = "0.4.0", features = ["print-trace"] }
 # sync-committee-verifier = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }

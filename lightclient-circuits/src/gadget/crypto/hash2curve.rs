@@ -90,7 +90,6 @@ impl<'a, S: Spec, F: Field, HC: HashInstructions<F> + 'a> HashToCurveChip<'a, S,
         msg: HashInput<QuantumCell<F>>,
         cache: &mut HashToCurveCache<F>,
     ) -> Result<[Fp2Point<F>; 2], Error> {
-        //
         let range = self.hash_chip.range();
         let gate = range.gate();
         let safe_types = SafeTypeChip::new(range);
@@ -660,6 +659,7 @@ mod test {
 
         let h2c_chip = HashToCurveChip::<Testnet, F, _>::new(&sha256);
         let fp_chip = halo2_ecc::bls12_381::FpChip::<F>::new(&range, G2::LIMB_BITS, G2::NUM_LIMBS);
+        let fp2_chip = halo2_ecc::bls12_381::Fp2Chip::new(&fp_chip);
 
         for input in input_vector {
             let mut cache = HashToCurveCache::<F>::default();
@@ -670,8 +670,16 @@ mod test {
                 &mut cache,
             )?;
 
-            print_fq2_dev::<G2, F>(hp.x(), "res_p.x");
-            print_fq2_dev::<G2, F>(hp.y(), "res_p.y");
+            // print_fq2_dev::<G2, F>(hp.x(), "res_p.x");
+            // print_fq2_dev::<G2, F>(hp.y(), "res_p.y");
+
+            println!(
+                "msghash: {:?}",
+                (
+                    fp2_chip.get_assigned_value(&hp.x.into()),
+                    fp2_chip.get_assigned_value(&hp.y.into())
+                )
+            );
         }
 
         builder.config(k, None);

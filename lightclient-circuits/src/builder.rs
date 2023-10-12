@@ -1,11 +1,11 @@
 use eth_types::Field;
 use halo2_base::{
-    gates::builder::{CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints},
+    gates::{CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints},
     AssignedValue,
-};
-use halo2_proofs::{
-    circuit::{Layouter, SimpleFloorPlanner},
-    plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
+    halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner},
+        plonk::{Circuit, Column, ConstraintSystem, Error, Instance},
+    }
 };
 use log::debug;
 

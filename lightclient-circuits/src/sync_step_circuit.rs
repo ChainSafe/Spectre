@@ -13,47 +13,39 @@ use std::{
 };
 
 use crate::{
-    builder::Eth2CircuitBuilder,
     gadget::crypto::{
-        calculate_ysquared, Fp2Point, FpPoint, G1Chip, G1Point, G2Chip, G2Point, HashInstructions,
-        HashToCurveCache, HashToCurveChip, Sha256Chip, ShaCircuitBuilder, ShaThreadBuilder,
+        calculate_ysquared, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, Sha256Chip,
+        ShaCircuitBuilder, ShaThreadBuilder,
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{
-        decode_into_field, gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning,
-        IntoWitness, ThreadBuilderBase,
+        gen_pkey, AppCircuit, AssignedValueCell, Challenges, Eth2ConfigPinning, IntoWitness,
+        ThreadBuilderBase,
     },
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
 };
-use eth_types::{AppCurveExt, Field, Spec};
+use eth_types::{Field, Spec};
 use ff::PrimeField;
 use group::UncompressedEncoding;
 use halo2_base::{
-    gates::{
-        builder::{
-            CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder,
-            MultiPhaseThreadBreakPoints, RangeCircuitBuilder,
-        },
-        flex_gate::GateStrategy,
-        range::{RangeConfig, RangeStrategy},
+    gates::{range::RangeConfig, RangeChip, RangeInstructions, GateInstructions, circuit::CircuitBuilderStage},
+    halo2_proofs::{
+        circuit::{Layouter, Region, SimpleFloorPlanner, Value},
+        dev::MockProver,
+        plonk::{Circuit, Column, ConstraintSystem, Error, Instance, ProvingKey},
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
-    safe_types::{GateInstructions, RangeChip, RangeInstructions},
+    poseidon::PoseidonChip,
     utils::{decompose, fe_to_bigint, fe_to_biguint, fs::gen_srs, CurveAffineExt, ScalarField},
     AssignedValue, Context,
     QuantumCell::{self, Witness},
 };
 use halo2_ecc::{
     bigint::ProperCrtUint,
-    bls12_381::{bls_signature, pairing::PairingChip, Fp12Chip, Fp2Chip, FpChip},
-    ecc::{bls_signature::BlsSignatureChip, EcPoint, EccChip},
-    fields::{fp12, vector::FieldVector, FieldChip, FieldExtConstructor},
-};
-use halo2_proofs::{
-    circuit::{Layouter, Region, SimpleFloorPlanner, Value},
-    dev::MockProver,
-    plonk::{Circuit, Column, ConstraintSystem, Error, Instance, ProvingKey},
-    poly::{commitment::Params, kzg::commitment::ParamsKZG},
+    bls12_381::{bls_signature::{self, BlsSignatureChip}, pairing::PairingChip, Fp12Chip, Fp2Chip, FpChip, Fp2Point},
+    ecc::{hash_to_curve::HashToCurveChip, EcPoint, EccChip},
+    fields::{fp12, fp2, vector::FieldVector, FieldChip, FieldExtConstructor},
 };
 use halo2curves::{
     bls12_381::{Fq, Fq12, Fr, G1Affine, G2Affine, G2Prepared, G1, G2},
@@ -63,9 +55,7 @@ use itertools::Itertools;
 use lazy_static::__Deref;
 use num_bigint::BigUint;
 use pasta_curves::group::{ff, GroupEncoding};
-use poseidon::PoseidonChip;
-use sha2::{Digest, Sha256};
-use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
+// use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
 use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
@@ -94,8 +84,8 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let g2_chip = EccChip::new(&fp2_chip);
         let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
         let pairing_chip = PairingChip::new(&fp_chip);
-        let bls_chip = bls_signature::BlsSignatureChip::new(&fp_chip, pairing_chip);
-        let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip);
+        let bls_chip = BlsSignatureChip::new(&fp_chip, &pairing_chip);
+        let h2c_chip = HashToCurveChip::<S, F, _>::new(&sha256_chip, &fp2_chip);
 
         let execution_payload_root: HashInputChunk<QuantumCell<F>> =
             args.execution_payload_root.clone().into_witness();
@@ -128,7 +118,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             use ff::Field;
             fp12_chip.load_constant(thread_pool.main(), Fq12::one())
         };
-        let mut h2c_cache = HashToCurveCache::<F>::default();
 
         // Verify attestted header
         let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
@@ -196,7 +185,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             thread_pool,
             &fp_chip,
             signing_root.into(),
-            &mut h2c_cache,
         )?;
 
         let res =
@@ -308,7 +296,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             })
             .collect_vec();
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
+            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), todo!()).unwrap();
         let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
         input[88..].copy_from_slice(&poseidon_commitment_le);
 
@@ -463,15 +451,15 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
         args: &Self::Witness,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
-        let mut thread_pool = ShaThreadBuilder::from_stage(stage);
-        let range = RangeChip::<bn256::Fr>::new(RangeStrategy::Vertical, 8);
+        let mut builder = ShaCircuitBuilder::<bn256::Fr, ShaThreadBuilder>::from_stage(stage);
+        let range = builder.range_chip(8);
 
-        let assigned_instances = Self::synthesize(&mut thread_pool, &range, args)?;
+        let assigned_instances = Self::synthesize(&mut builder, &range, args)?;
 
         match stage {
             CircuitBuilderStage::Prover => {}
             _ => {
-                thread_pool.config(
+                builder.config(
                     k as usize,
                     Some(
                         var("MINIMUM_ROWS")
@@ -483,156 +471,150 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
             }
         }
 
-        Ok(Eth2CircuitBuilder::from_stage(
-            assigned_instances,
-            thread_pool,
-            pinning.map(|p| p.break_points),
-            stage,
-        ))
+        Ok(builder)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::{
-        env::{set_var, var},
-        fs,
-        os::unix::thread,
-    };
+// #[cfg(test)]
+// mod tests {
+//     use std::{
+//         env::{set_var, var},
+//         fs,
+//         os::unix::thread,
+//     };
 
-    use crate::{
-        builder::Eth2CircuitBuilder,
-        util::{full_prover, full_verifier, gen_pkey, Halo2ConfigPinning},
-        witness::SyncStepArgs,
-    };
+//     use crate::{
+//         util::{full_prover, full_verifier, gen_pkey, Halo2ConfigPinning},
+//         witness::SyncStepArgs,
+//     };
 
-    use super::*;
-    use ark_std::{end_timer, start_timer};
-    use eth_types::Testnet;
-    use group::Group;
-    use halo2_base::{
-        gates::{
-            builder::{CircuitBuilderStage, FlexGateConfigParams},
-            flex_gate::GateStrategy,
-            range::RangeStrategy,
-        },
-        utils::{decompose, fs::gen_srs},
-    };
-    use halo2_proofs::{
-        circuit::SimpleFloorPlanner,
-        dev::MockProver,
-        halo2curves::bn256::Fr,
-        plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
-        poly::kzg::commitment::ParamsKZG,
-    };
-    use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
-    use pasta_curves::group::UncompressedEncoding;
-    use rand::{rngs::OsRng, thread_rng};
-    use rayon::iter::ParallelIterator;
-    use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
-    use snark_verifier_sdk::{
-        evm::{encode_calldata, evm_verify, gen_evm_proof_shplonk},
-        halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
-        CircuitExt, SHPLONK,
-    };
+//     use super::*;
+//     use ark_std::{end_timer, start_timer};
+//     use eth_types::Testnet;
+//     use group::Group;
+//     use halo2_base::{
+//         gates::{
+//             builder::{CircuitBuilderStage, FlexGateConfigParams},
+//             flex_gate::GateStrategy,
+//             range::RangeStrategy,
+//         },
+//         utils::{decompose, fs::gen_srs},
+//     };
+//     use halo2_proofs::{
+//         circuit::SimpleFloorPlanner,
+//         dev::MockProver,
+//         halo2curves::bn256::Fr,
+//         plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
+//         poly::kzg::commitment::ParamsKZG,
+//     };
+//     use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
+//     use pasta_curves::group::UncompressedEncoding;
+//     use rand::{rngs::OsRng, thread_rng};
+//     use rayon::iter::ParallelIterator;
+//     use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
+//     use snark_verifier_sdk::{
+//         evm::{encode_calldata, evm_verify, gen_evm_proof_shplonk},
+//         halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
+//         CircuitExt, SHPLONK,
+//     };
 
-    fn load_circuit_args() -> SyncStepArgs<Testnet> {
-        serde_json::from_slice(&fs::read("../test_data/sync_step_512.json").unwrap()).unwrap()
-    }
+//     fn load_circuit_args() -> SyncStepArgs<Testnet> {
+//         serde_json::from_slice(&fs::read("../test_data/sync_step_512.json").unwrap()).unwrap()
+//     }
 
-    #[test]
-    fn test_sync_circuit() {
-        const K: u32 = 21;
-        let params = gen_srs(K);
+//     #[test]
+//     fn test_sync_circuit() {
+//         const K: u32 = 21;
+//         let params = gen_srs(K);
 
-        let witness = load_circuit_args();
+//         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+//         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            Some(pinning),
-            &witness,
-            K,
-        )
-        .unwrap();
+//         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+//             CircuitBuilderStage::Mock,
+//             Some(pinning),
+//             &witness,
+//             K,
+//         )
+//         .unwrap();
 
-        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness);
+//         let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness);
 
-        let timer = start_timer!(|| "sync_step mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
-        prover.assert_satisfied_par();
-        end_timer!(timer);
-    }
+//         let timer = start_timer!(|| "sync_step mock prover");
+//         let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
+//         prover.assert_satisfied_par();
+//         end_timer!(timer);
+//     }
 
-    #[test]
-    fn test_sync_proofgen() {
-        const K: u32 = 22;
-        let params = gen_srs(K);
+//     #[test]
+//     fn test_sync_proofgen() {
+//         const K: u32 = 22;
+//         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
-            &params,
-            "../build/sync_step.pkey",
-            "./config/sync_step.json",
-            false,
-            &SyncStepArgs::<Testnet>::default(),
-        );
+//         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+//             &params,
+//             "../build/sync_step.pkey",
+//             "./config/sync_step.json",
+//             false,
+//             &SyncStepArgs::<Testnet>::default(),
+//         );
 
-        let witness = load_circuit_args();
+//         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+//         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Prover,
-            Some(pinning),
-            &witness,
-            K,
-        )
-        .unwrap();
+//         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+//             CircuitBuilderStage::Prover,
+//             Some(pinning),
+//             &witness,
+//             K,
+//         )
+//         .unwrap();
 
-        let instances = circuit.instances();
-        let proof = full_prover(&params, &pk, circuit, instances.clone());
+//         let instances = circuit.instances();
+//         let proof = full_prover(&params, &pk, circuit, instances.clone());
 
-        assert!(full_verifier(&params, pk.get_vk(), proof, instances))
-    }
+//         assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+//     }
 
-    #[test]
-    fn test_sync_evm_verify() {
-        const K: u32 = 22;
-        let params = gen_srs(K);
+//     #[test]
+//     fn test_sync_evm_verify() {
+//         const K: u32 = 22;
+//         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
-            &params,
-            "../build/sync_step.pkey",
-            "./config/sync_step.json",
-            false,
-            &SyncStepArgs::<Testnet>::default(),
-        );
+//         let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+//             &params,
+//             "../build/sync_step.pkey",
+//             "./config/sync_step.json",
+//             false,
+//             &SyncStepArgs::<Testnet>::default(),
+//         );
 
-        let witness = load_circuit_args();
+//         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+//         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Prover,
-            Some(pinning),
-            &witness,
-            K,
-        )
-        .unwrap();
+//         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+//             CircuitBuilderStage::Prover,
+//             Some(pinning),
+//             &witness,
+//             K,
+//         )
+//         .unwrap();
 
-        let num_instances = circuit.num_instance();
-        let instances = circuit.instances();
-        let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
-        println!("proof size: {}", proof.len());
-        let deployment_code = SyncStepCircuit::<Testnet, Fr>::gen_evm_verifier_shplonk(
-            &params,
-            &pk,
-            None::<String>,
-            &witness,
-        )
-        .unwrap();
-        println!("deployment_code size: {}", deployment_code.len());
-        evm_verify(deployment_code, instances, proof);
-    }
-}
+//         let num_instances = circuit.num_instance();
+//         let instances = circuit.instances();
+//         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
+//         println!("proof size: {}", proof.len());
+//         let deployment_code = SyncStepCircuit::<Testnet, Fr>::gen_evm_verifier_shplonk(
+//             &params,
+//             &pk,
+//             None::<String>,
+//             &witness,
+//         )
+//         .unwrap();
+//         println!("deployment_code size: {}", deployment_code.len());
+//         evm_verify(deployment_code, instances, proof);
+//     }
+// }

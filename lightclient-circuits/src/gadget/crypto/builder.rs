@@ -1,175 +1,174 @@
 use std::{cell::RefCell, collections::HashMap, env::set_var, marker::PhantomData, mem};
 
 use eth_types::Field;
+use getset::Getters;
 use halo2_base::{
     gates::{
-        builder::{
-            assign_threads_in, CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
-            MultiPhaseThreadBreakPoints, ThreadBreakPoints,
+        circuit::{
+            builder::BaseCircuitBuilder, BaseCircuitParams, BaseConfig, CircuitBuilderStage,
         },
-        range::{RangeConfig, RangeStrategy},
+        flex_gate::threads::SinglePhaseCoreManager,
+        RangeChip,
     },
-    safe_types::RangeChip,
-    SKIP_FIRST_PASS,
+    halo2_proofs::{
+        circuit::{Layouter, SimpleFloorPlanner},
+        plonk::{Circuit, ConstraintSystem, Error},
+    },
+    utils::BigPrimeField,
+    virtual_region::manager::VirtualRegionManager,
+    Context,
 };
-use halo2_proofs::{
-    circuit::{self, Layouter, SimpleFloorPlanner},
-    plonk::{Circuit, ConstraintSystem, Error},
-};
-use snark_verifier_sdk::CircuitExt;
 
 use crate::{
     gadget::crypto::{Sha256Chip, ShaThreadBuilder},
-    util::{ThreadBuilderBase, ThreadBuilderConfigBase},
+    util::ThreadBuilderBase,
 };
 
 use super::sha256_flex::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 
 #[derive(Debug, Clone)]
-pub struct SHAConfig<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> {
-    pub compression: CustomConfig,
-    pub range: RangeConfig<F>,
+pub struct SHAConfig<F: BigPrimeField> {
+    pub compression: SpreadConfig<F>,
+    pub base: BaseConfig<F>,
 }
 
-impl<F: Field, CustomConfig: ThreadBuilderConfigBase<F>> SHAConfig<F, CustomConfig> {
-    pub fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
-        let degree = params.k;
-        let mut range = RangeConfig::configure(
-            meta,
-            RangeStrategy::Vertical,
-            &params.num_advice_per_phase,
-            &params.num_lookup_advice_per_phase,
-            params.num_fixed,
-            params.k - 1,
-            degree,
-        );
-        let compression = CustomConfig::configure(meta, params);
+impl<F: BigPrimeField> SHAConfig<F> {
+    pub fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
+        let base = BaseConfig::configure(meta, params);
+        let compression = SpreadConfig::configure(meta, 8, 1);
 
-        range.gate.max_rows = (1 << degree) - meta.minimum_rows();
-        Self { range, compression }
+        Self { base, compression }
     }
 }
 
+#[derive(Getters)]
 pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
-    pub builder: RefCell<ThreadBuilder>,
-    pub break_points: RefCell<MultiPhaseThreadBreakPoints>, // `RefCell` allows the circuit to record break points in a keygen call of `synthesize` for use in later witness gen
-    _f: PhantomData<F>,
+    #[getset(get = "pub", get_mut = "pub")]
+    pub(crate) sha: ThreadBuilder,
+    #[getset(get = "pub", get_mut = "pub")]
+    pub(crate) base: BaseCircuitBuilder<F>,
 }
 
 impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
-    pub fn new(builder: ThreadBuilder, break_points: Option<MultiPhaseThreadBreakPoints>) -> Self {
+    pub fn new(witness_gen_only: bool) -> Self {
+        let base = BaseCircuitBuilder::new(witness_gen_only);
         Self {
-            builder: RefCell::new(builder),
-            break_points: RefCell::new(break_points.unwrap_or_default()),
-            _f: PhantomData,
+            sha: ShaThreadBuilder::new(witness_gen_only)
+                .use_copy_manager(base.core().phase_manager[FIRST_PHASE].copy_manager.clone()),
+            base,
         }
     }
 
-    pub fn from_stage(
-        builder: ThreadBuilder,
-        break_points: Option<MultiPhaseThreadBreakPoints>,
-        stage: CircuitBuilderStage,
-    ) -> Self {
-        Self::new(
-            builder.unknown(stage == CircuitBuilderStage::Keygen),
-            break_points,
-        )
+    pub fn from_stage(stage: CircuitBuilderStage) -> Self {
+        Self::new(stage == CircuitBuilderStage::Prover)
+            .unknown(stage == CircuitBuilderStage::Keygen)
+    }
+
+    pub fn unknown(mut self, use_unknown: bool) -> Self {
+        self.sha = self.sha.unknown(use_unknown);
+        self.base = self.base.unknown(use_unknown);
+        self
     }
 
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [ShaThreadBuilder] set to true.
-    pub fn keygen(builder: ThreadBuilder) -> Self {
-        Self::new(builder.unknown(true), None)
+    pub fn keygen() -> Self {
+        Self::from_stage(CircuitBuilderStage::Keygen)
     }
 
     /// Creates a new [ShaCircuitBuilder] with `use_unknown` of [GateThreadBuilder] set to false.
-    pub fn mock(builder: ThreadBuilder) -> Self {
-        Self::new(builder.unknown(false), None)
+    pub fn mock() -> Self {
+        Self::from_stage(CircuitBuilderStage::Mock)
     }
 
     /// Creates a new [ShaCircuitBuilder].
-    pub fn prover(builder: ThreadBuilder, break_points: MultiPhaseThreadBreakPoints) -> Self {
-        Self::new(builder.unknown(false), Some(break_points))
+    pub fn prover() -> Self {
+        Self::from_stage(CircuitBuilderStage::Prover)
     }
 
-    pub fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
-        // clone everything so we don't alter the circuit in any way for later calls
-        let mut builder = self.builder.borrow().clone();
-        builder.config(k, minimum_rows)
+    /// The log_2 size of the lookup table, if using.
+    pub fn lookup_bits(&self) -> Option<usize> {
+        self.base.lookup_bits()
     }
 
-    // re-usable function for synthesize
-    #[allow(clippy::type_complexity)]
-    pub fn sub_synthesize(
-        &self,
-        config: &SHAConfig<F, ThreadBuilder::Config>,
-        layouter: &mut impl Layouter<F>,
-    ) -> Result<HashMap<(usize, usize), (circuit::Cell, usize)>, Error> {
-        config
-            .range
-            .load_lookup_table(layouter)
-            .expect("load range lookup table");
+    /// Set lookup bits
+    pub fn set_lookup_bits(&mut self, lookup_bits: usize) {
+        self.base.set_lookup_bits(lookup_bits);
+    }
 
-        let mut first_pass = SKIP_FIRST_PASS;
-        let witness_gen_only = self.builder.borrow().witness_gen_only();
+    /// Returns new with lookup bits
+    pub fn use_lookup_bits(mut self, lookup_bits: usize) -> Self {
+        self.set_lookup_bits(lookup_bits);
+        self
+    }
 
-        let mut assigned_advices = HashMap::new();
+    /// Sets new `k` = log2 of domain
+    pub fn set_k(&mut self, k: usize) {
+        self.base.set_k(k);
+    }
 
-        config.compression.load(layouter)?;
+    /// Returns new with `k` set
+    pub fn use_k(mut self, k: usize) -> Self {
+        self.set_k(k);
+        self
+    }
 
-        layouter.assign_region(
-            || "ShaCircuitBuilder generated circuit",
-            |mut region| {
-                if first_pass {
-                    first_pass = false;
-                    return Ok(());
-                }
+    /// Set config params
+    pub fn set_params(&mut self, params: BaseCircuitParams) {
+        self.base.set_params(params)
+    }
 
-                if !witness_gen_only {
-                    let mut builder = self.builder.borrow().clone();
+    /// Returns new with config params
+    pub fn use_params(mut self, params: BaseCircuitParams) -> Self {
+        self.set_params(params);
+        self
+    }
 
-                    let assignments = builder.assign_all(
-                        &config.range.gate,
-                        &config.range.lookup_advice,
-                        &config.range.q_lookup,
-                        &config.compression,
-                        &mut region,
-                        Default::default(),
-                    )?;
-                    *self.break_points.borrow_mut() = assignments.break_points.clone();
-                    assigned_advices = assignments.assigned_advices;
-                } else {
-                    let builder = &mut self.builder.borrow_mut();
-                    let break_points = &mut self.break_points.borrow_mut();
+    /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
+    /// * `phase`: The challenge phase (as an index) of the gate thread.
+    pub fn main(&mut self) -> &mut Context<F> {
+        self.base.main(0)
+    }
 
-                    builder.assign_witnesses(
-                        &config.range.gate,
-                        &config.range.lookup_advice,
-                        &config.compression,
-                        &mut region,
-                        break_points,
-                    )?;
-                }
-                Ok(())
-            },
-        )?;
-        Ok(assigned_advices)
+    /// Returns [SinglePhaseCoreManager] with the virtual region with all core threads in the given phase.
+    pub fn pool(&mut self, phase: usize) -> &mut SinglePhaseCoreManager<F> {
+        self.base.pool(phase)
+    }
+
+    pub fn calculate_params(&mut self, minimum_rows: Option<usize>) -> BaseCircuitParams {
+        self.base.calculate_params(minimum_rows)
+    }
+
+    pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, &mut ThreadBuilder::CustomContext) {
+        (self.base.main(0), self.sha.custom_context())
+    }
+
+    pub fn range_chip(&mut self, lookup_bits: usize) -> RangeChip<F> {
+        self.base.set_lookup_bits(lookup_bits);
+        self.base.range_chip()
     }
 }
 
 impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
     for ShaCircuitBuilder<F, ThreadBuilder>
 {
-    type Config = SHAConfig<F, ThreadBuilder::Config>;
+    type Config = SHAConfig<F>;
     type FloorPlanner = SimpleFloorPlanner;
+    type Params = BaseCircuitParams;
+
+    fn params(&self) -> Self::Params {
+        self.base.config_params.clone()
+    }
 
     fn without_witnesses(&self) -> Self {
         unimplemented!()
     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> SHAConfig<F, ThreadBuilder::Config> {
-        let params: FlexGateConfigParams =
-            serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+    fn configure_with_params(meta: &mut ConstraintSystem<F>, params: Self::Params) -> Self::Config {
         SHAConfig::configure(meta, params)
+    }
+
+    fn configure(_meta: &mut ConstraintSystem<F>) -> SHAConfig<F> {
+        unreachable!("You must use configure_with_params");
     }
 
     fn synthesize(
@@ -177,7 +176,18 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
         config: Self::Config,
         mut layouter: impl Layouter<F>,
     ) -> Result<(), Error> {
-        self.sub_synthesize(&config, &mut layouter)?;
+        config.compression.load(&mut layouter)?;
+
+        layouter.assign_region(
+            || "ShaCircuitBuilder generated circuit",
+            |mut region| {
+                self.sha.assign_raw(&config.compression, &mut region);
+                Ok(())
+            },
+        )?;
+
+        self.base.synthesize(config.base.clone(), layouter)?;
+
         Ok(())
     }
 }

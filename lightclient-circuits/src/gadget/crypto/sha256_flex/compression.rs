@@ -1,13 +1,13 @@
 use std::cell::RefMut;
 
+use crate::gadget::crypto::ShaCircuitBuilder;
 use crate::util::ThreadBuilderBase;
 
-use super::builder::ShaContexts;
+use super::gate::ShaContexts;
 use super::spread::{self, SpreadChip, SpreadConfig};
 use super::util::{bits_le_to_fe, fe_to_bits_le};
 use super::ShaThreadBuilder;
 use eth_types::Field;
-use halo2_base::halo2_proofs::halo2curves::FieldExt;
 use halo2_base::halo2_proofs::{
     circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
     plonk::{
@@ -56,7 +56,7 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
 pub fn sha256_compression<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
     pre_state_words: &[AssignedValue<F>],
@@ -249,7 +249,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
 }
 
 fn state_to_spread_u32<'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
 ) -> Result<SpreadU32<'a, F>, Error> {
@@ -292,7 +292,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 }
 
 fn ch<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -402,7 +402,7 @@ fn ch<'a, 'b: 'a, F: Field>(
 }
 
 fn maj<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -524,7 +524,7 @@ fn sigma_upper1<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower0<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -575,7 +575,7 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
 
 #[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
     starts: &[usize; 4],

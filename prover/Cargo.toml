@@ -21,12 +21,12 @@ http = "0.2"
 halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
 
 # verifier SDK 
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1-ce", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
 ] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1-ce", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
