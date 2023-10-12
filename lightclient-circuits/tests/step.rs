@@ -1,3 +1,5 @@
+#![feature(generic_const_exprs)]
+
 use ark_std::{end_timer, start_timer};
 use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
@@ -6,6 +8,7 @@ use ethereum_consensus_types::{ForkData, Root};
 use halo2_base::gates::builder::CircuitBuilderStage;
 use halo2_proofs::dev::MockProver;
 use halo2curves::bn256::{self, Fr};
+use halo2curves::bls12_381;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
@@ -559,7 +562,7 @@ mod solidity_tests {
         let (witness, _) = read_test_files_and_gen_witness(path);
         let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness);
         let poseidon_commitment_le =
-            extract_poseidon_committee_commitment(&witness.pubkeys_uncompressed)?;
+            poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed)?;
 
         let anvil_instance = Anvil::new().spawn();
         let ethclient: Arc<SignerMiddleware<Provider<Http>, _>> = make_client(&anvil_instance);
@@ -658,12 +661,15 @@ mod solidity_tests {
     );
 
     // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
-    impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput {
+    impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput
+    where
+        [(); Spec::SYNC_COMMITTEE_SIZE]:,
+    {
         fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
             let poseidon_commitment_le =
-                extract_poseidon_committee_commitment(&args.pubkeys_compressed).unwrap();
+            poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed).unwrap();
 
-            let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
+            let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
                 .pubkeys_compressed
                 .iter()
                 .cloned()
@@ -686,7 +692,7 @@ mod solidity_tests {
         }
     }
 
-    fn extract_poseidon_committee_commitment(
+    fn poseidon_committee_commitment_from_uncompressed(
         pubkeys_uncompressed: &Vec<Vec<u8>>,
     ) -> anyhow::Result<[u8; 32]> {
         let pubkey_affines = pubkeys_uncompressed
@@ -701,6 +707,18 @@ mod solidity_tests {
             .collect_vec();
         let poseidon_commitment =
             fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
+        Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    }
+
+    fn poseidon_committee_commitment_from_compressed(
+        pubkeys_compressed: &Vec<Vec<u8>>,
+    ) -> anyhow::Result<[u8; 32]> {
+        let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes[47] &= 0b00011111;
+            bls12_381::Fq::from_bytes_le(&bytes)
+        });
+        let poseidon_commitment =
+            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
         Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
     }
 
