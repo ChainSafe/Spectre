@@ -84,3 +84,39 @@ impl Client {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::args;
+    use jsonrpc_v2::Error;
+
+    #[tokio::test]
+    #[ignore = "requires a running prover"]
+    async fn test_rpc_client() {
+        let client = Client::new("http://localhost:3000/rpc");
+
+        let p = GenProofStepParams {
+            spec: args::Spec::Testnet,
+            k: Some(21),
+            beacon_api: String::from("http://3.128.78.74:5052"),
+        };
+        let r = client.gen_evm_proof_step_circuit(p).await;
+
+        match r {
+            Ok(r) => {
+                println!("res: {:?}", r);
+            }
+            Err(Error::Full {
+                data: _,
+                code,
+                message,
+            }) => {
+                println!("Error: {}, Code: {}", message, code);
+            }
+            Err(Error::Provided { code, message }) => {
+                println!("Error: {}, Code: {}", message, code);
+            }
+        }
+    }
+}
