@@ -7,8 +7,8 @@ use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
 use halo2_base::gates::builder::CircuitBuilderStage;
 use halo2_proofs::dev::MockProver;
-use halo2curves::bn256::{self, Fr};
 use halo2curves::bls12_381;
+use halo2curves::bn256::{self, Fr};
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
@@ -364,11 +364,7 @@ fn read_test_files_and_gen_witness(
         .next_sync_committee
         .aggregate_pubkey
         .to_bytes()
-        .iter()
-        // Reverse bytes because of endieness
-        .copied()
-        .rev()
-        .collect_vec();
+        .to_vec();
 
     let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
@@ -381,10 +377,7 @@ fn read_test_files_and_gen_witness(
             .pubkeys
             .iter()
             .cloned()
-            .map(|pk| {
-                // Reverse bytes because of endieness
-                pk.to_bytes().iter().copied().rev().collect_vec()
-            })
+            .map(|pk| pk.to_bytes().to_vec())
             .collect_vec(),
         randomness: crypto::constant_randomness(),
         _spec: Default::default(),
@@ -668,7 +661,7 @@ mod solidity_tests {
     {
         fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
             let poseidon_commitment_le =
-            poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed).unwrap();
+                poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed).unwrap();
 
             let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
                 .pubkeys_compressed
@@ -718,8 +711,7 @@ mod solidity_tests {
             bytes[47] &= 0b00011111;
             bls12_381::Fq::from_bytes_le(&bytes)
         });
-        let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
         Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
     }
 
