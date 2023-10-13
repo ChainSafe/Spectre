@@ -141,6 +141,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         [(); { S::SYNC_COMMITTEE_SIZE }]:,
     {
         let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes.reverse();
             bytes[47] &= 0b00011111;
             bls12_381::Fq::from_bytes_le(&bytes)
         });

@@ -660,8 +660,18 @@ mod solidity_tests {
         [(); Spec::SYNC_COMMITTEE_SIZE]:,
     {
         fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
-            let poseidon_commitment_le =
-                poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed).unwrap();
+            let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
+                &args
+                    .pubkeys_compressed
+                    .iter()
+                    .cloned()
+                    .map(|mut b| {
+                        b.reverse();
+                        b
+                    })
+                    .collect_vec(),
+            )
+            .unwrap();
 
             let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
                 .pubkeys_compressed
