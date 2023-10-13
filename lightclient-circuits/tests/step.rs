@@ -616,6 +616,7 @@ mod solidity_tests {
             })
             .collect();
 
+        assert_eq!(result_decoded.len(), instance[0].len());
         assert_eq!(vec![result_decoded], instance);
         Ok(())
     }
