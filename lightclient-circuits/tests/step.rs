@@ -602,7 +602,7 @@ mod solidity_tests {
         let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
 
         let result = contract
-            .to_input_commitment(RotateInput::from(witness), finalized_block_root)
+            .to_public_inputs(RotateInput::from(witness), finalized_block_root)
             .call()
             .await?;
 

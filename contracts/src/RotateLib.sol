@@ -16,7 +16,7 @@ library RotateLib {
     * @param args The arguments for the sync step
     * @return The public input commitment that can be sent to the verifier contract.
      */
-    function toInputCommitment(RotateInput memory args, bytes32 finalizedHeaderRoot) internal pure returns (uint256[65] memory) {
+    function toPublicInputs(RotateInput memory args, bytes32 finalizedHeaderRoot) internal pure returns (uint256[65] memory) {
         uint256[65] memory inputs;
 
         inputs[0] = uint256(EndianConversions.toLittleEndian(uint256(args.syncCommitteePoseidon)));
