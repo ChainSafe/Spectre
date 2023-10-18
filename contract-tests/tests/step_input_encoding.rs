@@ -5,9 +5,8 @@ use eth_types::Minimal;
 use contract_tests::make_client;
 use itertools::Itertools;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
-use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
-use halo2curves::bls12_381;
-use halo2curves::bn256::{self, Fr};
+use lightclient_circuits::witness::SyncStepArgs;
+use halo2curves::bn256;
 use test_utils::read_test_files_and_gen_witness;
 use halo2_base::safe_types::ScalarField;
 use halo2curves::group::UncompressedEncoding;
@@ -31,7 +30,7 @@ async fn test_step_instance_commitment_evm_equivalence(
     let poseidon_commitment_le =
         poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed)?;
 
-    let (anvil_instance, ethclient) = make_client();
+    let (_anvil_instance, ethclient) = make_client();
     let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
 
     let result = contract
