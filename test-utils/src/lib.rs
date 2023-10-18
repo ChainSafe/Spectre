@@ -1,3 +1,5 @@
+#![feature(generic_const_exprs)]
+
 use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
@@ -23,6 +25,7 @@ use crate::test_types::{ByteVector, TestMeta, TestStep};
 
 mod execution_payload_header;
 mod test_types;
+pub mod abis;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const SYNC_COMMITTEE_SIZE: usize>(path: &PathBuf) -> anyhow::Result<(usize, [u8; 32])> {

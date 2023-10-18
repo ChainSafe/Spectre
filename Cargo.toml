@@ -35,6 +35,12 @@ halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "comm
     "halo2-pse",
     "display",
 ] }
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+    "display",
+    "loader_halo2",
+    "loader_evm",
+    "halo2-pse",
+] }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
 halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
