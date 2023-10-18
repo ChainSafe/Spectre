@@ -1,17 +1,17 @@
-use ethers::contract::abigen;
-use rstest::rstest;
-use std::path::PathBuf;
-use eth_types::Minimal;
 use contract_tests::make_client;
+use eth_types::Minimal;
+use ethers::contract::abigen;
+use halo2_base::safe_types::ScalarField;
+use halo2curves::bn256;
+use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
+use lightclient_circuits::poseidon::fq_array_poseidon_native;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
-use halo2curves::bn256;
-use test_utils::read_test_files_and_gen_witness;
-use halo2_base::safe_types::ScalarField;
-use halo2curves::group::UncompressedEncoding;
-use lightclient_circuits::poseidon::fq_array_poseidon_native;
+use rstest::rstest;
 use ssz_rs::Merkleized;
+use std::path::PathBuf;
+use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
     SyncStepExternal,
