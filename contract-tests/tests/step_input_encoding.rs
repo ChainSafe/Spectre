@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use contract_tests::make_client;
 use eth_types::Minimal;
 use ethers::contract::abigen;
@@ -10,7 +12,6 @@ use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
 use ssz_rs::Merkleized;
-use std::path::PathBuf;
 use test_utils::read_test_files_and_gen_witness;
 
 abigen!(

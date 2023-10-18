@@ -1,11 +1,12 @@
 #![feature(generic_const_exprs)]
 
+use std::path::PathBuf;
+
 use contract_tests::make_client;
 use eth_types::Minimal;
 use ethers::contract::abigen;
 use halo2_base::safe_types::ScalarField;
-use halo2curves::bls12_381;
-use halo2curves::bn256::{self, Fr};
+use halo2curves::{bls12_381, bn256::{self, Fr}};
 use itertools::Itertools;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::poseidon::fq_array_poseidon_native;
@@ -13,7 +14,6 @@ use lightclient_circuits::witness::CommitteeRotationArgs;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use std::path::PathBuf;
 use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
