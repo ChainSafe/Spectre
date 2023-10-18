@@ -1,0 +1,18 @@
+[package]
+name = "test-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lightclient-circuits = { workspace = true }
+ethereum-consensus-types = { workspace = true }
+eth-types = { workspace = true }
+ssz-rs = { workspace = true }
+zipline-test-utils = { workspace = true }
+light-client-verifier = { workspace = true }
+sync-committee-primitives = { workspace = true }
+halo2curves = { workspace = true }
+
+itertools = "0.11.0"
+hex = "0.4.3"
+serde = { version = "1.0.130", features = ["derive"] }

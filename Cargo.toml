@@ -1,5 +1,5 @@
 [workspace]
-members = ["lightclient-circuits", "prover", "preprocessor", "eth-types"]
+members = ["lightclient-circuits", "prover", "preprocessor", "eth-types", "contract-tests", "test-utils"]
 
 # Definition of benchmarks profile to use.
 [profile.bench]
@@ -20,6 +20,21 @@ overflow-checks = true
 rpath = false
 lto = "thin"
 incremental = true
+
+[workspace.dependencies]
+lightclient-circuits = { path = "lightclient-circuits" }
+test-utils = { path = "test-utils" }
+ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+eth-types = { path = "eth-types" }
+ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
+zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0" }
+halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
 
 [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
 halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
