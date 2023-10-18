@@ -85,7 +85,7 @@ contract Spectre {
         // that there exists an SSZ proof that can verify this SSZ commitment to the committee is in the state
         uint256 currentPeriod = getSyncCommitteePeriod(stepInput.finalizedSlot);
         uint256 nextPeriod = currentPeriod + 1;
-        uint256[65] memory verifierInput = rotateInput.toInputCommitment(stepInput.finalizedHeaderRoot);
+        uint256[65] memory verifierInput = rotateInput.toPublicInputs(stepInput.finalizedHeaderRoot);
         bool rotateSuccess = committeeUpdateVerifier.verify(verifierInput, rotateProof);
         if (!rotateSuccess) {
             revert("Rotation proof verification failed");

@@ -2,11 +2,15 @@ use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
-use halo2curves::bn256::Fr;
+use halo2curves::bn256::{self, Fr};
+use halo2curves::bls12_381;
+use halo2curves::group::UncompressedEncoding;
+use halo2_base::safe_types::ScalarField;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use lightclient_circuits::poseidon::fq_array_poseidon_native;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use ssz_rs::Node;
@@ -20,8 +24,33 @@ use crate::test_types::{ByteVector, TestMeta, TestStep};
 mod execution_payload_header;
 mod test_types;
 
+// loads the boostrap on the path and return the initial sync committee poseidon and sync period
+pub fn get_initial_sync_committee_poseidon<const SYNC_COMMITTEE_SIZE: usize>(path: &PathBuf) -> anyhow::Result<(usize, [u8; 32])> {
+    let bootstrap: LightClientBootstrap =
+        load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
+    let pubkeys_uncompressed = bootstrap
+        .current_sync_committee
+        .pubkeys
+        .iter()
+        .map(|pk| {
+            let p = pk.decompressed_bytes();
+            let mut x = p[0..48].to_vec();
+            let mut y = p[48..96].to_vec();
+            x.reverse();
+            y.reverse();
+            let mut res = vec![];
+            res.append(&mut x);
+            res.append(&mut y);
+            res
+        })
+        .collect_vec();
+    let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
+    let sync_period = (bootstrap.header.beacon.slot as usize) / SYNC_COMMITTEE_SIZE;
+    Ok((sync_period, committee_poseidon))
+}
+
 pub fn read_test_files_and_gen_witness(
-    path: PathBuf,
+    path: &PathBuf,
 ) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -90,6 +119,35 @@ pub fn read_test_files_and_gen_witness(
         sync_committee_branch,
     };
     (sync_wit, rotation_wit)
+}
+
+pub fn poseidon_committee_commitment_from_uncompressed(
+    pubkeys_uncompressed: &Vec<Vec<u8>>,
+) -> anyhow::Result<[u8; 32]> {
+    let pubkey_affines = pubkeys_uncompressed
+        .iter()
+        .cloned()
+        .map(|bytes| {
+            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
+                &bytes.as_slice().try_into().unwrap(),
+            )
+            .unwrap()
+        })
+        .collect_vec();
+    let poseidon_commitment =
+        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
+    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+}
+
+pub fn poseidon_committee_commitment_from_compressed(
+    pubkeys_compressed: &Vec<Vec<u8>>,
+) -> anyhow::Result<[u8; 32]> {
+    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
+        bytes[47] &= 0b00011111;
+        bls12_381::Fq::from_bytes_le(&bytes)
+    });
+    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
 fn to_sync_ciruit_witness<

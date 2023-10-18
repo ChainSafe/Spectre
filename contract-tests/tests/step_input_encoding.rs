@@ -12,7 +12,9 @@ use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
 use ssz_rs::Merkleized;
-use test_utils::read_test_files_and_gen_witness;
+use test_utils::{
+    poseidon_committee_commitment_from_uncompressed, read_test_files_and_gen_witness,
+};
 
 abigen!(
     SyncStepExternal,
@@ -26,7 +28,7 @@ async fn test_step_instance_commitment_evm_equivalence(
     #[exclude("deneb*")]
     path: PathBuf,
 ) -> anyhow::Result<()> {
-    let (witness, _) = read_test_files_and_gen_witness(path);
+    let (witness, _) = read_test_files_and_gen_witness(&path);
     let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness);
     let poseidon_commitment_le =
         poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed)?;
@@ -43,24 +45,6 @@ async fn test_step_instance_commitment_evm_equivalence(
 
     assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
     Ok(())
-}
-
-fn poseidon_committee_commitment_from_uncompressed(
-    pubkeys_uncompressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkey_affines = pubkeys_uncompressed
-        .iter()
-        .cloned()
-        .map(|bytes| {
-            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
-                &bytes.as_slice().try_into().unwrap(),
-            )
-            .unwrap()
-        })
-        .collect_vec();
-    let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
 // SyncStepInput type produced by abigen macro matches the solidity struct type

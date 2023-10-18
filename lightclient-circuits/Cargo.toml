@@ -62,12 +62,7 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 [dev-dependencies]
 rstest = "0.18.2"
-test-utils = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
-ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
-light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
-ethers = "2.0.10"
-tokio = { version = "1.32.0", features = ["rt", "macros"] }
-anyhow = "1.0.75"
+test-utils = { workspace = true }
 
 [features]
 default = []

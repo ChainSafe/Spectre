@@ -6,7 +6,10 @@ use contract_tests::make_client;
 use eth_types::Minimal;
 use ethers::contract::abigen;
 use halo2_base::safe_types::ScalarField;
-use halo2curves::{bls12_381, bn256::{self, Fr}};
+use halo2curves::{
+    bls12_381,
+    bn256::{self, Fr},
+};
 use itertools::Itertools;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::poseidon::fq_array_poseidon_native;
@@ -14,7 +17,7 @@ use lightclient_circuits::witness::CommitteeRotationArgs;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use test_utils::read_test_files_and_gen_witness;
+use test_utils::{poseidon_committee_commitment_from_compressed, read_test_files_and_gen_witness};
 
 abigen!(
     RotateExternal,
@@ -28,7 +31,7 @@ async fn test_rotate_public_input_evm_equivalence(
     #[exclude("deneb*")]
     path: PathBuf,
 ) -> anyhow::Result<()> {
-    let (_, witness) = read_test_files_and_gen_witness(path);
+    let (_, witness) = read_test_files_and_gen_witness(&path);
     let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness);
     let finalized_block_root = witness
         .finalized_header
@@ -60,17 +63,6 @@ async fn test_rotate_public_input_evm_equivalence(
     assert_eq!(result_decoded.len(), instance[0].len());
     assert_eq!(vec![result_decoded], instance);
     Ok(())
-}
-
-fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
-    });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
 // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
