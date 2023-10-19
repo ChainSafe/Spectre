@@ -29,6 +29,60 @@ const SLOTS_PER_EPOCH: usize = 8;
 const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize = 8;
 const SLOTS_PER_SYNC_COMMITTEE_PERIOD: usize = EPOCHS_PER_SYNC_COMMITTEE_PERIOD * SLOTS_PER_EPOCH;
 
+#[tokio::test]
+async fn test_deploy_spectre() -> anyhow::Result<()> {
+    let (_anvil_instance, ethclient) = make_client();
+    let contract = deploy_spectre_mock_verifiers(ethclient, 0, [0; 32], 0).await?;
+    Ok(())
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_contract_initialization_and_first_step(
+    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+    #[exclude("deneb*")]
+    path: PathBuf,
+) -> anyhow::Result<()> {
+    let (_anvil_instance, ethclient) = make_client();
+
+    let (initial_period, initial_poseidon) =
+        get_initial_sync_committee_poseidon::<SLOTS_PER_SYNC_COMMITTEE_PERIOD>(&path)?;
+
+    let (witness, _) = read_test_files_and_gen_witness(&path);
+
+    let contract = deploy_spectre_mock_verifiers(
+        ethclient,
+        initial_period,
+        initial_poseidon,
+        SLOTS_PER_SYNC_COMMITTEE_PERIOD,
+    )
+    .await?;
+
+    // pre conditions
+    assert_eq!(contract.head().call().await?, U256::from(0));
+
+    // call step with the input and proof
+    let step_input = SyncStepInput::from(witness);
+    let step_call = contract.step(step_input.clone(), Vec::new().into());
+    let receipt = step_call.send().await?.confirmations(1).await?;
+
+    // post conditions
+    let head = U256::from(step_input.finalized_slot);
+    assert_eq!(contract.head().call().await?, head);
+    assert_eq!(
+        contract.block_header_roots(head).call().await?,
+        step_input.finalized_header_root
+    );
+    assert_eq!(
+        contract.execution_state_roots(head).call().await?,
+        step_input.execution_payload_root
+    );
+
+    Ok(())
+}
+
+//////////// deployment helpers //////////////////
+
 /// Deploy the Spectre contract using the given ethclient
 /// Also deploys the step verifier and the update verifier contracts
 /// and passes their addresses along with the other params to the constructor
@@ -83,57 +137,4 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
     )?
     .send()
     .await?)
-}
-
-#[tokio::test]
-async fn test_deploy_spectre() -> anyhow::Result<()> {
-    let (_anvil_instance, ethclient) = make_client();
-    let contract = deploy_spectre_mock_verifiers(ethclient, 0, [0; 32], 0).await?;
-    Ok(())
-}
-
-#[rstest]
-#[tokio::test]
-async fn test_contract_initialization_and_first_step(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-    #[exclude("deneb*")]
-    path: PathBuf,
-) -> anyhow::Result<()> {
-    let (_anvil_instance, ethclient) = make_client();
-
-    let (initial_period, initial_poseidon) =
-        get_initial_sync_committee_poseidon::<SLOTS_PER_SYNC_COMMITTEE_PERIOD>(&path)?;
-
-    let (witness, _) = read_test_files_and_gen_witness(&path);
-
-    let contract = deploy_spectre_mock_verifiers(
-        ethclient,
-        initial_period,
-        initial_poseidon,
-        SLOTS_PER_SYNC_COMMITTEE_PERIOD,
-    )
-    .await?;
-
-    // pre conditions
-    assert_eq!(contract.head().call().await?, U256::from(0));
-
-    // call step with the input and proof
-    let step_input = SyncStepInput::from(witness);
-    let step_call = contract
-        .step(step_input.clone(), Vec::new().into());
-    let receipt = step_call.send().await?.confirmations(1).await?;
-
-    // post conditions
-    let head = U256::from(step_input.finalized_slot);
-    assert_eq!(contract.head().call().await?, head);
-    assert_eq!(
-        contract.block_header_roots(head).call().await?,
-        step_input.finalized_header_root
-    );
-    assert_eq!(
-        contract.execution_state_roots(head).call().await?,
-        step_input.execution_payload_root
-    );
-
-    Ok(())
 }

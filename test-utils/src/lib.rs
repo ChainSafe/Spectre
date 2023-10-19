@@ -4,15 +4,15 @@ use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
-use halo2curves::bn256::{self, Fr};
-use halo2curves::bls12_381;
-use halo2curves::group::UncompressedEncoding;
 use halo2_base::safe_types::ScalarField;
+use halo2curves::bls12_381;
+use halo2curves::bn256::{self, Fr};
+use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
-use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use lightclient_circuits::poseidon::fq_array_poseidon_native;
+use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use ssz_rs::Node;
@@ -23,12 +23,14 @@ use zipline_test_utils::{load_snappy_ssz, load_yaml};
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
 
+pub mod abis;
 mod execution_payload_header;
 mod test_types;
-pub mod abis;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
-pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(path: &PathBuf) -> anyhow::Result<(usize, [u8; 32])> {
+pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
+    path: &PathBuf,
+) -> anyhow::Result<(usize, [u8; 32])> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
     let pubkeys_uncompressed = bootstrap
@@ -47,7 +49,8 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
             res
         })
         .collect_vec();
-    let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
+    let committee_poseidon =
+        poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
     let sync_period = (bootstrap.header.beacon.slot as usize) / EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
     Ok((sync_period, committee_poseidon))
 }

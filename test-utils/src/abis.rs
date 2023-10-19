@@ -1,8 +1,8 @@
 use ethers::contract::abigen;
 use halo2curves::bn256::Fr;
-use ssz_rs::prelude::*;
-use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use itertools::Itertools;
+use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use ssz_rs::prelude::*;
 
 use crate::poseidon_committee_commitment_from_compressed;
 
@@ -15,7 +15,10 @@ abigen!(
     "../contracts/out/committee_update_aggregated.sol/Verifier.json"
 );
 
-abigen!(StepMockVerifier, "../contracts/out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json");
+abigen!(
+    StepMockVerifier,
+    "../contracts/out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json"
+);
 
 abigen!(
     CommitteeUpdateMockVerifier,
