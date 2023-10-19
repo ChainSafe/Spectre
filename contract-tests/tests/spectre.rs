@@ -107,9 +107,15 @@ async fn test_contract_initialization_and_first_step(
     )
     .await?;
 
+    // pre conditions
+    assert_eq!(contract.head().call().await?, U256::from(0));
+
     // call step with the input and proof!
     let step_input = SyncStepInput::from(witness);
-    let result = contract.step(step_input, vec![0_u8].into()).call().await?;
+    let result = contract.step(step_input.clone(), Vec::new().into()).call().await?;
+
+    // post conditions
+    assert_eq!(contract.head().call().await?, U256::from(step_input.finalized_slot));
 
     Ok(())
 }
