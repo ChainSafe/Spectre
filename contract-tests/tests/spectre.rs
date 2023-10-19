@@ -5,20 +5,25 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use eth_types::Minimal;
 use contract_tests::make_client;
+use eth_types::Minimal;
 use ethers::contract::abigen;
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
-use rstest::rstest;
-use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
-use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning, AppCircuit, full_prover, gen_srs};
-use halo2curves::bn256;
 use halo2_base::gates::builder::CircuitBuilderStage;
+use halo2curves::bn256;
+use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
+use lightclient_circuits::util::{
+    full_prover, gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning,
+};
 use lightclient_circuits::witness::SyncStepArgs;
-use test_utils::abis::{CommitteeUpdateVerifier, CommitteeUpdateMockVerifier, Spectre, StepVerifier, StepMockVerifier, SyncStepInput};
-use test_utils::{get_initial_sync_committee_poseidon, read_test_files_and_gen_witness};
+use rstest::rstest;
 use snark_verifier_sdk::CircuitExt;
+use test_utils::abis::{
+    CommitteeUpdateMockVerifier, CommitteeUpdateVerifier, Spectre, StepMockVerifier, StepVerifier,
+    SyncStepInput,
+};
+use test_utils::{get_initial_sync_committee_poseidon, read_test_files_and_gen_witness};
 
 const SLOTS_PER_EPOCH: usize = 8;
 const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize = 8;
@@ -60,7 +65,9 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
     initial_sync_committee_poseidon: [u8; 32],
     slots_per_period: usize,
 ) -> anyhow::Result<Spectre<M>> {
-    let step_verifier = StepMockVerifier::deploy(ethclient.clone(), ())?.send().await?;
+    let step_verifier = StepMockVerifier::deploy(ethclient.clone(), ())?
+        .send()
+        .await?;
     let update_verifier = CommitteeUpdateMockVerifier::deploy(ethclient.clone(), ())?
         .send()
         .await?;
@@ -110,16 +117,23 @@ async fn test_contract_initialization_and_first_step(
     // pre conditions
     assert_eq!(contract.head().call().await?, U256::from(0));
 
-    // call step with the input and proof!
+    // call step with the input and proof
     let step_input = SyncStepInput::from(witness);
-    let result = contract.step(step_input.clone(), Vec::new().into()).call().await?;
+    let step_call = contract
+        .step(step_input.clone(), Vec::new().into());
+    let receipt = step_call.send().await?.confirmations(1).await?;
 
     // post conditions
     let head = U256::from(step_input.finalized_slot);
     assert_eq!(contract.head().call().await?, head);
-    assert_eq!(contract.block_header_roots(head).call().await?, step_input.finalized_header_root);
-    assert_eq!(contract.execution_state_roots(head).call().await?, step_input.execution_payload_root);
-
+    assert_eq!(
+        contract.block_header_roots(head).call().await?,
+        step_input.finalized_header_root
+    );
+    assert_eq!(
+        contract.execution_state_roots(head).call().await?,
+        step_input.execution_payload_root
+    );
 
     Ok(())
 }
