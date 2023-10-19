@@ -115,7 +115,11 @@ async fn test_contract_initialization_and_first_step(
     let result = contract.step(step_input.clone(), Vec::new().into()).call().await?;
 
     // post conditions
-    assert_eq!(contract.head().call().await?, U256::from(step_input.finalized_slot));
+    let head = U256::from(step_input.finalized_slot);
+    assert_eq!(contract.head().call().await?, head);
+    assert_eq!(contract.block_header_roots(head).call().await?, step_input.finalized_header_root);
+    assert_eq!(contract.execution_state_roots(head).call().await?, step_input.execution_payload_root);
+
 
     Ok(())
 }
