@@ -28,7 +28,7 @@ mod test_types;
 pub mod abis;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
-pub fn get_initial_sync_committee_poseidon<const SYNC_COMMITTEE_SIZE: usize>(path: &PathBuf) -> anyhow::Result<(usize, [u8; 32])> {
+pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(path: &PathBuf) -> anyhow::Result<(usize, [u8; 32])> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
     let pubkeys_uncompressed = bootstrap
@@ -48,7 +48,7 @@ pub fn get_initial_sync_committee_poseidon<const SYNC_COMMITTEE_SIZE: usize>(pat
         })
         .collect_vec();
     let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
-    let sync_period = (bootstrap.header.beacon.slot as usize) / SYNC_COMMITTEE_SIZE;
+    let sync_period = (bootstrap.header.beacon.slot as usize) / EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
     Ok((sync_period, committee_poseidon))
 }
 

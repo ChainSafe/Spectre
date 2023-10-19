@@ -20,7 +20,9 @@ use test_utils::abis::{CommitteeUpdateVerifier, CommitteeUpdateMockVerifier, Spe
 use test_utils::{get_initial_sync_committee_poseidon, read_test_files_and_gen_witness};
 use snark_verifier_sdk::CircuitExt;
 
-const SLOTS_PER_PERIOD: usize = 32;
+const SLOTS_PER_EPOCH: usize = 8;
+const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize = 8;
+const SLOTS_PER_SYNC_COMMITTEE_PERIOD: usize = EPOCHS_PER_SYNC_COMMITTEE_PERIOD * SLOTS_PER_EPOCH;
 
 /// Deploy the Spectre contract using the given ethclient
 /// Also deploys the step verifier and the update verifier contracts
@@ -93,14 +95,15 @@ async fn test_contract_initialization_and_first_step(
     let (_anvil_instance, ethclient) = make_client();
 
     let (initial_period, initial_poseidon) =
-        get_initial_sync_committee_poseidon::<SLOTS_PER_PERIOD>(&path)?;
+        get_initial_sync_committee_poseidon::<SLOTS_PER_SYNC_COMMITTEE_PERIOD>(&path)?;
+
     let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let contract = deploy_spectre_mock_verifiers(
         ethclient,
         initial_period,
         initial_poseidon,
-        SLOTS_PER_PERIOD,
+        SLOTS_PER_SYNC_COMMITTEE_PERIOD,
     )
     .await?;
 

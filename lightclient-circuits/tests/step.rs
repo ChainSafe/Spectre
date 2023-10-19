@@ -36,7 +36,7 @@ fn test_eth2_spec_mock_3(
 }
 
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
-    let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(path);
+    let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(&path);
 
     let rotation_circuit = {
         let pinning: Eth2ConfigPinning =
@@ -89,7 +89,7 @@ fn test_eth2_spec_proofgen(
     path: PathBuf,
 ) {
     const K: u32 = 20;
-    let (witness, _) = read_test_files_and_gen_witness(path);
+    let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let params = gen_srs(K);
     let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
@@ -133,7 +133,7 @@ fn test_eth2_spec_evm_verify(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let (witness, _) = read_test_files_and_gen_witness(path);
+    let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
