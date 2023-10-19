@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 import { SyncStepLib } from "./SyncStepLib.sol";
 import { RotateLib } from "./RotateLib.sol";
 
-import { Verifier as SyncStepVerifier } from "../snark-verifiers/sync_step.sol";
-import { Verifier as CommitteeUpdateVerifier } from "../snark-verifiers/committee_update_aggregated.sol";
+import { SyncStepVerifier } from "./interfaces/SyncStepVerifier.sol";
+import { CommitteeUpdateVerifier } from "./interfaces/CommitteeUpdateVerifier.sol";
 
 contract Spectre {
     using SyncStepLib for SyncStepLib.SyncStepInput;

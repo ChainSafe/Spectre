@@ -15,6 +15,13 @@ abigen!(
     "../contracts/out/committee_update_aggregated.sol/Verifier.json"
 );
 
+abigen!(StepMockVerifier, "../contracts/out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json");
+
+abigen!(
+    CommitteeUpdateMockVerifier,
+    "../contracts/out/CommitteeUpdateMockVerifier.sol/CommitteeUpdateMockVerifier.json"
+);
+
 // SyncStepInput type produced by abigen macro matches the solidity struct type
 impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
     fn from(args: SyncStepArgs<Spec>) -> Self {
