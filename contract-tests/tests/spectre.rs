@@ -6,19 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use contract_tests::make_client;
-use eth_types::Minimal;
-use ethers::contract::abigen;
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
-use halo2_base::gates::builder::CircuitBuilderStage;
-use halo2curves::bn256;
-use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
-use lightclient_circuits::util::{
-    full_prover, gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning,
-};
-use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
-use snark_verifier_sdk::CircuitExt;
 use test_utils::abis::{
     CommitteeUpdateMockVerifier, CommitteeUpdateVerifier, Spectre, StepMockVerifier, StepVerifier,
     SyncStepInput,
@@ -32,7 +22,7 @@ const SLOTS_PER_SYNC_COMMITTEE_PERIOD: usize = EPOCHS_PER_SYNC_COMMITTEE_PERIOD 
 #[tokio::test]
 async fn test_deploy_spectre() -> anyhow::Result<()> {
     let (_anvil_instance, ethclient) = make_client();
-    let contract = deploy_spectre_mock_verifiers(ethclient, 0, [0; 32], 0).await?;
+    let _contract = deploy_spectre_mock_verifiers(ethclient, 0, [0; 32], 0).await?;
     Ok(())
 }
 
@@ -64,7 +54,7 @@ async fn test_contract_initialization_and_first_step(
     // call step with the input and proof
     let step_input = SyncStepInput::from(witness);
     let step_call = contract.step(step_input.clone(), Vec::new().into());
-    let receipt = step_call.send().await?.confirmations(1).await?;
+    let _receipt = step_call.send().await?.confirmations(1).await?;
 
     // post conditions
     let head = U256::from(step_input.finalized_slot);
