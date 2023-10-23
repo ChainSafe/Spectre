@@ -136,15 +136,19 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         Ok(public_inputs)
     }
 
-    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>> {
+    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>>
+    where
+        [(); { S::SYNC_COMMITTEE_SIZE }]:,
+    {
         let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
-            bytes[47] &= 0b11111000;
+            bytes.reverse();
+            bytes[47] &= 0b00011111;
             bls12_381::Fq::from_bytes_le(&bytes)
         });
 
         let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
 
-        let mut pk_vector: Vector<Vector<u8, 48>, 512> = args
+        let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
             .iter()
             .cloned()
@@ -159,6 +163,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .chain(finalized_header_root.0.map(|b| bn256::Fr::from(b as u64)))
             .collect();
 
         vec![instance_vec]
