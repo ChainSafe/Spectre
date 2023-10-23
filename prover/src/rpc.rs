@@ -1,4 +1,4 @@
-use super::{args, args::Spec};
+use super::args::Spec;
 
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
@@ -11,45 +11,20 @@ use lightclient_circuits::{
     util::{gen_srs, AppCircuit, Halo2ConfigPinning},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
-use serde::{Deserialize, Serialize};
 
+use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
 use snark_verifier_sdk::{
-    evm::gen_evm_verifier_shplonk,
     gen_pk,
     halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
     CircuitExt, Snark, SHPLONK,
 };
-
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofRotationParams {
-    spec: args::Spec,
-
-    k: Option<u32>,
-    #[serde(default = "default_beacon_api")]
-    beacon_api: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofStepParams {
-    spec: args::Spec,
-
-    k: Option<u32>,
-    #[serde(default = "default_beacon_api")]
-    beacon_api: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvmProofResult {
-    proof: Vec<u8>,
-    public_inputs: Vec<U256>,
-}
-
-fn default_beacon_api() -> String {
-    String::from("http://127.0.0.1:5052")
-}
+use crate::rpc_api::{
+    EvmProofResult, GenProofRotationParams, GenProofStepParams, EVM_PROOF_ROTATION_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT,
+};
 
 fn gen_app_snark<S: eth_types::Spec>(
     app_config_path: PathBuf,
@@ -60,9 +35,10 @@ fn gen_app_snark<S: eth_types::Spec>(
         &app_config_path,
     ));
 
-    let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
+    let app_pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
         &params,
         app_pk_path,
+        &app_config_path,
         &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
     );
 
@@ -85,7 +61,7 @@ fn gen_evm_proof<C: AppCircuit>(
     let k = k.unwrap_or_else(|| C::get_degree(&config_path));
     let params = gen_srs(k);
 
-    let pk = C::read_pk(&params, build_dir.join(pk_filename), &witness);
+    let pk = C::create_pk(&params, build_dir.join(pk_filename), &config_path, &witness);
 
     let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
         .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
@@ -104,16 +80,16 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     } = params;
 
     // TODO: use config/build paths from CLI flags
-    let app_config_path = PathBuf::from("./lightclient-circuits/config/committee_update.json");
+    let app_config_path = PathBuf::from("../lightclient-circuits/config/committee_update.json");
     let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
 
     let agg_l2_config_path =
-        PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_2.json");
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_2.json");
     let agg_l1_config_path =
-        PathBuf::from("./lightclient-circuits/config/committee_update_aggregation_1.json");
-    let build_dir = PathBuf::from("./build");
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_1.json");
+    let _build_dir = PathBuf::from("./build");
 
-    let (l0_snark, pk_filename) = match spec {
+    let (l0_snark, _pk_filename) = match spec {
         Spec::Minimal => {
             let witness = fetch_rotation_args(beacon_api).await?;
             (
@@ -153,7 +129,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
             Some(pinning.break_points),
             lookup_bits,
             &p1,
-            std::iter::once(l0_snark.clone()),
+            std::iter::once(l0_snark),
         );
         circuit.expose_previous_instances(false);
 
@@ -176,7 +152,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 
         let mut circuit = AggregationCircuit::prover::<SHPLONK>(
             &p2,
-            std::iter::once(l1_snark.clone()),
+            std::iter::once(l1_snark),
             pinning.break_points,
         );
         circuit.expose_previous_instances(true);
@@ -208,7 +184,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         beacon_api,
     } = params.clone();
 
-    let config_path = PathBuf::from("./lightclient-circuits/config/step_sync.json");
+    let config_path = PathBuf::from("../lightclient-circuits/config/sync_step.json");
     let build_dir = PathBuf::from("./build");
 
     let (proof, instances) = match spec {
@@ -257,4 +233,14 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         proof,
         public_inputs,
     })
+}
+
+pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
+    JsonRpcServer::new()
+        .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
+        .with_method(
+            EVM_PROOF_ROTATION_CIRCUIT,
+            gen_evm_proof_rotation_circuit_handler,
+        )
+        .finish_unwrapped()
 }
