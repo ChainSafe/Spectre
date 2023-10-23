@@ -1,4 +1,7 @@
 use ssz_rs::prelude::*;
+use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use eth_types::Spec;
+use halo2curves::bn256::Fr;
 
 #[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
@@ -23,6 +26,27 @@ pub enum TestStep {
         current_slot: u64,
         checks: Checks,
     },
+}
+
+#[derive(Debug)]
+pub enum SpectreTestStep<S: Spec> {
+    // after posting a step update with the given sync_witness we expect the contract
+    // head to match the spot in post_date_head and the beacon/execution block roots for
+    // that slot to also be stored
+    SyncStep {
+        sync_witness: SyncStepArgs<S>,
+        post_head_state: RootAtSlot,
+    },
+    // after posting a rotate update with the given witness we expect no change in the
+    // post_head_state (should match the previous step, and for the post_sync_committee_poseidon 
+    // to be stored in the contract at the post_sync_period
+    RotateStep {
+        sync_witness: SyncStepArgs<S>,
+        rotate_witness: CommitteeRotationArgs<S, Fr>,
+        post_head_state: RootAtSlot,
+        post_sync_period: u64,
+        post_sync_committee_poseidon: String,
+    }
 }
 
 #[allow(dead_code)]

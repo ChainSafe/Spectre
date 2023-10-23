@@ -1,9 +1,9 @@
 #![feature(generic_const_exprs)]
 
-use eth_types::Minimal;
+use eth_types::{Minimal, Spec};
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::{ForkData, Root};
+use ethereum_consensus_types::{ForkData, Root, SyncCommittee};
 use halo2_base::safe_types::ScalarField;
 use halo2curves::bls12_381;
 use halo2curves::bn256::{self, Fr};
@@ -15,9 +15,9 @@ use lightclient_circuits::poseidon::fq_array_poseidon_native;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use ssz_rs::Node;
 use std::path::PathBuf;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use test_types::{RootAtSlot, SpectreTestStep};
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
@@ -55,23 +55,67 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
     Ok((sync_period, committee_poseidon))
 }
 
-pub fn read_test_files_and_gen_witness(
-    path: &PathBuf,
-) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
-    let bootstrap: LightClientBootstrap =
-        load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
+pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
     let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
-    let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
-
-    let genesis_validators_root = Root::try_from(
+    Root::try_from(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
             .unwrap()
             .as_slice(),
     )
-    .unwrap();
+    .unwrap()
+}
 
+pub fn spectre_test_steps_from_spec_tests(
+    steps: &[TestStep],
+    path: &PathBuf,
+    genesis_validators_root: Root,
+    initial_sync_committee: SyncCommittee<32>,
+) -> Vec<SpectreTestStep<Minimal>> {
+    steps.iter().take_while(|step| match step {
+        // only take the first contiguous block of ProcessUpdate steps
+        TestStep::ProcessUpdate { .. } => true,
+        _ => false,
+    });
+    let mut committee = initial_sync_committee;
+    let mut spectre_steps = Vec::new();
+    for step in steps {
+        if let TestStep::ProcessUpdate { update, .. } = step {
+            let light_client_update: LightClientUpdateCapella = load_snappy_ssz(
+                path.join(format!("{}.ssz_snappy", update))
+                    .to_str()
+                    .unwrap(),
+            )
+            .unwrap();
+            let zipline_witness = light_client_verifier::ZiplineUpdateWitnessCapella {
+                committee: committee.clone(),
+                light_client_update,
+            };
+            let sync_witness = to_sync_ciruit_witness(&zipline_witness, genesis_validators_root);
+            spectre_steps.push(SpectreTestStep::SyncStep {
+                sync_witness,
+                post_head_state: RootAtSlot {
+                    slot: 0,
+                    beacon_root: "".to_string(),
+                    execution_root: "".to_string(),
+                },
+            });
+        }
+    }
+    spectre_steps
+}
+
+// Load the updates for a given test and only includes the first sequence of steps that Spectre can perform
+// e.g. the the steps are cut at the first `ForceUpdate` step
+pub fn valid_updates_from_test_path(
+    path: &PathBuf,
+) -> Vec<ethereum_consensus_types::LightClientUpdateCapella<32, 55, 5, 105, 6, 256, 32>> {
+    let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
     let updates = steps
         .iter()
+        .take_while(|step| match step {
+            TestStep::ProcessUpdate { .. } => true,
+            _ => false,
+        })
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
                 let update: LightClientUpdateCapella = load_snappy_ssz(
@@ -85,6 +129,19 @@ pub fn read_test_files_and_gen_witness(
             _ => None,
         })
         .collect::<Vec<_>>();
+    updates
+}
+
+pub fn read_test_files_and_gen_witness(
+    path: &PathBuf,
+) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
+    let bootstrap: LightClientBootstrap =
+        load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
+    let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
+    let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
+
+    let genesis_validators_root = validators_root_from_test_path(path);
+    let updates = valid_updates_from_test_path(path);
 
     let zipline_witness = light_client_verifier::ZiplineUpdateWitnessCapella {
         committee: bootstrap.current_sync_committee,
