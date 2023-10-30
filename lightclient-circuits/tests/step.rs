@@ -1,3 +1,5 @@
+#![feature(generic_const_exprs)]
+
 use ark_std::{end_timer, start_timer};
 use eth_types::Minimal;
 use halo2_base::gates::builder::CircuitBuilderStage;
