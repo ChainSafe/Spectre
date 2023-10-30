@@ -1,6 +1,12 @@
 test:
     cargo test --workspace
 
+test-full-prover:
+    cargo test --workspace --features test-full-prover
+
+test-evm-verifier:
+    cargo test --workspace --features test-evm-verifier
+
 fmt:
     cargo fmt --all
 

@@ -272,6 +272,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "test-full-prover")]
     fn test_sha256_proof_gen() {
         let k = 15;
         let test_input = vec![0u8; 64];

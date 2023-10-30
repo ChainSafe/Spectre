@@ -453,6 +453,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
 }
 
 #[rstest]
+#[cfg(feature = "test-full-prover")]
 fn test_eth2_spec_proofgen(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
     #[exclude("deneb*")]
@@ -487,6 +488,7 @@ fn test_eth2_spec_proofgen(
 }
 
 #[rstest]
+#[cfg(feature = "test-evm-verifier")]
 fn test_eth2_spec_evm_verify(
     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
     #[exclude("deneb*")]

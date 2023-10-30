@@ -24,16 +24,10 @@ minimal.tar.gz
 /target
 node_modules
 
-/zkcasper-circuits/build
-/zkcasper-circuits/params
-
-lightclient-circuits/params/
 
 lightclient-circuits/build/
 
 build/
-
-params/
 
 .env
 

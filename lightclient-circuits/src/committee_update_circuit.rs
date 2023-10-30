@@ -368,6 +368,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-full-prover")]
     fn test_committee_update_proofgen() {
         const K: u32 = 18;
         let params = gen_srs(K);
@@ -399,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-full-prover")]
     fn test_circuit_aggregation_proofgen() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
         const APP_K: u32 = 20;
@@ -446,6 +448,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-evm-verifier")]
     fn test_circuit_aggregation_evm() {
         const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
         const APP_K: u32 = 21;
@@ -505,6 +508,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-evm-verifier")]
     fn test_circuit_aggregation_2_evm() {
         const K0: u32 = 20;
         const K1: u32 = 24;

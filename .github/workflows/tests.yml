@@ -24,6 +24,12 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SYGMA_REPO_PULL_KEY }}
     - uses: actions/checkout@v3
+      with:
+        lfs: true
+
+    - name: Checkout LFS objects # used for structured reference strings for tests (.srs files)
+      run: git lfs checkout
+
     - name: Install latest nightly-2022-10-28
       uses: dtolnay/rust-toolchain@stable
       with:

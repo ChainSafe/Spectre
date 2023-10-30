@@ -566,6 +566,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-full-prover")]
     fn test_sync_proofgen() {
         const K: u32 = 22;
         let params = gen_srs(K);
@@ -597,6 +598,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-evm-verifier")]
     fn test_sync_evm_verify() {
         const K: u32 = 22;
         let params = gen_srs(K);
