@@ -3,8 +3,6 @@ name = "preprocessor"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ssz-rs.workspace = true
 halo2curves.workspace = true
@@ -13,13 +11,14 @@ sync-committee-primitives.workspace = true
 group.workspace = true
 
 # misc
-hex = "0.4"
-log = "=0.4.20"
 eyre = "0.6"
 tokio = { version = "1", features = ["full"]}
-itertools = "0.11.0"
-serde_json = "1.0.78"
-serde = {version = "1.0.130", features = ["derive"] }
+
+hex.workspace = true
+log.workspace = true
+itertools.workspace = true
+serde_json.workspace = true
+serde.workspace = true
 
 # local
 eth-types.workspace = true
@@ -29,5 +28,4 @@ lightclient-circuits.workspace = true
 halo2_proofs.workspace = true
 halo2-base.workspace = true
 snark-verifier-sdk.workspace = true
-ark-std = { version = "0.4.0", features = ["print-trace"] }
-# sync-committee-verifier = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features=["testnet"] }
+ark-std.workspace = true
