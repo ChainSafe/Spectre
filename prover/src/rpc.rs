@@ -1,19 +1,19 @@
 use super::{args, args::Spec};
 
 use ethers::prelude::*;
-use halo2curves::bn256::Fr;
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
     aggregation::AggregationConfigPinning,
     committee_update_circuit::CommitteeUpdateCircuit,
+    halo2_base::gates::circuit::CircuitBuilderStage,
     sync_step_circuit::SyncStepCircuit,
     util::{gen_srs, AppCircuit, Halo2ConfigPinning},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
 use serde::{Deserialize, Serialize};
 
-use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
 use snark_verifier_sdk::{
     evm::gen_evm_verifier_shplonk,
     gen_pk,
@@ -140,25 +140,20 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     let l1_snark = {
         let k = k.unwrap_or(24);
         let p1 = gen_srs(k);
-        let mut circuit = AggregationCircuit::keygen::<SHPLONK>(&p1, vec![l0_snark.clone()]);
-        circuit.expose_previous_instances(false);
-
-        println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
-
-        let pk_l1 = gen_pk(&p1, &circuit, None);
-        let pinning = AggregationConfigPinning::from_path(agg_l1_config_path);
-        let lookup_bits = k as usize - 1;
-        let mut circuit = AggregationCircuit::new::<SHPLONK>(
-            CircuitBuilderStage::Prover,
-            Some(pinning.break_points),
-            lookup_bits,
+        let pk_l1 = AggregationCircuit::read_pk(
             &p1,
-            std::iter::once(l0_snark.clone()),
+            "./build/committee_update_aggregation_l1.pkey",
+            &vec![l0_snark.clone()],
         );
-        circuit.expose_previous_instances(false);
 
-        println!("L1 Prover num_instances: {:?}", circuit.num_instance());
-        let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
+        let snark = AggregationCircuit::gen_snark_shplonk(
+            &p1,
+            &pk_l1,
+            agg_l1_config_path,
+            None::<String>,
+            &vec![l0_snark.clone()],
+        )
+        .map_err(JsonRpcError::internal)?;
         println!("L1 snark size: {}", snark.proof.len());
 
         snark
@@ -167,26 +162,19 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     let (proof, instances) = {
         let k = k.unwrap_or(24);
         let p2 = gen_srs(k);
-        let mut circuit =
-            AggregationCircuit::keygen::<SHPLONK>(&p2, std::iter::once(l1_snark.clone()));
-        circuit.expose_previous_instances(true);
-
-        let pk_l2 = gen_pk(&p2, &circuit, None);
-        let pinning = AggregationConfigPinning::from_path(agg_l2_config_path);
-
-        let mut circuit = AggregationCircuit::prover::<SHPLONK>(
+        let pk_l2 = AggregationCircuit::read_pk(
             &p2,
-            std::iter::once(l1_snark.clone()),
-            pinning.break_points,
+            "./build/committee_update_aggregation_l2.pkey",
+            &vec![l0_snark.clone()],
         );
-        circuit.expose_previous_instances(true);
-
-        let instances = circuit.instances();
-
-        let proof =
-            snark_verifier_sdk::evm::gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
-
-        (proof, instances)
+        AggregationCircuit::gen_evm_proof_shplonk(
+            &p2,
+            &pk_l2,
+            agg_l2_config_path,
+            None,
+            &vec![l0_snark.clone()],
+        )
+        .map_err(JsonRpcError::internal)?
     };
 
     let public_inputs = instances[0]

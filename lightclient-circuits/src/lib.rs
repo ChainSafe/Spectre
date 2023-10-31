@@ -20,6 +20,7 @@ mod poseidon;
 mod ssz_merkle;
 
 pub use halo2_base;
+pub use halo2_base::halo2_proofs;
 
 use halo2_base::halo2_proofs::halo2curves::bn256;
 #[allow(type_alias_bounds)]

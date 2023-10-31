@@ -58,8 +58,7 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .iter()
         .take(S::SYNC_COMMITTEE_SIZE)
         .map(|pk| {
-            let pk_rev = pk.iter().copied().rev().collect_vec();
-            G1Affine::from_bytes_unchecked(&pk_rev.as_slice().try_into().unwrap())
+            G1Affine::from_bytes_unchecked(&pk.as_slice().try_into().unwrap())
                 .unwrap()
                 .to_uncompressed()
                 .as_ref()
@@ -132,13 +131,10 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         "Execution payload merkle proof verification failed"
     );
 
-    let mut signature_compressed = light_client_update
+    let signature_compressed = light_client_update
         .sync_aggregate
         .sync_committee_signature
         .to_vec();
-
-    // reverse beacouse it's big endian
-    signature_compressed.reverse();
 
     let args = SyncStepArgs::<S> {
         signature_compressed,

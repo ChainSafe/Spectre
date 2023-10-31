@@ -97,7 +97,6 @@ pub async fn read_rotation_args<S: Spec>(
 mod tests {
     use eth_types::Testnet;
     use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
-    use halo2curves::bn256::Fr;
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning}, halo2_base::gates::circuit::CircuitBuilderStage,
