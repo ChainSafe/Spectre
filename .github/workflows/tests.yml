@@ -54,4 +54,4 @@ jobs:
     #   run: cargo check --all
     
     - name: Test
-      run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" cargo test --release test_eth2_spec_mock_1 -- --nocapture
+      run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" FLEX_SHA_SPREAD_COLUMNS=2 cargo test --release test_eth2_spec_mock_1 -- --nocapture
