@@ -240,7 +240,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         Ok(vec![pi_commit])
     }
 
-    pub fn instance_commitment(args: &SyncStepArgs<S>) -> bn256::Fr {
+    pub fn instance_commitment(args: &SyncStepArgs<S>, limb_bits: usize) -> bn256::Fr {
         use sha2::Digest;
         const INPUT_SIZE: usize = 8 * 3 + 32 * 3;
         let mut input = [0; INPUT_SIZE];
@@ -287,7 +287,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             })
             .collect_vec();
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), todo!())
+            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits)
                 .unwrap();
         let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
         input[88..].copy_from_slice(&poseidon_commitment_le);
@@ -443,14 +443,17 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder =
             ShaCircuitBuilder::<bn256::Fr, ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
-                .use_k(k as usize);
+                .use_k(k as usize)
+                .use_instance_columns(1);
         let range = builder.range_chip(8);
-        let fp_chip = FpChip::new(&range, 120, 4);
+        let fp_chip = FpChip::new(&range, 112, 4);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
 
         match stage {
-            CircuitBuilderStage::Prover => {}
+            CircuitBuilderStage::Prover => {
+                builder.set_instances(0, assigned_instances);
+            }
             _ => {
                 builder.calculate_params(Some(
                     var("MINIMUM_ROWS")
@@ -522,7 +525,7 @@ mod tests {
         )
         .unwrap();
 
-        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness);
+        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness, 112);
 
         let timer = start_timer!(|| "sync_step mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();

@@ -442,7 +442,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
         .unwrap()
     };
 
-    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness);
+    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, todo!());
 
     let timer = start_timer!(|| "sync_step mock prover run");
     let prover =

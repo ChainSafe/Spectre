@@ -216,14 +216,17 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder =
             ShaCircuitBuilder::<bn256::Fr, ShaBitGateManager<bn256::Fr>>::from_stage(stage)
-                .use_k(k as usize);
+                .use_k(k as usize)
+                .use_instance_columns(1);
         let range = builder.range_chip(8);
         let fp_chip = FpChip::new(&range, 120, 4);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
 
         match stage {
-            CircuitBuilderStage::Prover => {}
+            CircuitBuilderStage::Prover => {
+                builder.set_instances(0, assigned_instances);
+            }
             _ => {
                 builder.calculate_params(Some(
                     var("MINIMUM_ROWS")

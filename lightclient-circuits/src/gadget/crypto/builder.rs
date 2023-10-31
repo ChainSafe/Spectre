@@ -19,7 +19,7 @@ use halo2_base::{
     },
     utils::BigPrimeField,
     virtual_region::manager::VirtualRegionManager,
-    Context,
+    Context, AssignedValue,
 };
 use itertools::Itertools;
 use snark_verifier_sdk::CircuitExt;
@@ -103,6 +103,27 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
     /// Returns new with lookup bits
     pub fn use_lookup_bits(mut self, lookup_bits: usize) -> Self {
         self.set_lookup_bits(lookup_bits);
+        self
+    }
+
+    /// Set the number of instance columns. This resizes `self.base().assigned_instances`.
+    pub fn set_instance_columns(&mut self, num_instance_columns: usize) {
+        self.base.set_instance_columns(num_instance_columns)
+    }
+
+    /// Returns new with `self.assigned_instances` resized to specified number of instance columns.
+    pub fn use_instance_columns(mut self, num_instance_columns: usize) -> Self {
+        self.set_instance_columns(num_instance_columns);
+        self
+    }
+
+    pub fn set_instances(&mut self, column: usize, assigned_instances: Vec<AssignedValue<F>>) {
+        self.base.assigned_instances[column] = assigned_instances;
+    }
+
+    /// Returns new with `self.assigned_instances` resized to specified number of instance columns.
+    pub fn use_instances(mut self, column: usize, assigned_instances: Vec<AssignedValue<F>>) -> Self {
+        self.set_instances(column, assigned_instances);
         self
     }
 
@@ -240,7 +261,7 @@ where
         self.base
             .assigned_instances
             .iter()
-            .map(|v| v.into_iter().map(|av| *av.value()).collect_vec())
+            .map(|v| v.iter().map(|av| *av.value()).collect_vec())
             .collect()
     }
 }
