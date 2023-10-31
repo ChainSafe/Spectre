@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use eth_types::Spec;
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
 use ssz_rs::Merkleized;
@@ -96,12 +96,11 @@ pub async fn read_rotation_args<S: Spec>(
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
-    use halo2_base::gates::builder::CircuitBuilderStage;
-    use halo2_proofs::dev::MockProver;
+    use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use halo2curves::bn256::Fr;
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning}, halo2_base::gates::circuit::CircuitBuilderStage,
     };
     use snark_verifier_sdk::CircuitExt;
 

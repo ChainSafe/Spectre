@@ -7,7 +7,10 @@ use halo2_base::{
         circuit::{
             builder::BaseCircuitBuilder, BaseCircuitParams, BaseConfig, CircuitBuilderStage,
         },
-        flex_gate::threads::SinglePhaseCoreManager,
+        flex_gate::{
+            threads::{CommonCircuitBuilder, SinglePhaseCoreManager},
+            MultiPhaseThreadBreakPoints,
+        },
         RangeChip,
     },
     halo2_proofs::{
@@ -18,42 +21,44 @@ use halo2_base::{
     virtual_region::manager::VirtualRegionManager,
     Context,
 };
+use itertools::Itertools;
+use snark_verifier_sdk::CircuitExt;
 
 use crate::{
-    gadget::crypto::{Sha256Chip, ShaThreadBuilder},
-    util::ThreadBuilderBase,
+    gadget::crypto::{Sha256Chip, ShaFlexGateManager},
+    util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, PinnableCircuit},
 };
 
 use super::sha256_flex::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
 
 #[derive(Debug, Clone)]
-pub struct SHAConfig<F: BigPrimeField> {
-    pub compression: SpreadConfig<F>,
+pub struct SHAConfig<F: Field, CustomConfig: GateBuilderConfig<F>> {
+    pub compression: CustomConfig,
     pub base: BaseConfig<F>,
 }
 
-impl<F: BigPrimeField> SHAConfig<F> {
+impl<F: BigPrimeField, GateConfig: GateBuilderConfig<F>> SHAConfig<F, GateConfig> {
     pub fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
         let base = BaseConfig::configure(meta, params);
-        let compression = SpreadConfig::configure(meta, 8, 1);
+        let compression = GateConfig::configure(meta);
 
         Self { base, compression }
     }
 }
 
 #[derive(Getters)]
-pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: ThreadBuilderBase<F>> {
+pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: CommonGateManager<F>> {
     #[getset(get = "pub", get_mut = "pub")]
     pub(crate) sha: ThreadBuilder,
     #[getset(get = "pub", get_mut = "pub")]
     pub(crate) base: BaseCircuitBuilder<F>,
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadBuilder> {
+impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManager> {
     pub fn new(witness_gen_only: bool) -> Self {
         let base = BaseCircuitBuilder::new(witness_gen_only);
         Self {
-            sha: ShaThreadBuilder::new(witness_gen_only)
+            sha: GateManager::new(witness_gen_only)
                 .use_copy_manager(base.core().phase_manager[FIRST_PHASE].copy_manager.clone()),
             base,
         }
@@ -123,10 +128,15 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
         self
     }
 
-    /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
-    /// * `phase`: The challenge phase (as an index) of the gate thread.
-    pub fn main(&mut self) -> &mut Context<F> {
-        self.base.main(0)
+    /// Sets the break points of the circuit.
+    pub fn set_break_points(&mut self, break_points: MultiPhaseThreadBreakPoints) {
+        self.base.set_break_points(break_points);
+    }
+
+    /// Returns new with break points
+    pub fn use_break_points(mut self, break_points: MultiPhaseThreadBreakPoints) -> Self {
+        self.set_break_points(break_points);
+        self
     }
 
     /// Returns [SinglePhaseCoreManager] with the virtual region with all core threads in the given phase.
@@ -138,7 +148,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
         self.base.calculate_params(minimum_rows)
     }
 
-    pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, &mut ThreadBuilder::CustomContext) {
+    pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, GateManager::CustomContext<'_>) {
         (self.base.main(0), self.sha.custom_context())
     }
 
@@ -148,10 +158,31 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> ShaCircuitBuilder<F, ThreadB
     }
 }
 
-impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
-    for ShaCircuitBuilder<F, ThreadBuilder>
+impl<F: Field, GateManager: CommonGateManager<F>> CommonCircuitBuilder<F>
+    for ShaCircuitBuilder<F, GateManager>
 {
-    type Config = SHAConfig<F>;
+    fn main(&mut self) -> &mut Context<F> {
+        self.base.main(0)
+    }
+
+    fn thread_count(&self) -> usize {
+        self.thread_count()
+    }
+
+    fn new_context(&self, context_id: usize) -> Context<F> {
+        self.new_context(context_id)
+    }
+
+    fn new_thread(&mut self) -> &mut Context<F> {
+        self.new_thread()
+    }
+}
+
+impl<F: Field, GateManager: CommonGateManager<F>> Circuit<F> for ShaCircuitBuilder<F, GateManager>
+where
+    GateManager::Config: GateBuilderConfig<F>,
+{
+    type Config = SHAConfig<F, GateManager::Config>;
     type FloorPlanner = SimpleFloorPlanner;
     type Params = BaseCircuitParams;
 
@@ -167,7 +198,7 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
         SHAConfig::configure(meta, params)
     }
 
-    fn configure(_meta: &mut ConstraintSystem<F>) -> SHAConfig<F> {
+    fn configure(_meta: &mut ConstraintSystem<F>) -> Self::Config {
         unreachable!("You must use configure_with_params");
     }
 
@@ -189,5 +220,39 @@ impl<F: Field, ThreadBuilder: ThreadBuilderBase<F>> Circuit<F>
         self.base.synthesize(config.base.clone(), layouter)?;
 
         Ok(())
+    }
+}
+
+impl<F: Field, GateManager: CommonGateManager<F>> CircuitExt<F>
+    for ShaCircuitBuilder<F, GateManager>
+where
+    GateManager::Config: GateBuilderConfig<F>,
+{
+    fn num_instance(&self) -> Vec<usize> {
+        self.base
+            .assigned_instances
+            .iter()
+            .map(|e| e.len())
+            .collect()
+    }
+
+    fn instances(&self) -> Vec<Vec<F>> {
+        self.base
+            .assigned_instances
+            .iter()
+            .map(|v| v.into_iter().map(|av| *av.value()).collect_vec())
+            .collect()
+    }
+}
+
+impl<F: Field, GateManager: CommonGateManager<F>> PinnableCircuit<F>
+    for ShaCircuitBuilder<F, GateManager>
+where
+    GateManager::Config: GateBuilderConfig<F>,
+{
+    type Pinning = Eth2ConfigPinning;
+
+    fn break_points(&self) -> MultiPhaseThreadBreakPoints {
+        self.base.break_points()
     }
 }

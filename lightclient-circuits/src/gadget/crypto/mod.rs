@@ -1,8 +1,8 @@
 mod builder;
 mod ecc;
-// mod hash2curve;
+
 mod sha256_flex;
-// mod sha256_wide;
+mod sha256_wide;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
 use eth_types::Field;
@@ -14,8 +14,8 @@ use halo2_ecc::{
     fields::{fp2, vector::FieldVector, FieldExtConstructor},
 };
 use lazy_static::lazy_static;
-pub use sha256_flex::{Sha256Chip, ShaContexts, ShaThreadBuilder};
-// pub use sha256_wide::{Sha256ChipWide, ShaBitThreadBuilder};
+pub use sha256_flex::{Sha256Chip, ShaContexts, ShaFlexGateManager};
+pub use sha256_wide::{Sha256ChipWide, ShaBitGateManager};
 
 pub use ecc::calculate_ysquared;
 
@@ -30,13 +30,6 @@ pub type G1Chip<'chip, F> = EccChip<'chip, F, FpChip<'chip, F>>;
 pub type G2Chip<'chip, F> = EccChip<'chip, F, Fp2Chip<'chip, F>>;
 
 pub use halo2_ecc::ecc::hash_to_curve::HashInstructions;
-
-#[derive(Debug, Clone)]
-pub struct AssignedHashResult<F: Field> {
-    // pub input_len: AssignedValue<F>,
-    pub input_bytes: Vec<AssignedValue<F>>,
-    pub output_bytes: [AssignedValue<F>; 32],
-}
 
 // This is a temporary measure. TODO: use challenges API.
 pub fn constant_randomness<F: Field>() -> F {

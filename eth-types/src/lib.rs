@@ -5,6 +5,7 @@
 #![feature(trait_alias)]
 mod spec;
 use halo2_base::utils::BigPrimeField;
+// use halo2curves::FieldExt;
 pub use spec::{Mainnet, Minimal, Spec, Testnet};
 
 // mod curve;
@@ -28,7 +29,7 @@ pub trait Field = BigPrimeField;
 // {
 //     fn pow_const(&self, mut exp: usize) -> Self {
 //         if exp == 0 {
-//             return Self::one();
+//             return Self::ONE;
 //         }
 
 //         let mut base = *self;
@@ -53,7 +54,7 @@ pub trait Field = BigPrimeField;
 //     /// WARNING: CAN OVERFLOW.
 //     fn from_bytes_le_unsecure<'a, I: IntoIterator<Item = &'a u8>>(bytes: I) -> Self {
 //         let two = Self::from(2);
-//         let mut value = Self::zero();
+//         let mut value = Self::ZERO;
 //         for (i, byte) in bytes.into_iter().enumerate() {
 //             value += Self::from(*byte as u64) * two.pow_const(8 * i);
 //         }

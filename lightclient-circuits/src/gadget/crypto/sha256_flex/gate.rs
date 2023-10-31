@@ -13,6 +13,8 @@ use halo2_base::{
 };
 use itertools::Itertools;
 
+use crate::util::{CommonGateManager, GateBuilderConfig};
+
 use super::SpreadConfig;
 
 pub const FIRST_PHASE: usize = 0;
@@ -21,7 +23,7 @@ struct Dence;
 struct Spread;
 
 #[derive(Clone, Debug, Default, CopyGetters)]
-pub struct ShaThreadBuilder<F: BigPrimeField> {
+pub struct ShaFlexGateManager<F: BigPrimeField> {
     #[getset(get_copy = "pub")]
     witness_gen_only: bool,
     /// The `unknown` flag is used during key generation. If true, during key generation witness [Value]s are replaced with Value::unknown() for safety.
@@ -37,34 +39,7 @@ pub struct ShaThreadBuilder<F: BigPrimeField> {
 
 pub type ShaContexts<'a, F> = (&'a mut Context<F>, &'a mut Context<F>);
 
-impl<F: BigPrimeField> ShaThreadBuilder<F> {
-    pub fn new(witness_gen_only: bool) -> Self {
-        Self {
-            witness_gen_only,
-            use_unknown: false,
-            threads_spread: Vec::new(),
-            threads_dense: Vec::new(),
-            copy_manager: SharedCopyConstraintManager::default(),
-        }
-    }
-
-    pub fn mock() -> Self {
-        Self::new(false)
-    }
-
-    pub fn keygen() -> Self {
-        Self::new(false).unknown(true)
-    }
-
-    pub fn prover() -> Self {
-        Self::new(true)
-    }
-
-    pub fn from_stage(stage: CircuitBuilderStage) -> Self {
-        Self::new(stage == CircuitBuilderStage::Prover)
-            .unknown(stage == CircuitBuilderStage::Keygen)
-    }
-
+impl<F: BigPrimeField> ShaFlexGateManager<F> {
     /// Mutates `self` to use the given copy manager everywhere, including in all threads.
     pub fn set_copy_manager(&mut self, copy_manager: SharedCopyConstraintManager<F>) {
         self.copy_manager = copy_manager.clone();
@@ -74,30 +49,6 @@ impl<F: BigPrimeField> ShaThreadBuilder<F> {
         for ctx in &mut self.threads_spread {
             ctx.copy_manager = copy_manager.clone();
         }
-    }
-
-    /// Returns `self` with a given copy manager
-    pub fn use_copy_manager(mut self, copy_manager: SharedCopyConstraintManager<F>) -> Self {
-        self.set_copy_manager(copy_manager);
-        self
-    }
-
-    pub fn unknown(mut self, use_unknown: bool) -> Self {
-        self.use_unknown = use_unknown;
-        self
-    }
-
-    pub fn contexts_pair(&mut self) -> ShaContexts<F> {
-        if self.threads_dense.is_empty() {
-            self.new_thread_dense();
-        }
-        if self.threads_spread.is_empty() {
-            self.new_thread_spread();
-        }
-        (
-            self.threads_dense.last_mut().unwrap(),
-            self.threads_spread.last_mut().unwrap(),
-        )
     }
 
     pub fn new_thread_dense(&mut self) -> &mut Context<F> {
@@ -127,18 +78,51 @@ impl<F: BigPrimeField> ShaThreadBuilder<F> {
     // pub fn thread_count(&self) -> usize {
     //     self.core.thread_count()
     // }
-
-    // pub fn get_new_thread_id(&mut self) -> usize {
-    //     self.core.thread_count()
-    // }
 }
 
-impl<F: BigPrimeField> VirtualRegionManager<F> for ShaThreadBuilder<F> {
+impl<F: BigPrimeField> CommonGateManager<F> for ShaFlexGateManager<F> {
+    type CustomContext<'a> = ShaContexts<'a, F>;
+
+    fn new(witness_gen_only: bool) -> Self {
+        Self {
+            witness_gen_only,
+            use_unknown: false,
+            threads_spread: Vec::new(),
+            threads_dense: Vec::new(),
+            copy_manager: SharedCopyConstraintManager::default(),
+        }
+    }
+
+    fn custom_context(&mut self) -> ShaContexts<F> {
+        if self.threads_dense.is_empty() {
+            self.new_thread_dense();
+        }
+        if self.threads_spread.is_empty() {
+            self.new_thread_spread();
+        }
+        (
+            self.threads_dense.last_mut().unwrap(),
+            self.threads_spread.last_mut().unwrap(),
+        )
+    }
+
+    fn use_copy_manager(mut self, copy_manager: SharedCopyConstraintManager<F>) -> Self {
+        self.set_copy_manager(copy_manager);
+        self
+    }
+
+    fn unknown(mut self, use_unknown: bool) -> Self {
+        self.use_unknown = use_unknown;
+        self
+    }
+}
+
+impl<F: BigPrimeField> VirtualRegionManager<F> for ShaFlexGateManager<F> {
     type Config = SpreadConfig<F>;
 
     fn assign_raw(&self, spread: &Self::Config, region: &mut Region<F>) {
         spread.annotate_columns_in_region(region);
-        
+
         if self.witness_gen_only() {
             assign_threads_sha(
                 &self.threads_dense,

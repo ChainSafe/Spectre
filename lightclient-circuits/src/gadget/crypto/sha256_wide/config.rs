@@ -10,20 +10,22 @@ use std::marker::PhantomData;
 
 use crate::gadget::crypto::constant_randomness;
 use crate::gadget::{and, not, rlc, select, sum, xor, Expr};
-use crate::util::ThreadBuilderConfigBase;
+use crate::util::GateBuilderConfig;
 use crate::witness::HashInputChunk;
 use crate::{
-    util::{AssignedValueCell, BaseConstraintBuilder, Challenges},
+    util::{BaseConstraintBuilder, Challenges},
     witness::{self, HashInput},
 };
 use eth_types::{Field, Spec};
-use halo2_base::gates::builder::FlexGateConfigParams;
-use halo2_base::{AssignedValue, Context, ContextCell, QuantumCell};
-use halo2_proofs::circuit;
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
-    poly::Rotation,
+use halo2_base::halo2_proofs::circuit;
+use halo2_base::virtual_region::copy_constraints::CopyConstraintManager;
+use halo2_base::{
+    halo2_proofs::{
+        circuit::{AssignedCell, Layouter, Region, Value},
+        plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
+        poly::Rotation,
+    },
+    AssignedValue, Context, ContextCell, QuantumCell,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
@@ -72,11 +74,11 @@ pub struct Sha256BitConfig<F: Field, CF = Column<Fixed>, CA = Column<Advice>> {
     pub offset: usize,
 }
 
-impl<F: Field> ThreadBuilderConfigBase<F> for Sha256BitConfig<F> {
-    fn configure(meta: &mut ConstraintSystem<F>, _params: FlexGateConfigParams) -> Self {
+impl<F: Field> GateBuilderConfig<F> for Sha256BitConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         // consts
         let two = F::from(2);
-        let f256 = two.pow_const(8);
+        let f256 = F::from(256);
 
         let r: F = constant_randomness(); // TODO: use challenges API
         let q_enable = meta.fixed_column();
@@ -801,7 +803,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         region: &mut Region<F>,
         config: &Sha256BitConfig<F>,
         use_unknown: bool,
-        mut assigned_advices: Option<&mut HashMap<(usize, usize), (circuit::Cell, usize)>>,
+        mut copy_manager: Option<&mut CopyConstraintManager<F>>,
     ) -> Result<(), Error> {
         // Fixed values
         for (name, column, ctx) in [
@@ -828,8 +830,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                     .assign_fixed(|| name, *column, offset, || Value::known(val))?
                     .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
         }
@@ -852,8 +856,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                     .assign_advice(|| name, *column, offset, || value)?
                     .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
         }
@@ -905,8 +911,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                 }
                 .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
 

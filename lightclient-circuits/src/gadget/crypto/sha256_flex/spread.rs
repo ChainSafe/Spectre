@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use halo2_base::utils::{decompose, ScalarField};
 use halo2_base::QuantumCell;
 use halo2_base::{
@@ -12,15 +10,17 @@ use halo2_base::{
     utils::BigPrimeField,
 };
 use halo2_base::{
-    gates::{GateInstructions, RangeInstructions},
+    gates::{flex_gate::threads::CommonCircuitBuilder, GateInstructions, RangeInstructions},
     AssignedValue, Context,
 };
 use itertools::Itertools;
+use std::marker::PhantomData;
 
 use crate::gadget::crypto::ShaCircuitBuilder;
+use crate::util::GateBuilderConfig;
 
-use super::ShaThreadBuilder;
-use super::util::{fe_to_bits_le, bits_le_to_fe};
+use super::util::{bits_le_to_fe, fe_to_bits_le};
+use super::ShaFlexGateManager;
 
 #[derive(Debug, Clone)]
 pub struct SpreadConfig<F: BigPrimeField> {
@@ -75,8 +75,14 @@ impl<F: BigPrimeField> SpreadConfig<F> {
             _f: PhantomData,
         }
     }
+}
 
-    pub fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+impl<F: BigPrimeField> GateBuilderConfig<F> for SpreadConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self {
+        Self::configure(meta, 8, 1) // todo: configure
+    }
+
+    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         layouter.assign_table(
             || "spread table",
             |mut table| {
@@ -107,7 +113,7 @@ impl<F: BigPrimeField> SpreadConfig<F> {
         Ok(())
     }
 
-    pub fn annotate_columns_in_region(&self, region: &mut Region<F>) {
+    fn annotate_columns_in_region(&self, region: &mut Region<F>) {
         for (i, &column) in self.spreads.iter().enumerate() {
             region.name_column(|| format!("spread_{i}"), column);
         }
@@ -131,7 +137,7 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
     }
     pub fn spread(
         &self,
-        thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+        thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         dense: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
@@ -184,7 +190,7 @@ impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
 
     fn spread_limb(
         &self,
-        thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+        thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         limb: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let (ctx_base, (ctx_dense, ctx_spread)) = thread_pool.sha_contexts_pair();

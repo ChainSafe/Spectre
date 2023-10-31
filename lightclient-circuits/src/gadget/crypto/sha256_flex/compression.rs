@@ -1,27 +1,29 @@
 use std::cell::RefMut;
 
 use crate::gadget::crypto::ShaCircuitBuilder;
-use crate::util::ThreadBuilderBase;
+use crate::util::CommonGateManager;
 
 use super::gate::ShaContexts;
 use super::spread::{self, SpreadChip, SpreadConfig};
 use super::util::{bits_le_to_fe, fe_to_bits_le};
-use super::ShaThreadBuilder;
+use super::ShaFlexGateManager;
 use eth_types::Field;
-use halo2_base::halo2_proofs::{
-    circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{
-        Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, Selector, TableColumn,
-        VirtualCells,
-    },
-    poly::Rotation,
-};
-use halo2_base::utils::fe_to_bigint;
-use halo2_base::QuantumCell;
 use halo2_base::{
-    gates::{flex_gate::FlexGateConfig, range::RangeConfig, GateInstructions, RangeInstructions},
-    utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus},
-    AssignedValue, Context,
+    gates::{
+        flex_gate::{threads::CommonCircuitBuilder, FlexGateConfig},
+        range::RangeConfig,
+        GateInstructions, RangeInstructions,
+    },
+    halo2_proofs::{
+        circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
+        plonk::{
+            Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, Selector,
+            TableColumn, VirtualCells,
+        },
+        poly::Rotation,
+    },
+    utils::{bigint_to_fe, biguint_to_fe, fe_to_bigint, fe_to_biguint, modulus},
+    AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
@@ -56,7 +58,7 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
 pub fn sha256_compression<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
     pre_state_words: &[AssignedValue<F>],
@@ -249,7 +251,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
 }
 
 fn state_to_spread_u32<'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
 ) -> Result<SpreadU32<'a, F>, Error> {
@@ -277,7 +279,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 ) -> AssignedValue<F> {
     let gate = range.gate();
     let lo = F::from(x.value().get_lower_32() as u64);
-    let hi = F::from(((x.value().get_lower_128() >> 32) & ((1u128 << 32) - 1)) as u64);
+    let hi = F::from(((x.value().get_lower_64() >> 32) & ((1u64 << 32) - 1)) as u64);
     let assigned_lo = ctx.load_witness(lo);
     let assigned_hi = ctx.load_witness(hi);
     range.range_check(ctx, assigned_lo, 32);
@@ -292,7 +294,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 }
 
 fn ch<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -402,7 +404,7 @@ fn ch<'a, 'b: 'a, F: Field>(
 }
 
 fn maj<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -474,7 +476,7 @@ fn three_add<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper0<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -499,7 +501,7 @@ fn sigma_upper0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper1<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -524,7 +526,7 @@ fn sigma_upper1<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower0<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -549,7 +551,7 @@ fn sigma_lower0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower1<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -575,7 +577,7 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
 
 #[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaCircuitBuilder<F, ShaThreadBuilder<F>>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
     starts: &[usize; 4],
@@ -674,7 +676,7 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
     };
     let (r_lo, r_hi) = {
         let lo = F::from(r_spread.value().get_lower_32() as u64);
-        let hi = F::from(((r_spread.value().get_lower_128() >> 32) & ((1u128 << 32) - 1)) as u64);
+        let hi = F::from(((r_spread.value().get_lower_64() >> 32) & ((1u64 << 32) - 1)) as u64);
         let assigned_lo = thread_pool.main().load_witness(lo);
         let assigned_hi = thread_pool.main().load_witness(hi);
         range.range_check(thread_pool.main(), assigned_lo, 32);

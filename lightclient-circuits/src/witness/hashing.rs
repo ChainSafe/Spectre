@@ -65,6 +65,16 @@ impl<T: Clone> HashInput<T> {
     }
 }
 
+impl<F: Field> IntoIterator for HashInput<QuantumCell<F>> {
+    type Item = QuantumCell<F>;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_vec().into_iter()
+    }
+}
+
 impl<F: Field> HashInput<QuantumCell<F>> {
     pub fn into_assigned(self, ctx: &mut Context<F>) -> HashInput<AssignedValue<F>> {
         self.map(|cell| match cell {

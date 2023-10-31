@@ -59,7 +59,7 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .take(S::SYNC_COMMITTEE_SIZE)
         .map(|pk| {
             let pk_rev = pk.iter().copied().rev().collect_vec();
-            G1Affine::from_bytes_unchecked(&pk_rev.try_into().unwrap())
+            G1Affine::from_bytes_unchecked(&pk_rev.as_slice().try_into().unwrap())
                 .unwrap()
                 .to_uncompressed()
                 .as_ref()
@@ -179,11 +179,10 @@ pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<
 
 #[cfg(test)]
 mod tests {
+    use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use eth_types::Testnet;
-    use halo2_base::gates::builder::CircuitBuilderStage;
-    use halo2_proofs::dev::MockProver;
-    use halo2curves::bn256::Fr;
     use lightclient_circuits::{
+        halo2_base::gates::circuit::CircuitBuilderStage,
         sync_step_circuit::SyncStepCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };

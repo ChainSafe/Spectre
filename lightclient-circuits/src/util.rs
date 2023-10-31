@@ -111,7 +111,7 @@ pub mod to_bytes {
         let mut bytes = Vec::new();
         for byte_bits in bits.chunks(8) {
             let mut value = 0.expr();
-            let mut multiplier = F::one();
+            let mut multiplier = F::ONE;
             for byte in byte_bits.iter() {
                 value = value + byte.expr() * multiplier;
                 multiplier *= F::from(2);

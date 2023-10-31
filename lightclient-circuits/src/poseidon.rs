@@ -1,13 +1,16 @@
 use crate::gadget::crypto::G1Point;
 use eth_types::{Field, Spec};
 use halo2_base::{
-    gates::GateInstructions, halo2_proofs::plonk::Error, poseidon::PoseidonChip, AssignedValue,
-    Context,
+    gates::GateInstructions,
+    halo2_proofs::plonk::Error,
+    poseidon::{hasher::PoseidonSponge, PoseidonChip},
+    utils::ScalarField,
+    AssignedValue, Context,
 };
 use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
 use halo2curves::bls12_381::{Fq, G1Affine, G1};
 use itertools::Itertools;
-use poseidon_native::Poseidon as PoseidonNative;
+use pse_poseidon::Poseidon as PoseidonNative;
 
 const POSEIDON_SIZE: usize = 16;
 const R_F: usize = 8;
@@ -24,8 +27,8 @@ pub fn fq_array_poseidon<'a, F: Field>(
         .copied()
         .collect_vec();
 
-    let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
-        .expect("failed to construct Poseidon circuit");
+    let mut poseidon =
+        PoseidonSponge::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new::<R_F, R_P, 0>(ctx);
 
     let mut current_poseidon_hash = None;
 
@@ -35,7 +38,7 @@ pub fn fq_array_poseidon<'a, F: Field>(
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
 
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
+        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())
@@ -73,8 +76,8 @@ pub fn poseidon_sponge<F: Field>(
     gate: &impl GateInstructions<F>,
     elems: Vec<AssignedValue<F>>,
 ) -> Result<AssignedValue<F>, Error> {
-    let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
-        .expect("failed to construct Poseidon circuit");
+    let mut poseidon =
+        PoseidonSponge::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new::<R_F, R_P, 0>(ctx);
     let mut current_poseidon_hash = None;
 
     for (i, chunk) in elems.chunks(POSEIDON_SIZE - 3).enumerate() {
@@ -82,7 +85,7 @@ pub fn poseidon_sponge<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
+        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())

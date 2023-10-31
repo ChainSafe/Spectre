@@ -42,10 +42,10 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
     // Set the initial state
     let mut hs: [u64; 8] = H.to_vec().try_into().unwrap();
     let mut length = 0usize;
-    let mut data_rlc = F::zero();
-    let mut rnd_pow = F::zero();
-    let mut u8_pow = [F::one(), F::zero()];
-    let mut data_vals = [F::zero(); 2];
+    let mut data_rlc = F::ZERO;
+    let mut rnd_pow = F::ZERO;
+    let mut u8_pow = [F::ONE, F::ZERO];
+    let mut data_vals = [F::ZERO; 2];
 
     let mut in_padding = false;
 
@@ -104,10 +104,10 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 false,
                 length,
                 data_rlc,
-                F::zero(),
+                F::ZERO,
                 [false, false, false, in_padding],
-                [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             )
         };
         add_row_start(d, h, idx == 0);
@@ -119,7 +119,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
         for (round, round_cst) in ROUND_CST.iter().enumerate() {
             // Padding/Length/Data rlc
             let mut is_paddings = [false; ABSORB_WIDTH_PER_ROW_BYTES];
-            let mut inter_data_rlcs = [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES];
+            let mut inter_data_rlcs = [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES];
             let mut is_right = false; // feature: [multi input lookups]
             if round < NUM_WORDS_TO_ABSORB {
                 // padding/length
@@ -194,12 +194,12 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 if round < NUM_WORDS_TO_ABSORB {
                     data_rlc
                 } else {
-                    F::zero()
+                    F::ZERO
                 },
-                F::zero(),
+                F::ZERO,
                 is_paddings,
                 inter_data_rlcs,
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             );
 
             // Truncate the newly calculated values
@@ -226,11 +226,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 .collect::<Vec<_>>();
             rlc::value(&hash_bytes, rnd)
         } else {
-            F::zero()
+            F::ZERO
         };
 
         let final_hash_bytes = if is_final_block {
-            let mut bytes = [F::zero(); NUM_BYTES_FINAL_HASH];
+            let mut bytes = [F::ZERO; NUM_BYTES_FINAL_HASH];
             for (i, h) in hs.iter().enumerate() {
                 for (j, byte) in (*h as u32).to_be_bytes().into_iter().enumerate() {
                     bytes[4 * i + j] = F::from(byte as u64);
@@ -238,7 +238,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
             }
             bytes
         } else {
-            [F::zero(); NUM_BYTES_FINAL_HASH]
+            [F::ZERO; NUM_BYTES_FINAL_HASH]
         };
 
         // Add end rows
@@ -250,11 +250,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 false,
                 false,
                 0,
-                F::zero(),
-                F::zero(),
+                F::ZERO,
+                F::ZERO,
                 [false; ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             )
         };
         add_row_end(hs[3], hs[7]);
@@ -271,7 +271,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
             data_rlc,
             hash_rlc,
             [false, false, false, in_padding],
-            [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
+            [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
             final_hash_bytes,
         );
 

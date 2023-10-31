@@ -11,6 +11,7 @@ use halo2_base::halo2_proofs::{
     poly::commitment::Params,
     poly::kzg::commitment::ParamsKZG,
 };
+use halo2_base::utils::BigPrimeField;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
     encode_calldata, evm_verify, gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
@@ -78,7 +79,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 }
 
-pub trait PinnableCircuit<F: ff::Field>: CircuitExt<F> {
+pub trait PinnableCircuit<F: BigPrimeField>: CircuitExt<F> {
     type Pinning: Halo2ConfigPinning;
 
     fn break_points(&self) -> <Self::Pinning as Halo2ConfigPinning>::BreakPoints;
@@ -262,10 +263,10 @@ pub fn write_calldata_generic<ConcreteCircuit: CircuitExt<Fr>>(
     calldata
 }
 
-fn custom_read_pk<C, P>(fname: P, _: &C) -> ProvingKey<G1Affine>
+fn custom_read_pk<C, P>(fname: P, c: &C) -> ProvingKey<G1Affine>
 where
     C: Circuit<Fr>,
     P: AsRef<Path>,
 {
-    read_pk::<C>(fname.as_ref()).expect("proving key should exist")
+    read_pk::<C>(fname.as_ref(), c.params()).expect("proving key should exist")
 }

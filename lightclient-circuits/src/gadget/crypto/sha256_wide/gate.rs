@@ -1,24 +1,22 @@
-use std::{cell::RefCell, collections::HashMap, iter, mem};
+use std::{any::TypeId, cell::RefCell, collections::HashMap, iter, mem};
 
 use eth_types::Field;
+use getset::CopyGetters;
 use halo2_base::{
-    gates::{
-        builder::{
-            assign_threads_in, CircuitBuilderStage, FlexGateConfigParams, GateThreadBuilder,
-            KeygenAssignments, ThreadBreakPoints,
-        },
-        flex_gate::FlexGateConfig,
+    gates::{circuit::CircuitBuilderStage, flex_gate::FlexGateConfig},
+    halo2_proofs::{
+        circuit::{self, Region, Value},
+        plonk::{Advice, Column, Error, Selector},
     },
     utils::ScalarField,
+    virtual_region::{
+        copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
+    },
     Context,
-};
-use halo2_proofs::{
-    circuit::{self, Region, Value},
-    plonk::{Advice, Column, Error, Selector},
 };
 use itertools::Itertools;
 
-use crate::util::{ThreadBuilderBase, ThreadBuilderConfigBase};
+use crate::util::{CommonGateManager, GateBuilderConfig};
 
 use super::{config::Sha256BitConfig, witness::ShaRow};
 
@@ -26,23 +24,40 @@ pub const FIRST_PHASE: usize = 0;
 
 pub type Sha256BitContexts<F> = Sha256BitConfig<F, Context<F>, Context<F>>;
 
-#[derive(Clone, Debug)]
-pub struct ShaBitThreadBuilder<F: Field> {
+#[derive(Clone, Debug, CopyGetters)]
+pub struct ShaBitGateManager<F: Field> {
+    #[getset(get_copy = "pub")]
+    witness_gen_only: bool,
+    /// The `unknown` flag is used during key generation. If true, during key generation witness [Value]s are replaced with Value::unknown() for safety.
+    #[getset(get_copy = "pub")]
+    pub(crate) use_unknown: bool,
+
     /// Threads for spread table assignment.
     sha_contexts: Sha256BitContexts<F>,
-    /// [`GateThreadBuilder`] with threads for basic gate; also in charge of thread IDs
-    pub gate_builder: GateThreadBuilder<F>,
 
     sha_offset: usize,
+
+    pub copy_manager: SharedCopyConstraintManager<F>,
 }
 
-impl<F: Field> ThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
-    type Config = Sha256BitConfig<F>;
+impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
+    type CustomContext<'a> = &'a mut Sha256BitContexts<F>;
 
-    fn new(mut witness_gen_only: bool) -> Self {
-        let mut gate_builder = GateThreadBuilder::new(witness_gen_only);
-        let mut new_context = || Context::new(witness_gen_only, gate_builder.get_new_thread_id());
+    fn new(witness_gen_only: bool) -> Self {
+        let copy_manager = SharedCopyConstraintManager::default();
+        let mut context_id = 0;
+        let mut new_context = || {
+            Context::new(
+                witness_gen_only,
+                FIRST_PHASE,
+                TypeId::of::<Self>(),
+                context_id,
+                copy_manager.clone(),
+            )
+        };
         Self {
+            witness_gen_only,
+            use_unknown: false,
             sha_contexts: Sha256BitConfig {
                 q_enable: new_context(),
                 q_first: new_context(),
@@ -71,9 +86,13 @@ impl<F: Field> ThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
                 _f: std::marker::PhantomData,
                 offset: 0,
             },
-            gate_builder,
             sha_offset: 0,
+            copy_manager: SharedCopyConstraintManager::default(),
         }
+    }
+
+    fn custom_context(&mut self) -> Self::CustomContext<'_> {
+        self.sha_contexts()
     }
 
     fn from_stage(stage: CircuitBuilderStage) -> Self {
@@ -81,119 +100,44 @@ impl<F: Field> ThreadBuilderBase<F> for ShaBitThreadBuilder<F> {
             .unknown(stage == CircuitBuilderStage::Keygen)
     }
 
-    fn unknown(mut self, use_unknown: bool) -> Self {
-        self.gate_builder = self.gate_builder.unknown(use_unknown);
+    fn use_copy_manager(mut self, copy_manager: SharedCopyConstraintManager<F>) -> Self {
+        self.set_copy_manager(copy_manager);
         self
     }
 
-    fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams {
-        self.gate_builder.config(k, minimum_rows)
-    }
-
-    fn main(&mut self) -> &mut Context<F> {
-        self.gate_builder.main(FIRST_PHASE)
-    }
-
-    fn witness_gen_only(&self) -> bool {
-        self.gate_builder.witness_gen_only()
-    }
-
-    fn use_unknown(&self) -> bool {
-        self.gate_builder.use_unknown()
-    }
-
-    fn thread_count(&self) -> usize {
-        self.gate_builder.thread_count()
-    }
-
-    fn get_new_thread_id(&mut self) -> usize {
-        self.gate_builder.get_new_thread_id()
-    }
-
-    fn assign_all(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        q_lookup: &[Option<Selector>],
-        config: &Sha256BitConfig<F>,
-        region: &mut Region<F>,
-        KeygenAssignments {
-            mut assigned_advices,
-            assigned_constants,
-            mut break_points,
-        }: KeygenAssignments<F>,
-    ) -> Result<KeygenAssignments<F>, Error> {
-        assert!(!self.witness_gen_only());
-
-        config.annotate_columns_in_region(region);
-
-        let use_unknown = self.use_unknown();
-
-        self.sha_contexts().assign_in_region(
-            region,
-            config,
-            use_unknown,
-            Some(&mut assigned_advices),
-        )?;
-
-        let main_ctx = self.gate_builder.main(0);
-        // for ctx in self
-        //     .threads_spread
-        //     .iter_mut()
-        //     .chain(self.threads_dense.iter_mut())
-        // {
-        //     main_ctx
-        //         .advice_equality_constraints
-        //         .append(&mut ctx.advice_equality_constraints);
-        //     main_ctx
-        //         .constant_equality_constraints
-        //         .append(&mut ctx.constant_equality_constraints);
-        // }
-
-        Ok(self.gate_builder.assign_all(
-            gate,
-            lookup_advice,
-            q_lookup,
-            region,
-            KeygenAssignments {
-                assigned_advices,
-                assigned_constants,
-                break_points,
-            },
-        ))
-    }
-
-    fn assign_witnesses(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        config: &Self::Config,
-        region: &mut Region<F>,
-        break_points: &mut halo2_base::gates::builder::MultiPhaseThreadBreakPoints,
-    ) -> Result<(), Error> {
-        let use_unknown = self.use_unknown();
-
-        let break_points_gate = mem::take(&mut break_points[FIRST_PHASE]);
-        // warning: we currently take all contexts from phase 0, which means you can't read the values
-        // from these contexts later in phase 1. If we want to read, should clone here
-        let threads = mem::take(&mut self.gate_builder.threads[FIRST_PHASE]);
-
-        assign_threads_in(
-            FIRST_PHASE,
-            threads,
-            gate,
-            &lookup_advice[FIRST_PHASE],
-            region,
-            break_points_gate,
-        );
-
-        self.sha_contexts()
-            .assign_in_region(region, config, use_unknown, None)
+    fn unknown(mut self, use_unknown: bool) -> Self {
+        self.use_unknown = use_unknown;
+        self
     }
 }
 
-impl<F: Field> ShaBitThreadBuilder<F> {
+impl<F: Field> VirtualRegionManager<F> for ShaBitGateManager<F> {
+    type Config = Sha256BitConfig<F>;
+
+    fn assign_raw(&self, config: &Self::Config, region: &mut Region<F>) {
+        config.annotate_columns_in_region(region);
+
+        if self.witness_gen_only() {
+            self.sha_contexts
+                .assign_in_region(region, config, false, None)
+                .unwrap();
+        } else {
+            let mut copy_manager = self.copy_manager.lock().unwrap();
+            self.sha_contexts
+                .assign_in_region(region, config, self.use_unknown(), Some(&mut copy_manager))
+                .unwrap();
+        }
+    }
+}
+
+impl<F: Field> ShaBitGateManager<F> {
     pub fn sha_contexts(&mut self) -> &mut Sha256BitContexts<F> {
         &mut self.sha_contexts
+    }
+
+    /// Mutates `self` to use the given copy manager everywhere, including in all threads.
+    pub fn set_copy_manager(&mut self, copy_manager: SharedCopyConstraintManager<F>) {
+        self.copy_manager = copy_manager.clone();
+        // TODO: set to `self.sha_contexts`.
     }
 }
