@@ -228,7 +228,7 @@ impl<'a, F: Field> Sha256ChipWide<'a, F> {
                 .try_into()
                 .unwrap();
 
-            let is_final = reassign_to_gate(assigned_rows.is_final[round_idx]);
+            let is_final = reassign_to_gate(assigned_rows.is_enabled[round_idx]);
             let output_rlc = reassign_to_gate(assigned_rows.output_rlc[0]);
 
             assigned_rounds.push(AssignedSha256Round {

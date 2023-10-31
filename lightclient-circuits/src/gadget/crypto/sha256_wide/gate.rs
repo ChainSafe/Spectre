@@ -47,6 +47,7 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
         let copy_manager = SharedCopyConstraintManager::default();
         let mut context_id = 0;
         let mut new_context = || {
+            context_id += 1;
             Context::new(
                 witness_gen_only,
                 FIRST_PHASE,
@@ -55,6 +56,7 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
                 copy_manager.clone(),
             )
         };
+
         Self {
             witness_gen_only,
             use_unknown: false,

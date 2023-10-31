@@ -772,7 +772,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         }
 
         if round == NUM_ROUNDS + 7 {
-            assigned_rows.is_final.push(is_enabled);
+            assigned_rows.is_enabled.push(is_enabled);
             assigned_rows.input_len.push(input_len);
         }
 

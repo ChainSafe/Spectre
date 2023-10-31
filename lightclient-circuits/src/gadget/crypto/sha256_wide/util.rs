@@ -51,7 +51,7 @@ pub struct Sha256AssignedRows<F: Field> {
     /// Input words at the row.
     pub input_rlc: Vec<AssignedValue<F>>,
     /// Whether the output word is enabled at the row.
-    pub is_final: Vec<AssignedValue<F>>,
+    pub is_enabled: Vec<AssignedValue<F>>,
     /// Whether the row is padding.
     pub padding_selectors: Vec<[AssignedValue<F>; 4]>,
     /// Output words at the row.

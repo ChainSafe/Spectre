@@ -20,7 +20,7 @@ use crate::{
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
-    witness::{self, HashInput, HashInputChunk, SyncStepArgs},
+    witness::{self, HashInput, HashInputChunk, SyncStepArgs}, Eth2CircuitBuilder,
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
@@ -442,7 +442,7 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder =
-            ShaCircuitBuilder::<bn256::Fr, ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
+            Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
                 .use_k(k as usize)
                 .use_instance_columns(1);
         let range = builder.range_chip(8);
