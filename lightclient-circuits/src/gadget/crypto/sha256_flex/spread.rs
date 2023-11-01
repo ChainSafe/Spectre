@@ -1,3 +1,4 @@
+use std::env::var;
 use std::marker::PhantomData;
 
 use crate::util::{ThreadBuilderBase, ThreadBuilderConfigBase};
@@ -45,6 +46,7 @@ impl<F: Field> SpreadConfig<F> {
         num_bits_lookup: usize,
         num_advice_columns: usize,
     ) -> Self {
+        println!("num_advice_columns: {}", num_advice_columns);
         debug_assert_eq!(16 % num_bits_lookup, 0);
 
         let denses = (0..num_advice_columns)
@@ -94,7 +96,14 @@ impl<F: Field> SpreadConfig<F> {
 
 impl<F: Field> ThreadBuilderConfigBase<F> for SpreadConfig<F> {
     fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self {
-        Self::configure(meta, 8, 1) // TODO configure num_advice_columns
+        Self::configure(
+            meta,
+            8,
+            var("FLEX_SHA_SPREAD_COLUMNS")
+                .unwrap_or_else(|_| "1".to_string())
+                .parse()
+                .unwrap(),
+        ) // TODO configure num_advice_columns
     }
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {

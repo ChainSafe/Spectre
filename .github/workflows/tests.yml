@@ -49,4 +49,4 @@ jobs:
       run: just build-contracts
     
     - name: Test
-      run: RUST_LOG="lightclient-circuits=debug" cargo test --release -- --nocapture
+      run: RUST_LOG="lightclient-circuits=debug" FLEX_SHA_SPREAD_COLUMNS=2 cargo test --release -- --nocapture
