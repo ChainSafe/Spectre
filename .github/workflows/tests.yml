@@ -17,7 +17,6 @@ jobs:
   test:
     name: build-and-test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
     - name: Give GitHub Actions access to sygmaprotocol/zipline
       uses: webfactory/ssh-agent@v0.7.0
@@ -47,11 +46,7 @@ jobs:
       uses: foundry-rs/foundry-toolchain@v1
 
     - name: Build contracts
-      run: just build-contracts   
-
-    # skip this in favour of compiling in the `Test` action.
-    # - name: Check
-    #   run: cargo check --all
+      run: just build-contracts
     
     - name: Test
-      run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" cargo test --release test_eth2_spec_mock_1 -- --nocapture
+      run: RUST_LOG="lightclient-circuits=debug" cargo test --release -- --nocapture
