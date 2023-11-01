@@ -51,4 +51,4 @@ jobs:
     - name: Test
       # currently this is skipping the rotation circuit spec tests because they use too much memory on CI and cause it to be stopped
       # This should be fixed in a future PR and tests re-enabled
-      run: RUST_LOG="lightclient-circuits=debug" FLEX_SHA_SPREAD_COLUMNS=2 cargo test --release -- --nocapture --skip test_eth2_spec_mock
+      run: RUST_LOG="lightclient-circuits=debug" FLEX_SHA_SPREAD_COLUMNS=2 cargo test --release -- --nocapture --skip test_sync_circuit
