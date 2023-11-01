@@ -7,6 +7,7 @@ edition = "2021"
 lightclient-circuits = { workspace = true }
 ethereum-consensus-types = { workspace = true }
 eth-types = { workspace = true }
+contracts = { workspace = true }
 ssz-rs = { workspace = true }
 zipline-test-utils = { workspace = true }
 light-client-verifier = { workspace = true }

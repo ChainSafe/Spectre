@@ -19,3 +19,4 @@ eth-types = { workspace = true }
 ssz-rs = { workspace = true }
 halo2-base = { workspace = true }
 snark-verifier-sdk = { workspace = true }
+contracts = { workspace = true }

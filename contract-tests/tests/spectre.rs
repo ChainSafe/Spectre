@@ -6,14 +6,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use contract_tests::make_client;
+use contracts::{
+    CommitteeUpdateMockVerifier, CommitteeUpdateVerifier, Spectre, StepMockVerifier, StepVerifier,
+};
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
 use rstest::rstest;
-use test_utils::abis::{
-    CommitteeUpdateMockVerifier, CommitteeUpdateVerifier, Spectre, StepMockVerifier, StepVerifier,
-    SyncStepInput,
+use test_utils::{
+    conversions::sync_input_from_args, get_initial_sync_committee_poseidon,
+    read_test_files_and_gen_witness,
 };
-use test_utils::{get_initial_sync_committee_poseidon, read_test_files_and_gen_witness};
 
 const SLOTS_PER_EPOCH: usize = 8;
 const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize = 8;
@@ -52,7 +54,7 @@ async fn test_contract_initialization_and_first_step(
     assert_eq!(contract.head().call().await?, U256::from(0));
 
     // call step with the input and proof
-    let step_input = SyncStepInput::from(witness);
+    let step_input = sync_input_from_args(witness);
     let step_call = contract.step(step_input.clone(), Vec::new().into());
     let _receipt = step_call.send().await?.confirmations(1).await?;
 
