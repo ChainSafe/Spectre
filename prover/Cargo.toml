@@ -22,34 +22,22 @@ jsonrpc-v2 = { version = "0.12", default-features = false, features = ["easy-err
 http = "0.2"
 
 # halo2
-halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
-
+halo2curves.workspace = true
 # verifier SDK 
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
-    "display",
-    "loader_halo2",
-    "loader_evm",
-] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.1", default-features = false, features = [
-    "display",
-    "loader_halo2",
-    "loader_evm",
-] }
-halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
-
+snark-verifier.workspace = true
+snark-verifier-sdk.workspace = true
+halo2_solidity_verifier.workspace = true
 # local
-lightclient-circuits = { path = "../lightclient-circuits" }
-preprocessor = { path = "../preprocessor" }
-eth-types = { path = "../eth-types" }
-
+lightclient-circuits.workspace = true
+preprocessor.workspace = true
+eth-types.workspace = true
 
 # misc
+itertools.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
 url = "2"
-itertools = "0.11.0"
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.78"
-log = "0.4.14"
-
 
 # ethereum
 ethers = { version = "2.0.7", default_features = false, features = [

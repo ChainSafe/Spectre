@@ -12,7 +12,7 @@ contract Verifier {
     uint256 constant SIZE_LIMIT = 21888242871839275222246405745257275088696311157297823662689037894645226208583; 
 
     function verify(
-        uint256[1] calldata pubInputs,
+        uint256[65] calldata pubInputs,
         bytes calldata proof
     ) public view returns (bool) {
         bool success = true;
