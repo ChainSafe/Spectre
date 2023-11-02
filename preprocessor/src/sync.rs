@@ -23,7 +23,7 @@ pub async fn fetch_step_args_at_block<S: Spec>(
         .fetch_block(&block_id)
         .await
         .map_err(|e| eyre::eyre!("Error fetching block from node. Error: {}", e))?;
-    let state_id = finalized_block.state_root.to_string();
+    let state_id = "head";
     let state = client
         .fetch_beacon_state(&state_id)
         .await
