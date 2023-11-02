@@ -32,7 +32,7 @@ jobs:
     - name: Read toolchain file
       id: rust-toolchain
       run: |
-        RUST_TOOLCHAIN=$(grep 'channel' rust-toolchain | awk '{split($0,a," = "); print a[2]}' | tr -d '"')
+        RUST_TOOLCHAIN=$(grep 'channel' rust-toolchain.toml | awk '{split($0,a," = "); print a[2]}' | tr -d '"')
         echo "RUST_TOOLCHAIN=$RUST_TOOLCHAIN" >> $GITHUB_OUTPUT
       shell: bash
 
