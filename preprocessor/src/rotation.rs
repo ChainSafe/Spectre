@@ -9,6 +9,63 @@ use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use sync_committee_prover::SyncCommitteeProver;
 use tokio::fs;
 
+pub async fn fetch_rotation_args_at_block<S: Spec>(
+    client: reqwest::Client,
+    node_url: String,
+    block_id: String,
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
+    let client = SyncCommitteeProver { node_url, client };
+
+    let finalized_header = client.fetch_header(&block_id).await.unwrap();
+    let mut finalized_state = client
+        .fetch_beacon_state(&finalized_header.state_root.to_string())
+        .await
+        .unwrap();
+    let pubkeys_compressed = finalized_state
+        .next_sync_committee
+        .public_keys
+        .iter()
+        .map(|pk| pk.to_vec())
+        .collect_vec();
+
+    let mut sync_committee_branch =
+        ssz_rs::generate_proof(&mut finalized_state, &[S::SYNC_COMMITTEE_ROOT_INDEX * 2]).unwrap();
+
+    sync_committee_branch.insert(
+        0,
+        finalized_state
+            .next_sync_committee
+            .aggregate_public_key
+            .hash_tree_root()
+            .unwrap(),
+    );
+    assert!(
+        ssz_rs::verify_merkle_proof(
+            &finalized_state
+                .next_sync_committee
+                .public_keys
+                .hash_tree_root()
+                .unwrap(),
+            &sync_committee_branch,
+            &ssz_rs::GeneralizedIndex(S::SYNC_COMMITTEE_ROOT_INDEX * 2),
+            &finalized_header.state_root,
+        ),
+        "Execution payload merkle proof verification failed"
+    );
+    let args = CommitteeRotationArgs::<S, Fr> {
+        pubkeys_compressed,
+        randomness: crypto::constant_randomness(),
+        finalized_header,
+        sync_committee_branch: sync_committee_branch
+            .iter()
+            .map(|n| n.as_bytes().to_vec())
+            .collect_vec(),
+        _spec: PhantomData,
+    };
+
+    Ok(args)
+}
+
 pub async fn fetch_rotation_args<S: Spec>(
     node_url: String,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
