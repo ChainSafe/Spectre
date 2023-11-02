@@ -21,6 +21,24 @@ pub struct GenProofStepParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenProofStepWithWitnessParams {
+    pub spec: args::Spec,
+
+    pub k: Option<u32>,
+
+    pub witness: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenProofRotationWithWitnessParams {
+    pub spec: args::Spec,
+
+    pub k: Option<u32>,
+
+    pub witness: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvmProofResult {
     pub proof: Vec<u8>,
     pub public_inputs: Vec<U256>,
@@ -32,3 +50,8 @@ fn default_beacon_api() -> String {
 
 pub const EVM_PROOF_STEP_CIRCUIT: &str = "genEvmProofAndInstancesStepSyncCircuit";
 pub const EVM_PROOF_ROTATION_CIRCUIT: &str = "genEvmProofAndInstancesRotationCircuit";
+
+pub const EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS: &str =
+    "genEvmProofAndInstancesStepSyncCircuitWithWitness";
+pub const EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS: &str =
+    "genEvmProofAndInstancesRotationCircuitWithWitness";

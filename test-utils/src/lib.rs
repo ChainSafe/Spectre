@@ -22,9 +22,9 @@ use zipline_test_utils::{load_snappy_ssz, load_yaml};
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
 
+pub mod conversions;
 mod execution_payload_header;
 mod test_types;
-pub mod conversions;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(

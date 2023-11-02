@@ -4,12 +4,12 @@ use std::marker::PhantomData;
 use super::HashInput;
 use eth_types::{Field, Spec};
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ssz_rs::{Merkleized, Node};
 use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
     pub signature_compressed: Vec<u8>,
 

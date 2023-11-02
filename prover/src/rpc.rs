@@ -22,8 +22,10 @@ use snark_verifier_sdk::{
 use std::path::PathBuf;
 
 use crate::rpc_api::{
-    EvmProofResult, GenProofRotationParams, GenProofStepParams, EVM_PROOF_ROTATION_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT,
+    EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
+    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT,
+    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
 };
 
 fn gen_app_snark<S: eth_types::Spec>(
@@ -175,6 +177,109 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     })
 }
 
+pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
+    Params(params): Params<GenProofRotationWithWitnessParams>,
+) -> Result<EvmProofResult, JsonRpcError> {
+    let GenProofRotationWithWitnessParams { spec, k, witness } = params;
+
+    // TODO: use config/build paths from CLI flags
+    let app_config_path = PathBuf::from("../lightclient-circuits/config/committee_update.json");
+    let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
+
+    let agg_l2_config_path =
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_2.json");
+    let agg_l1_config_path =
+        PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_1.json");
+    let _build_dir = PathBuf::from("./build");
+
+    let (l0_snark, _pk_filename) = match spec {
+        Spec::Minimal => {
+            let witness = serde_json::from_slice(&witness).unwrap();
+            (
+                gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_minimal.pkey",
+            )
+        }
+        Spec::Testnet => {
+            let witness = serde_json::from_slice(&witness).unwrap();
+
+            (
+                gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_testnet.pkey",
+            )
+        }
+        Spec::Mainnet => {
+            let witness = serde_json::from_slice(&witness).unwrap();
+
+            (
+                gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?,
+                "agg_rotation_circuit_mainnet.pkey",
+            )
+        }
+    };
+
+    let l1_snark = {
+        let k = k.unwrap_or(24);
+        let p1 = gen_srs(k);
+        let mut circuit = AggregationCircuit::keygen::<SHPLONK>(&p1, vec![l0_snark.clone()]);
+        circuit.expose_previous_instances(false);
+
+        println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
+
+        let pk_l1 = gen_pk(&p1, &circuit, None);
+        let pinning = AggregationConfigPinning::from_path(agg_l1_config_path);
+        let lookup_bits = k as usize - 1;
+        let mut circuit = AggregationCircuit::new::<SHPLONK>(
+            CircuitBuilderStage::Prover,
+            Some(pinning.break_points),
+            lookup_bits,
+            &p1,
+            std::iter::once(l0_snark),
+        );
+        circuit.expose_previous_instances(false);
+
+        println!("L1 Prover num_instances: {:?}", circuit.num_instance());
+        let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
+        println!("L1 snark size: {}", snark.proof.len());
+
+        snark
+    };
+
+    let (proof, instances) = {
+        let k = k.unwrap_or(24);
+        let p2 = gen_srs(k);
+        let mut circuit =
+            AggregationCircuit::keygen::<SHPLONK>(&p2, std::iter::once(l1_snark.clone()));
+        circuit.expose_previous_instances(true);
+
+        let pk_l2 = gen_pk(&p2, &circuit, None);
+        let pinning = AggregationConfigPinning::from_path(agg_l2_config_path);
+
+        let mut circuit = AggregationCircuit::prover::<SHPLONK>(
+            &p2,
+            std::iter::once(l1_snark),
+            pinning.break_points,
+        );
+        circuit.expose_previous_instances(true);
+
+        let instances = circuit.instances();
+
+        let proof =
+            snark_verifier_sdk::evm::gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
+
+        (proof, instances)
+    };
+
+    let public_inputs = instances[0]
+        .iter()
+        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+        .collect();
+    Ok(EvmProofResult {
+        proof,
+        public_inputs,
+    })
+}
+
 pub(crate) async fn gen_evm_proof_step_circuit_handler(
     Params(params): Params<GenProofStepParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
@@ -235,12 +340,76 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
     })
 }
 
+pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
+    Params(params): Params<GenProofStepWithWitnessParams>,
+) -> Result<EvmProofResult, JsonRpcError> {
+    let GenProofStepWithWitnessParams { spec, k, witness } = params.clone();
+
+    let config_path = PathBuf::from("../lightclient-circuits/config/sync_step.json");
+    let build_dir = PathBuf::from("./build");
+
+    let (proof, instances) = match spec {
+        Spec::Minimal => {
+            let pk_filename = format!("step_circuit_minimal.pkey");
+            let witness = serde_json::from_slice(&witness).unwrap();
+            gen_evm_proof::<SyncStepCircuit<eth_types::Minimal, Fr>>(
+                k,
+                build_dir,
+                pk_filename,
+                config_path,
+                witness,
+            )
+        }
+        Spec::Testnet => {
+            let pk_filename = format!("step_circuit_testnet.pkey");
+            let witness = serde_json::from_slice(&witness).unwrap();
+
+            gen_evm_proof::<SyncStepCircuit<eth_types::Testnet, Fr>>(
+                k,
+                build_dir,
+                pk_filename,
+                config_path,
+                witness,
+            )
+        }
+        Spec::Mainnet => {
+            let pk_filename = format!("step_circuit_mainnet.pkey");
+            let witness = serde_json::from_slice(&witness).unwrap();
+
+            gen_evm_proof::<SyncStepCircuit<eth_types::Mainnet, Fr>>(
+                k,
+                build_dir,
+                pk_filename,
+                config_path,
+                witness,
+            )
+        }
+    };
+
+    let public_inputs = instances[0]
+        .iter()
+        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+        .collect();
+    Ok(EvmProofResult {
+        proof,
+        public_inputs,
+    })
+}
+
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
     JsonRpcServer::new()
         .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
         .with_method(
             EVM_PROOF_ROTATION_CIRCUIT,
             gen_evm_proof_rotation_circuit_handler,
+        )
+        .with_method(
+            EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS,
+            gen_evm_proof_rotation_circuit_with_witness_handler,
+        )
+        .with_method(
+            EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
+            gen_evm_proof_step_circuit_with_witness_handler,
         )
         .finish_unwrapped()
 }

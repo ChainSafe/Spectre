@@ -4,8 +4,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
 
 use crate::rpc_api::{
-    EvmProofResult, GenProofRotationParams, GenProofStepParams, EVM_PROOF_ROTATION_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT,
+    EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
+    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT,
+    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
 };
 
 /// Error object in a response
@@ -57,6 +59,23 @@ impl Client {
         params: GenProofStepParams,
     ) -> Result<EvmProofResult, Error> {
         self.call(EVM_PROOF_STEP_CIRCUIT, params).await
+    }
+
+    /// Generates a proof along with instance values for committee Rotation circuit
+    pub async fn gen_evm_proof_rotation_circuit_with_witness(
+        &self,
+        params: GenProofRotationWithWitnessParams,
+    ) -> Result<EvmProofResult, Error> {
+        self.call(EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, params)
+            .await
+    }
+
+    /// Generates a proof along with instance values for Step circuit
+    pub async fn gen_evm_proof_step_circuit_with_witness(
+        &self,
+        params: GenProofStepWithWitnessParams,
+    ) -> Result<EvmProofResult, Error> {
+        self.call(EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, params).await
     }
 
     /// Utility method for sending RPC requests over HTTP
