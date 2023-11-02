@@ -29,12 +29,18 @@ jobs:
     - name: Checkout LFS objects # used for structured reference strings for tests (.srs files)
       run: git lfs checkout
 
-    - name: Install latest nightly-2022-10-28
-      uses: dtolnay/rust-toolchain@stable
+    - name: Read toolchain file
+      id: rust-toolchain
+      run: |
+        RUST_TOOLCHAIN=$(grep 'channel' rust-toolchain.toml | awk '{split($0,a," = "); print a[2]}' | tr -d '"')
+        echo "RUST_TOOLCHAIN=$RUST_TOOLCHAIN" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Install toolchain
+      uses: dtolnay/rust-toolchain@master
       with:
-          toolchain: nightly-2022-10-28
-          override: true
-          components: rustfmt
+        toolchain: ${{ steps.rust-toolchain.outputs.RUST_TOOLCHAIN }}
+        components: rustfmt
 
     - name: Install just
       uses: extractions/setup-just@v1
