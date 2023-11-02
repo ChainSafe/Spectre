@@ -1,11 +1,13 @@
 use crate::gadget::crypto::G1Point;
 use eth_types::{AppCurveExt, Field, Spec};
+use group::UncompressedEncoding;
 use halo2_base::safe_types::ScalarField;
 use halo2_base::{safe_types::GateInstructions, AssignedValue, Context};
 use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
 use halo2_proofs::plonk::Error;
 use halo2curves::bls12_381::G1;
 use halo2curves::bls12_381::{self, G1Affine};
+use halo2curves::bn256;
 use itertools::Itertools;
 use poseidon::PoseidonChip;
 use poseidon_native::Poseidon as PoseidonNative;
@@ -85,4 +87,33 @@ pub fn poseidon_sponge<F: Field>(
     }
 
     Ok(current_poseidon_hash.unwrap())
+}
+
+pub fn poseidon_committee_commitment_from_uncompressed(
+    pubkeys_uncompressed: &Vec<Vec<u8>>,
+) -> Result<[u8; 32], Error> {
+    let pubkey_affines = pubkeys_uncompressed
+        .iter()
+        .cloned()
+        .map(|bytes| {
+            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
+                &bytes.as_slice().try_into().unwrap(),
+            )
+            .unwrap()
+        })
+        .collect_vec();
+    let poseidon_commitment =
+        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
+    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+}
+
+pub fn poseidon_committee_commitment_from_compressed(
+    pubkeys_compressed: &Vec<Vec<u8>>,
+) -> Result<[u8; 32], Error> {
+    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
+        bytes[47] &= 0b00011111;
+        bls12_381::Fq::from_bytes_le(&bytes)
+    });
+    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }

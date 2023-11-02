@@ -8,11 +8,12 @@ use ethers::contract::abigen;
 use halo2curves::bn256::{self, Fr};
 use itertools::Itertools;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
+use lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed;
 use lightclient_circuits::witness::CommitteeRotationArgs;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use test_utils::{poseidon_committee_commitment_from_compressed, read_test_files_and_gen_witness};
+use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
     RotateExternal,

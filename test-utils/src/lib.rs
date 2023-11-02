@@ -11,7 +11,9 @@ use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
-use lightclient_circuits::poseidon::fq_array_poseidon_native;
+use lightclient_circuits::poseidon::{
+    poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
+};
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
@@ -140,35 +142,6 @@ pub fn read_test_files_and_gen_witness(
         sync_committee_branch,
     };
     (sync_wit, rotation_wit)
-}
-
-pub fn poseidon_committee_commitment_from_uncompressed(
-    pubkeys_uncompressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkey_affines = pubkeys_uncompressed
-        .iter()
-        .cloned()
-        .map(|bytes| {
-            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
-                &bytes.as_slice().try_into().unwrap(),
-            )
-            .unwrap()
-        })
-        .collect_vec();
-    let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
-}
-
-pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
-    });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
 fn to_sync_ciruit_witness<
