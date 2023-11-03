@@ -267,6 +267,7 @@ mod test {
         },
     };
     use sha2::{Digest, Sha256};
+    use serial_test::serial;
 
     fn test_circuit<F: Field>(
         k: usize,
@@ -303,6 +304,7 @@ mod test {
     }
 
     #[test]
+    #[serial]
     fn test_sha256_wide_params_gen() {
         let k = 10;
         let test_input = vec![1u8; 64];

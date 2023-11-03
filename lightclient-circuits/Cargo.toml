@@ -45,6 +45,7 @@ lazy_static = "1.4"
 
 [dev-dependencies]
 rstest = "0.18.2"
+serial_test = "2.0.0"
 test-utils = { workspace = true }
 
 [features]

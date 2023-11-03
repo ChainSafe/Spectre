@@ -210,7 +210,6 @@ mod test {
 
     use crate::gadget::crypto::ShaCircuitBuilder;
     use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
-
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
@@ -228,6 +227,7 @@ mod test {
         },
     };
     use sha2::{Digest, Sha256};
+    use serial_test::serial;
 
     fn test_circuit<F: Field>(
         k: usize,
@@ -246,6 +246,7 @@ mod test {
     }
 
     #[test]
+    #[serial]
     fn test_sha256_chip_constant_size() {
         let k = 15;
 
@@ -260,6 +261,7 @@ mod test {
     }
 
     #[test]
+    #[serial]
     fn test_sha256_params_gen() {
         let k = 15;
         let test_input = vec![0u8; 64];

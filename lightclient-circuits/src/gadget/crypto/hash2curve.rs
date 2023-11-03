@@ -649,6 +649,7 @@ mod test {
     use halo2_proofs::circuit::Value;
     use halo2curves::bls12_381::G2;
     use sha2::{Digest, Sha256};
+    use serial_test::serial;
 
     fn get_circuit<F: Field>(
         k: usize,
@@ -679,8 +680,9 @@ mod test {
     }
 
     #[test]
+    #[serial]
     fn test_hash_to_g2() {
-        let k = 17;
+        let k = 20;
 
         let test_input = vec![0u8; 32];
         let builder = ShaThreadBuilder::<Fr>::mock();
