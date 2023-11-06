@@ -10,6 +10,7 @@ use halo2_base::halo2_proofs::{
 };
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
+use lightclient_circuits::LIMB_BITS;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::gadget::crypto;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
@@ -17,7 +18,6 @@ use lightclient_circuits::util::gen_srs;
 use lightclient_circuits::util::AppCircuit;
 use lightclient_circuits::util::Eth2ConfigPinning;
 use lightclient_circuits::util::Halo2ConfigPinning;
-use lightclient_circuits::util::{full_prover, full_verifier};
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use rstest::rstest;
 use snark_verifier_sdk::CircuitExt;
@@ -172,21 +172,22 @@ fn to_sync_ciruit_witness<
         ..Default::default()
     };
 
-    args.signature_compressed.reverse();
+    // args.signature_compressed.reverse();
     let pubkeys_uncompressed = zipline_witness
         .committee
         .pubkeys
         .iter()
         .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
+            // let p = pk.decompressed_bytes();
+            // let mut x = p[0..48].to_vec();
+            // let mut y = p[48..96].to_vec();
+            // x.reverse();
+            // y.reverse();
+            // let mut res = vec![];
+            // res.append(&mut x);
+            // res.append(&mut y);
+            // res
+            pk.decompressed_bytes()
         })
         .collect_vec();
     args.pubkeys_uncompressed = pubkeys_uncompressed;
@@ -442,7 +443,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
         .unwrap()
     };
 
-    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, todo!());
+    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
 
     let timer = start_timer!(|| "sync_step mock prover run");
     let prover =
@@ -469,20 +470,13 @@ fn test_eth2_spec_proofgen(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
-
-    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
-        CircuitBuilderStage::Prover,
-        Some(pinning),
+    let _ = SyncStepCircuit::<Minimal, Fr>::gen_proof_shplonk(
+        &params,
+        &pk,
+        "./config/sync_step.json",
         &witness,
-        K,
     )
-    .unwrap();
-
-    let instances = circuit.instances();
-    let proof = full_prover(&params, &pk, circuit, instances.clone());
-
-    assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+    .expect("proof generation & verification should not fail");
 }
 
 #[rstest]

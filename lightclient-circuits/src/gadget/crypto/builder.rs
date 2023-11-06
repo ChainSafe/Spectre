@@ -166,7 +166,12 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
     }
 
     pub fn calculate_params(&mut self, minimum_rows: Option<usize>) -> BaseCircuitParams {
-        self.base.calculate_params(minimum_rows)
+        let params = self.base.calculate_params(minimum_rows);
+        set_var(
+            "GATE_CONFIG_PARAMS",
+            serde_json::to_string(&params).unwrap(),
+        );
+        params
     }
 
     pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, GateManager::CustomContext<'_>) {
@@ -187,15 +192,15 @@ impl<F: Field, GateManager: CommonGateManager<F>> CommonCircuitBuilder<F>
     }
 
     fn thread_count(&self) -> usize {
-        self.thread_count()
+        unimplemented!()
     }
 
     fn new_context(&self, context_id: usize) -> Context<F> {
-        self.new_context(context_id)
+        unimplemented!()
     }
 
     fn new_thread(&mut self) -> &mut Context<F> {
-        self.new_thread()
+        unimplemented!()
     }
 }
 

@@ -20,7 +20,8 @@ use crate::{
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
-    witness::{self, HashInput, HashInputChunk, SyncStepArgs}, Eth2CircuitBuilder,
+    witness::{self, HashInput, HashInputChunk, SyncStepArgs},
+    Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
@@ -85,12 +86,12 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
         let range = fp_chip.range();
         let gate = range.gate();
         let sha256_chip = Sha256Chip::new(range);
-        let fp2_chip = Fp2Chip::<F>::new(&fp_chip);
+        let fp2_chip = Fp2Chip::<F>::new(fp_chip);
         let g1_chip = EccChip::new(fp2_chip.fp_chip());
         let g2_chip = EccChip::new(&fp2_chip);
         let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
-        let pairing_chip = PairingChip::new(&fp_chip);
-        let bls_chip = BlsSignatureChip::new(&fp_chip, &pairing_chip);
+        let pairing_chip = PairingChip::new(fp_chip);
+        let bls_chip = BlsSignatureChip::new(fp_chip, &pairing_chip);
         let h2c_chip = HashToCurveChip::new(&sha256_chip, &fp2_chip);
 
         let execution_payload_root: HashInputChunk<QuantumCell<F>> =
@@ -441,18 +442,21 @@ impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
         args: &Self::Witness,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
-        let mut builder =
-            Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
-                .use_k(k as usize)
-                .use_instance_columns(1);
+        let mut builder = Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
+            .use_k(k as usize)
+            .use_instance_columns(1);
         let range = builder.range_chip(8);
-        let fp_chip = FpChip::new(&range, 112, 4);
+        let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
 
         match stage {
             CircuitBuilderStage::Prover => {
                 builder.set_instances(0, assigned_instances);
+                if let Some(pinning) = pinning {
+                    builder.set_params(pinning.params);
+                    builder.set_break_points(pinning.break_points);
+                }
             }
             _ => {
                 builder.calculate_params(Some(
@@ -477,7 +481,7 @@ mod tests {
     };
 
     use crate::{
-        util::{full_prover, full_verifier, gen_pkey, Halo2ConfigPinning},
+        util::{gen_pkey, Halo2ConfigPinning},
         witness::SyncStepArgs,
     };
 
@@ -548,20 +552,13 @@ mod tests {
 
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
-
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Prover,
-            Some(pinning),
+        let _ = SyncStepCircuit::<Testnet, Fr>::gen_proof_shplonk(
+            &params,
+            &pk,
+            "./config/sync_step.json",
             &witness,
-            K,
         )
-        .unwrap();
-
-        let instances = circuit.instances();
-        let proof = full_prover(&params, &pk, circuit, instances.clone());
-
-        assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+        .expect("proof generation & verification should not fail");
     }
 
     #[test]

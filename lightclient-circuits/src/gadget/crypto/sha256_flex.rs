@@ -182,9 +182,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
                 builder.main().constrain_equal(&assigned_word, &sum);
                 assigned_bytes
             })
-            .collect_vec()
-            .try_into()
-            .unwrap();
+            .collect_vec();
 
         Ok(output_digest_bytes)
     }
@@ -205,7 +203,7 @@ mod test {
     use std::{cell::RefCell, marker::PhantomData};
 
     use crate::gadget::crypto::ShaCircuitBuilder;
-    use crate::util::{full_prover, full_verifier, gen_pkey, Challenges, IntoWitness};
+    use crate::util::{gen_pkey, Challenges, IntoWitness};
 
     use super::*;
     use ark_std::{end_timer, start_timer};

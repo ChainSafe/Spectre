@@ -1,6 +1,8 @@
 use std::{
     env::{set_var, var},
-    iter, path::Path, fs::File,
+    fs::File,
+    iter,
+    path::Path,
 };
 
 use eth_types::Testnet;
@@ -14,16 +16,18 @@ use halo2_base::{
     utils::fs::gen_srs,
 };
 use serde::{Deserialize, Serialize};
-use snark_verifier_sdk::{halo2::aggregation::{AggregationCircuit, AggregationConfigParams}, Snark, SHPLONK};
+use snark_verifier_sdk::{
+    halo2::aggregation::{AggregationCircuit, AggregationConfigParams},
+    Snark, SHPLONK,
+};
 
-use crate::util::{AppCircuit, Eth2ConfigPinning, PinnableCircuit, Halo2ConfigPinning};
+use crate::util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning, PinnableCircuit};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationConfigPinning {
     pub params: AggregationConfigParams,
     pub break_points: MultiPhaseThreadBreakPoints,
 }
-
 
 impl Halo2ConfigPinning for AggregationConfigPinning {
     type BreakPoints = MultiPhaseThreadBreakPoints;

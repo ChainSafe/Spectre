@@ -199,11 +199,6 @@ pub fn expr_from_bytes<F: Field, E: Expr<F>>(bytes: &[E]) -> Expression<F> {
     value
 }
 
-/// Returns 2**by as Field
-pub fn pow_of_two<F: Field>(by: usize) -> F {
-    F::from(2).pow(&[by as u64, 0, 0, 0])
-}
-
 /// Returns the random linear combination of the inputs.
 /// Encoding is done as follows: v_0 * R^0 + v_1 * R^1 + ...
 pub mod rlc {

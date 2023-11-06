@@ -9,7 +9,7 @@ use crate::{
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
-    witness::{self, HashInput, HashInputChunk}, Eth2CircuitBuilder,
+    witness::{self, HashInput, HashInputChunk}, Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
@@ -222,13 +222,17 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
                 .use_k(k as usize)
                 .use_instance_columns(1);
         let range = builder.range_chip(8);
-        let fp_chip = FpChip::new(&range, 120, 4);
+        let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
 
         match stage {
             CircuitBuilderStage::Prover => {
                 builder.set_instances(0, assigned_instances);
+                if let Some(pinning) = pinning {
+                    builder.set_params(pinning.params);
+                    builder.set_break_points(pinning.break_points);
+                }
             }
             _ => {
                 builder.calculate_params(Some(
@@ -255,7 +259,7 @@ mod tests {
     use crate::{
         aggregation::AggregationConfigPinning,
         gadget::crypto::constant_randomness,
-        util::{full_prover, full_verifier, gen_pkey, Halo2ConfigPinning, PinnableCircuit},
+        util::{gen_pkey, Halo2ConfigPinning, PinnableCircuit},
         witness::{CommitteeRotationArgs, SyncStepArgs},
     };
 
@@ -361,20 +365,13 @@ mod tests {
 
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
-
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Prover,
-            Some(pinning),
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::gen_proof_shplonk(
+            &params,
+            &pk,
+            "./config/committee_update.json",
             &witness,
-            K,
         )
-        .unwrap();
-
-        let instances = circuit.instances();
-        let proof = full_prover(&params, &pk, circuit, instances.clone());
-
-        assert!(full_verifier(&params, pk.get_vk(), proof, instances))
+        .expect("proof generation & verification should not fail");
     }
 
     #[test]
@@ -406,22 +403,13 @@ mod tests {
             &vec![snark.clone()],
         );
 
-        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
-
-        let agg_circuit = AggregationCircuit::create_circuit(
-            CircuitBuilderStage::Prover,
-            Some(agg_config),
+        let circuit = AggregationCircuit::gen_proof_shplonk(
+            &params,
+            &pk,
+            AGG_CONFIG_PATH,
             &vec![snark.clone()],
-            AGG_K,
         )
-        .unwrap();
-
-        let instances = agg_circuit.instances();
-        let num_instances = agg_circuit.num_instance();
-
-        let proof = full_prover(&params, &pk, agg_circuit, instances.clone());
-
-        assert!(full_verifier(&params, pk.get_vk(), proof, instances));
+        .expect("proof generation & verification should not fail");
     }
 
     #[test]

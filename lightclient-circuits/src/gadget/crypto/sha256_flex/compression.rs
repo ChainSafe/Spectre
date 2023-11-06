@@ -227,7 +227,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         };
         a_spread = state_to_spread_u32(thread_pool, spread_chip, &a)?;
     }
-    let new_states = vec![a, b, c, d, e, f, g, h];
+    let new_states = [a, b, c, d, e, f, g, h];
     let next_state_words = new_states
         .iter()
         .copied()
@@ -279,7 +279,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 ) -> AssignedValue<F> {
     let gate = range.gate();
     let lo = F::from(x.value().get_lower_32() as u64);
-    let hi = F::from(((x.value().get_lower_64() >> 32) & ((1u64 << 32) - 1)) as u64);
+    let hi = F::from((x.value().get_lower_64() >> 32) & ((1u64 << 32) - 1));
     let assigned_lo = ctx.load_witness(lo);
     let assigned_hi = ctx.load_witness(hi);
     range.range_check(ctx, assigned_lo, 32);

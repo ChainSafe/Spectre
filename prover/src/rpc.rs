@@ -5,21 +5,14 @@ use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
-    aggregation::AggregationConfigPinning,
     committee_update_circuit::CommitteeUpdateCircuit,
-    halo2_base::gates::circuit::CircuitBuilderStage,
     sync_step_circuit::SyncStepCircuit,
-    util::{gen_srs, AppCircuit, Halo2ConfigPinning},
+    util::{gen_srs, AppCircuit},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
 use serde::{Deserialize, Serialize};
 
-use snark_verifier_sdk::{
-    evm::gen_evm_verifier_shplonk,
-    gen_pk,
-    halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
-    CircuitExt, Snark, SHPLONK,
-};
+use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 
 use std::path::PathBuf;
 

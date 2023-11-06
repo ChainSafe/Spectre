@@ -46,7 +46,7 @@ impl<T: Clone> HashInput<T> {
                 let mut all = left
                     .bytes
                     .into_iter()
-                    .chain(right.bytes.into_iter())
+                    .chain(right.bytes)
                     .map(f)
                     .collect_vec();
                 let remainer = all.split_off(left_size);
