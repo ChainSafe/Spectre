@@ -57,7 +57,6 @@ pub fn fq_array_poseidon_native<F: Field>(
                 .collect_vec()
         })
         .collect_vec();
-
     let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
     let mut current_poseidon_hash = None;
 

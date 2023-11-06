@@ -121,6 +121,39 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         Ok(public_inputs)
     }
 
+    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>>
+    where
+        [(); { S::SYNC_COMMITTEE_SIZE }]:,
+    {
+        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes.reverse();
+            bytes[47] &= 0b00011111;
+            bls12_381::Fq::from_bytes_le(&bytes)
+        });
+
+        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+
+        let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
+            .pubkeys_compressed
+            .iter()
+            .cloned()
+            .map(|v| v.try_into().unwrap())
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let ssz_root = pk_vector.hash_tree_root().unwrap();
+
+        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
+
+        let instance_vec = iter::once(poseidon_commitment)
+            .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .chain(finalized_header_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .collect();
+
+        vec![instance_vec]
+    }
+
     fn decode_pubkeys_x(
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,
