@@ -85,12 +85,6 @@ hex = "0.4"
 # halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "bls12-381/hash_to_curve" }
 halo2curves = { path = "../halo2curves" }
 
-# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-# halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
-# # halo2curves = { path = "../halo2curves" }
-
-# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-# halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
 halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
@@ -113,7 +107,3 @@ ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main" }
 [patch."https://github.com/polytope-labs/sync-committee-rs"]
 sync-committee-prover = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
 sync-committee-primitives = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
-
-# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-# # halo2curves = { git = "https://github.com/sygma-protocol/halo2curves", branch = "bls12-381/hash_to_curve" }
-# halo2curves = { path = "../halo2curves-pse" }

@@ -135,14 +135,14 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         let pk_l2 = AggregationCircuit::read_pk(
             &p2,
             "./build/committee_update_aggregation_l2.pkey",
-            &vec![l0_snark.clone()],
+            &vec![l1_snark.clone()],
         );
         AggregationCircuit::gen_evm_proof_shplonk(
             &p2,
             &pk_l2,
             agg_l2_config_path,
             None,
-            &vec![l0_snark.clone()],
+            &vec![l1_snark.clone()],
         )
         .map_err(JsonRpcError::internal)?
     };
