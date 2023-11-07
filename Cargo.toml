@@ -23,47 +23,21 @@ rpath = false
 lto = "thin"
 incremental = true
 
-[patch."https://github.com/axiom-crypto/halo2curves"]
-# halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "bls12-381/hash_to_curve" }
-halo2curves = { path = "../halo2curves" }
 [workspace.dependencies]
 lightclient-circuits = { path = "lightclient-circuits" }
 test-utils = { path = "test-utils" }
-ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
 eth-types = { path = "eth-types" }
 contracts = { path = "contracts" }
 preprocessor = { path = "preprocessor" }
-ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
-zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
-light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
-sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0" }
-halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
-halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
-    "halo2-pse",
-    "display",
-] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
-    "display",
-    "loader_halo2",
-    "loader_evm",
-    "halo2-pse",
-] }
-
-[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
-# halo2curves = { path = "../halo2curves" }
 
 # halo2
-halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
-    "dev-graph",
-] }
-halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", tag = "0.3.1" }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
     "halo2-pse",
     "display",
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
-poseidon = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
+halo2curves = { git = "https://github.com/axiom-crypto/halo2curves", version = "0.4.0" }
+
 
 # verifier SDK
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
@@ -81,6 +55,9 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
 
 # ethereum types
+ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
+light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "27e8a01" }
 sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0" }
 sync-committee-prover = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features = [
     "testnet",
@@ -104,13 +81,25 @@ serde_json = "1.0.78"
 log = "0.4.14"
 hex = "0.4"
 
-[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
-halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
+[patch."https://github.com/axiom-crypto/halo2curves"]
+# halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "bls12-381/hash_to_curve" }
+halo2curves = { path = "../halo2curves" }
+
+# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
+# halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
+# # halo2curves = { path = "../halo2curves" }
+
+# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
+# halo2curves = { git = "https://github.com/sygmaprotocol/halo2curves", branch = "dev/bls12_381" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496" }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496" }
-poseidon = { git = "https://github.com/timoftime/halo2-lib", rev = "95bf9a5ce6b62a3f28b163748a7494281d814496" }
+halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+    "halo2-pse",
+] }
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
 # snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
@@ -125,6 +114,6 @@ ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main" }
 sync-committee-prover = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
 sync-committee-primitives = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
 
-[patch."https://github.com/privacy-scaling-explorations/halo2curves"]
+# [patch."https://github.com/privacy-scaling-explorations/halo2curves"]
 # # halo2curves = { git = "https://github.com/sygma-protocol/halo2curves", branch = "bls12-381/hash_to_curve" }
 # halo2curves = { path = "../halo2curves-pse" }

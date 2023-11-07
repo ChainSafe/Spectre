@@ -8,8 +8,6 @@ pub mod rpc_client;
 use args::Cli;
 use axum::{response::IntoResponse, routing::post, Router};
 use cli_batteries::version;
-use ethers::prelude::*;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
 use http::StatusCode;
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 

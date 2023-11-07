@@ -2,9 +2,9 @@ use crate::args::{Args, Out, Proof};
 
 use ethers::abi::Address;
 use ethers::providers::{Http, Provider};
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use itertools::Itertools;
 use lightclient_circuits::{
+    halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine},
     committee_update_circuit::CommitteeUpdateCircuit,
     sync_step_circuit::SyncStepCircuit,
     util::{gen_srs, AppCircuit},

@@ -1,34 +1,34 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+use crate::execution_payload_header::ExecutionPayloadHeader;
+use crate::test_types::{ByteVector, TestMeta, TestStep};
 use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
-use halo2_base::safe_types::ScalarField;
 use halo2curves::bls12_381;
-use halo2curves::bn256::{self, Fr};
 use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::{self, Fr};
 use lightclient_circuits::poseidon::fq_array_poseidon_native;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use lightclient_circuits::LIMB_BITS;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use std::path::PathBuf;
+use std::path::Path;
 use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
-use crate::execution_payload_header::ExecutionPayloadHeader;
-use crate::test_types::{ByteVector, TestMeta, TestStep};
-
+pub mod conversions;
 mod execution_payload_header;
 mod test_types;
-pub mod conversions;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
-    path: &PathBuf,
+    path: &Path,
 ) -> anyhow::Result<(usize, [u8; 32])> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -36,17 +36,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
         .current_sync_committee
         .pubkeys
         .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
     let committee_poseidon =
         poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
@@ -54,7 +44,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
     Ok((sync_period, committee_poseidon))
 }
 
-pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
+pub fn validators_root_from_test_path(path: &Path) -> Root {
     let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
     Root::try_from(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
@@ -67,15 +57,12 @@ pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
 // Load the updates for a given test and only includes the first sequence of steps that Spectre can perform
 // e.g. the the steps are cut at the first `ForceUpdate` step
 pub fn valid_updates_from_test_path(
-    path: &PathBuf,
+    path: &Path,
 ) -> Vec<ethereum_consensus_types::LightClientUpdateCapella<32, 55, 5, 105, 6, 256, 32>> {
     let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
     let updates = steps
         .iter()
-        .take_while(|step| match step {
-            TestStep::ProcessUpdate { .. } => true,
-            _ => false,
-        })
+        .take_while(|step| matches!(step, TestStep::ProcessUpdate { .. }))
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
                 let update: LightClientUpdateCapella = load_snappy_ssz(
@@ -93,7 +80,7 @@ pub fn valid_updates_from_test_path(
 }
 
 pub fn read_test_files_and_gen_witness(
-    path: &PathBuf,
+    path: &Path,
 ) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -135,15 +122,15 @@ pub fn read_test_files_and_gen_witness(
             .map(|pk| pk.to_bytes().to_vec())
             .collect_vec(),
         randomness: crypto::constant_randomness(),
-        _spec: Default::default(),
         finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
+        _spec: Default::default(),
     };
     (sync_wit, rotation_wit)
 }
 
 pub fn poseidon_committee_commitment_from_uncompressed(
-    pubkeys_uncompressed: &Vec<Vec<u8>>,
+    pubkeys_uncompressed: &[Vec<u8>],
 ) -> anyhow::Result<[u8; 32]> {
     let pubkey_affines = pubkeys_uncompressed
         .iter()
@@ -156,19 +143,21 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         })
         .collect_vec();
     let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
+            .unwrap();
+    Ok(poseidon_commitment.to_bytes())
 }
 
 pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
+    pubkeys_compressed: &[Vec<u8>],
 ) -> anyhow::Result<[u8; 32]> {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
+        bytes[0] &= 0b00011111;
+        bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+            .expect("bad bls12_381::Fq encoding")
     });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS).unwrap();
+    Ok(poseidon_commitment.to_bytes())
 }
 
 fn to_sync_ciruit_witness<
@@ -201,22 +190,11 @@ fn to_sync_ciruit_witness<
         ..Default::default()
     };
 
-    args.signature_compressed.reverse();
     let pubkeys_uncompressed = zipline_witness
         .committee
         .pubkeys
         .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
     args.pubkeys_uncompressed = pubkeys_uncompressed;
     args.pariticipation_bits = zipline_witness

@@ -1,10 +1,9 @@
-#![feature(generic_const_exprs)]
-
 use ark_std::{end_timer, start_timer};
 use eth_types::Minimal;
-use halo2_base::gates::builder::CircuitBuilderStage;
-use halo2_proofs::dev::MockProver;
-use halo2curves::bn256;
+use halo2_base::gates::circuit::CircuitBuilderStage;
+use halo2_base::halo2_proofs::dev::MockProver;
+use halo2_base::halo2_proofs::halo2curves::bn256;
+use lightclient_circuits::LIMB_BITS;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::util::gen_srs;
@@ -56,7 +55,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     let prover = MockProver::<bn256::Fr>::run(
         K_ROTATION,
         &rotation_circuit,
-        rotation_circuit.instances(), //CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(rotation_witness.pubkeys_compressed),
+        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&rotation_witness, LIMB_BITS),
     )
     .unwrap();
     prover.assert_satisfied_par();
@@ -74,7 +73,8 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
         .unwrap()
     };
 
-    let sync_pi_commit = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
+    let sync_pi_commit =
+        SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
 
     let timer = start_timer!(|| "sync_step mock prover run");
     let prover =
@@ -101,7 +101,7 @@ fn test_eth2_spec_proofgen(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let _ = SyncStepCircuit::<Minimal, Fr>::gen_proof_shplonk(
+    let _ = SyncStepCircuit::<Minimal, bn256::Fr>::gen_proof_shplonk(
         &params,
         &pk,
         "./config/sync_step.json",

@@ -12,12 +12,7 @@ use lightclient_circuits::{
 use preprocessor::{fetch_rotation_args, fetch_step_args};
 
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
-use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
-use snark_verifier_sdk::{
-    gen_pk,
-    halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
-    CircuitExt, Snark, SHPLONK,
-};
+use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use std::path::PathBuf;
 
 use crate::rpc_api::{
