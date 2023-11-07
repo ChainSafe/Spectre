@@ -56,7 +56,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_bytes()
+            .as_ref()
             .try_into()
             .unwrap();
 

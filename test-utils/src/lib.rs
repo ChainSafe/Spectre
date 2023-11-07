@@ -18,12 +18,11 @@ use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use std::path::PathBuf;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
-
+use ethereum_consensus_types::BeaconBlockHeader;
 pub mod conversions;
 mod execution_payload_header;
 mod test_types;
@@ -209,7 +208,7 @@ fn to_sync_ciruit_witness<
             .light_client_update
             .attested_header
             .beacon
-            .proposer_index as u64,
+            .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
@@ -248,7 +247,7 @@ fn to_sync_ciruit_witness<
             .light_client_update
             .finalized_header
             .beacon
-            .proposer_index as u64,
+            .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update

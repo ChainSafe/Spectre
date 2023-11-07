@@ -34,7 +34,7 @@ async fn test_rotate_public_input_evm_equivalence(
         .clone()
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .as_ref()
         .try_into()
         .unwrap();
 
@@ -92,7 +92,7 @@ where
         let sync_committee_ssz = pk_vector
             .hash_tree_root()
             .unwrap()
-            .as_bytes()
+            .as_ref()
             .try_into()
             .unwrap();
 

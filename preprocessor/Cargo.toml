@@ -4,11 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ssz-rs.workspace = true
+ssz_rs.workspace = true
 halo2curves.workspace = true
-sync-committee-prover.workspace = true
-sync-committee-primitives.workspace = true
 group.workspace = true
+beacon-api-client.workspace = true
 
 # misc
 eyre = "0.6"
@@ -19,7 +18,8 @@ log.workspace = true
 itertools.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-
+ethereum-consensus-types.workspace = true
+zipline-cryptography = { workspace = true, features = ["serde"] }
 # local
 eth-types.workspace = true
 lightclient-circuits.workspace = true

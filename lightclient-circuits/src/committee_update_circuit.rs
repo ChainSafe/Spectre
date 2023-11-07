@@ -53,7 +53,6 @@ use pasta_curves::group::{ff, GroupEncoding};
 use poseidon::PoseidonChip;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::{Merkleized, Vector};
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -162,8 +161,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
 
         let instance_vec = iter::once(poseidon_commitment)
-            .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
-            .chain(finalized_header_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
+            .chain(finalized_header_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
             .collect();
 
         vec![instance_vec]
@@ -277,6 +276,7 @@ mod tests {
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
+    use ethereum_consensus_types::BeaconBlockHeader;
     use halo2_base::{
         gates::{
             builder::{CircuitBuilderStage, FlexGateConfigParams},

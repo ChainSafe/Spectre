@@ -16,7 +16,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
         .clone()
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .as_ref()
         .try_into()
         .unwrap();
 
@@ -62,7 +62,7 @@ where
     let sync_committee_ssz = pk_vector
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .as_ref()
         .try_into()
         .unwrap();
 

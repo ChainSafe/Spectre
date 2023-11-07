@@ -39,16 +39,16 @@ impl<const BYTES_PER_LOGS_BLOOM: usize, const MAX_EXTRA_DATA_BYTES: usize>
         >,
     ) -> Self {
         Self {
-            parent_hash: Node::from_bytes(header.parent_hash.as_ref().try_into().unwrap()),
+            parent_hash: header.parent_hash,
             fee_recipient: ByteVector(
                 Vector::try_from(header.fee_recipient.0.as_ref().to_vec()).unwrap(),
             ),
-            state_root: Node::from_bytes(header.state_root.as_ref().try_into().unwrap()),
-            receipts_root: Node::from_bytes(header.receipts_root.as_ref().try_into().unwrap()),
+            state_root: header.state_root.as_ref().try_into().unwrap(),
+            receipts_root: header.receipts_root.as_ref().try_into().unwrap(),
             logs_bloom: ByteVector(
                 Vector::try_from(header.logs_bloom.0.as_ref().to_vec()).unwrap(),
             ),
-            prev_randao: Node::from_bytes(header.prev_randao.as_ref().try_into().unwrap()),
+            prev_randao:header.prev_randao.as_ref().try_into().unwrap(),
             block_number: header.block_number,
             gas_limit: header.gas_limit,
             gas_used: header.gas_used,
@@ -57,13 +57,13 @@ impl<const BYTES_PER_LOGS_BLOOM: usize, const MAX_EXTRA_DATA_BYTES: usize>
             base_fee_per_gas: U256::from_bytes_le(
                 header.base_fee_per_gas.to_bytes_le().try_into().unwrap(),
             ),
-            block_hash: Node::from_bytes(header.block_hash.as_ref().try_into().unwrap()),
-            transactions_root: Node::from_bytes(
+            block_hash: header.block_hash.as_ref().try_into().unwrap(),
+            transactions_root: 
                 header.transactions_root.as_ref().try_into().unwrap(),
-            ),
-            withdrawals_root: Node::from_bytes(
+            
+            withdrawals_root: 
                 header.withdrawals_root.as_ref().try_into().unwrap(),
-            ),
+            
         }
     }
 }

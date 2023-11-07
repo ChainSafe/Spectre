@@ -1,89 +1,95 @@
 use std::marker::PhantomData;
 
-use eth_types::Spec;
+use beacon_api_client::{mainnet::Client, BlockId, ClientTypes, Value, VersionedValue};
+use eth_types::{Mainnet, Spec};
+use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella, Root};
 use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
+use log::debug;
+use reqwest::Url;
+use serde::{Deserialize, Serialize};
 use ssz_rs::Merkleized;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
-use sync_committee_prover::{BeaconStateType, SyncCommitteeProver};
 use tokio::fs;
-
-pub async fn fetch_rotation_args_at_block<S: Spec>(
-    client: reqwest::Client,
-    node_url: String,
-    block_id: String,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let client = SyncCommitteeProver { node_url, client };
-
-    let finalized_header = client.fetch_header(&block_id).await.unwrap();
-    let finalized_state = client
-        .fetch_beacon_state(&finalized_header.state_root.to_string())
-        .await
-        .unwrap();
-    to_rotation_args(finalized_header, finalized_state)
-}
-
+use zipline_cryptography::bls::BlsSignature;
 pub async fn fetch_rotation_args<S: Spec>(
     node_url: String,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let client = SyncCommitteeProver::new(node_url);
-    let finalized_header = client.fetch_header("finalized").await.unwrap();
-    let finalized_state = client
-        .fetch_beacon_state(&finalized_header.state_root.to_string())
-        .await
-        .unwrap();
-    to_rotation_args(finalized_header, finalized_state)
-}
+    let client = Client::new(Url::parse(&node_url)?);
 
-fn to_rotation_args<S: Spec>(
-    finalized_header: BeaconBlockHeader,
-    mut finalized_state: BeaconStateType,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let pubkeys_compressed = finalized_state
+    // TODO: Once the API is updated, we can avoid this struct definition
+    #[derive(Serialize, Deserialize)]
+    struct BeaconHeaderSummary {
+        pub root: Root,
+        pub canonical: bool,
+        pub header: SignedBeaconBlockHeader,
+    }
+    #[derive(Serialize, Deserialize)]
+    struct SignedBeaconBlockHeader {
+        pub message: BeaconBlockHeader,
+        pub signature: BlsSignature,
+    }
+
+    let id = BlockId::Head;
+    let route = format!("eth/v1/beacon/headers/{id}");
+    let block: BeaconHeaderSummary = client.get::<Value<_>>(&route).await?.data;
+    let slot = block.header.message.slot;
+    let start_period = slot / (32 * 256);
+    debug!("start period: {}", start_period);
+    let count = 1;
+    let route = format!("eth/v1/beacon/light_client/updates");
+    let mut updates: Vec<VersionedValue<LightClientUpdateCapella<512, 55, 5, 105, 6, 256, 32>>> =
+        client
+            .http
+            .get(client.endpoint.join(&route)?)
+            .query(&[("start_period", start_period), ("count", count)])
+            .send()
+            .await?
+            .json()
+            .await?;
+    assert!(updates.len() == 1, "should only get one update");
+    let mut update = updates.pop().unwrap().data;
+    let pubkeys_compressed = update
         .next_sync_committee
-        .public_keys
+        .pubkeys
         .iter()
-        .map(|pk| pk.to_vec())
+        .map(|pk| pk.to_bytes().to_vec())
         .collect_vec();
-
-    let mut sync_committee_branch =
-        ssz_rs::generate_proof(&mut finalized_state, &[S::SYNC_COMMITTEE_ROOT_INDEX * 2]).unwrap();
+    let mut sync_committee_branch = update.next_sync_committee_branch.as_ref().to_vec();
 
     sync_committee_branch.insert(
         0,
-        finalized_state
+        update
             .next_sync_committee
-            .aggregate_public_key
+            .aggregate_pubkey
             .hash_tree_root()
             .unwrap(),
     );
+
     assert!(
-        ssz_rs::verify_merkle_proof(
-            &finalized_state
-                .next_sync_committee
-                .public_keys
-                .hash_tree_root()
-                .unwrap(),
-            &sync_committee_branch,
-            &ssz_rs::GeneralizedIndex(S::SYNC_COMMITTEE_ROOT_INDEX * 2),
-            &finalized_header.state_root,
+        ssz_rs::is_valid_merkle_branch(
+            &update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
+            sync_committee_branch.iter(),
+            S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+            &update.attested_header.beacon.state_root,
         ),
         "Execution payload merkle proof verification failed"
     );
+
     let args = CommitteeRotationArgs::<S, Fr> {
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
-        finalized_header,
+        finalized_header: update.attested_header.beacon,
         sync_committee_branch: sync_committee_branch
-            .iter()
-            .map(|n| n.as_bytes().to_vec())
+            .into_iter()
+            .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
     };
-
     Ok(args)
 }
+
 pub async fn read_rotation_args<S: Spec>(
     path: String,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
@@ -133,7 +139,7 @@ mod tests {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
 
-        let witness = fetch_rotation_args::<Testnet>("http://3.128.78.74:5052".to_string())
+        let witness = fetch_rotation_args::<Testnet>("http://65.109.55.120:9596".to_string())
             .await
             .unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
@@ -164,7 +170,7 @@ mod tests {
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
 
-        let witness = fetch_rotation_args::<Testnet>("http://3.128.78.74:5052".to_string())
+        let witness = fetch_rotation_args::<Testnet>("http://65.109.55.120:9596".to_string())
             .await
             .unwrap();
 

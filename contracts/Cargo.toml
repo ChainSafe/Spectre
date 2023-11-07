@@ -10,7 +10,7 @@ path = "rust-abi/lib.rs"
 ethers = "2.0.10"
 lightclient-circuits.workspace = true
 eth-types.workspace = true
-ssz-rs.workspace = true
+ssz_rs.workspace = true
 halo2curves = { workspace = true }
 itertools = { workspace = true }
 halo2-base = { workspace = true }
