@@ -1,17 +1,66 @@
 #![feature(generic_const_exprs)]
 
 mod sync;
+use std::ops::Deref;
+
 use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
+use eth_types::Spec;
 use ethereum_consensus_types::{
-    BeaconBlockHeader, LightClientBootstrap, LightClientFinalityUpdate, LightClientUpdateCapella,
-    Root,
+    BeaconBlockHeader, ByteVector, LightClientBootstrap, LightClientFinalityUpdate,
+    LightClientUpdateCapella, Root,
 };
+use halo2curves::bn256::Fr;
+use itertools::Itertools;
+use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
-use ssz_rs::Node;
+use ssz_rs::{Node, Vector};
 pub use sync::*;
 mod rotation;
 pub use rotation::*;
 use zipline_cryptography::bls::BlsSignature;
+
+pub async fn light_client_update_to_args<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
+    update: &mut LightClientUpdateCapella<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_ROOT_INDEX },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::FINALIZED_HEADER_INDEX },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S, Fr>)>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
+    let finality_update = LightClientFinalityUpdate {
+        attested_header: update.attested_header.clone(),
+        finalized_header: update.finalized_header.clone(),
+        finality_branch: Vector::try_from(
+            update
+                .finality_branch
+                .iter()
+                .map(|v| ByteVector(Vector::try_from(v.deref().to_vec()).unwrap()))
+                .collect_vec(),
+        )
+        .unwrap(),
+        sync_aggregate: update.sync_aggregate.clone(),
+        signature_slot: update.signature_slot,
+    };
+
+    let rotation_args = rotation::rotation_args_from_update(client, update).await?;
+
+    let sync_args = sync::step_args_from_finality_update(client, finality_update).await?;
+
+    Ok((sync_args, rotation_args))
+}
 
 pub async fn get_block_header<C: ClientTypes>(
     client: &Client<C>,

@@ -32,13 +32,13 @@ where
         slot, period
     );
 
-    let update = get_light_client_update_at_period(client, period).await?;
-    rotation_args_from_update(client, update).await
+    let mut update = get_light_client_update_at_period(client, period).await?;
+    rotation_args_from_update(client, &mut update).await
 }
 
 pub async fn rotation_args_from_update<S: Spec, C: ClientTypes>(
     _client: &Client<C>,
-    mut update: LightClientUpdateCapella<
+    update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
         { S::SYNC_COMMITTEE_ROOT_INDEX },
         { S::SYNC_COMMITTEE_DEPTH },
@@ -92,7 +92,7 @@ where
     let args = CommitteeRotationArgs::<S, Fr> {
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
-        finalized_header: update.attested_header.beacon,
+        finalized_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
             .into_iter()
             .map(|n| n.to_vec())
