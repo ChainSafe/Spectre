@@ -403,11 +403,10 @@ mod tests {
 
         let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());
-        let lookup_bits = params.k() as usize - 1;
 
         let pk = AggregationCircuit::read_or_create_pk(
             &params,
-            "../build/aggregation.pkey",
+            "../build/committee_update_aggregation_22.pkey",
             AGG_CONFIG_PATH,
             false,
             &vec![snark.clone()],

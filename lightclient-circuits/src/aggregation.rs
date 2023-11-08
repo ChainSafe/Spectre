@@ -44,7 +44,7 @@ impl Halo2ConfigPinning for AggregationConfigPinning {
 
     fn set_var(&self) {
         set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
+            "AGG_CONFIG_PARAMS",
             serde_json::to_string(&self.params).unwrap(),
         );
         set_var("LOOKUP_BITS", (self.params.degree - 1).to_string());
@@ -56,7 +56,7 @@ impl Halo2ConfigPinning for AggregationConfigPinning {
 
     fn from_var(break_points: MultiPhaseThreadBreakPoints) -> Self {
         let params: AggregationConfigParams =
-            serde_json::from_str(&var("AGGR_CONFIG_PARAMS").unwrap()).unwrap();
+            serde_json::from_str(&var("AGG_CONFIG_PARAMS").unwrap()).unwrap();
         Self {
             params,
             break_points,
@@ -87,28 +87,36 @@ impl AppCircuit for AggregationCircuit {
         snark: &Self::Witness,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error> {
-        let lookup_bits = k as usize - 1;
+        // let lookup_bits = k as usize - 1;
         let params = gen_srs(k);
-        let circuit_params = pinning.map_or(AggregationConfigParams{
-            degree: k,
-            ..Default::default()
-        }, |p| p.params);
+        let circuit_params = pinning.clone().map_or(
+            AggregationConfigParams {
+                degree: k,
+                lookup_bits: 8,
+                ..Default::default()
+            },
+            |p| p.params,
+        );
         let mut circuit = AggregationCircuit::new::<SHPLONK>(
             stage,
             circuit_params,
             &params,
             snark.clone(),
             Default::default(),
-        ); 
+        );
 
         match stage {
             CircuitBuilderStage::Prover => {
                 circuit.expose_previous_instances(false);
+                circuit.set_params(circuit_params);
+                circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
             }
             _ => {
                 circuit.expose_previous_instances(false);
-                circuit.calculate_params(Some(10));
-                set_var("LOOKUP_BITS", lookup_bits.to_string());
+                set_var(
+                    "AGG_CONFIG_PARAMS",
+                    serde_json::to_string(&circuit.calculate_params(Some(10))).unwrap(),
+                );
             }
         };
 
