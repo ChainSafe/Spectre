@@ -22,12 +22,7 @@ where
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
-    let finality_update: LightClientFinalityUpdate<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    > = get_light_client_finality_update(client).await?;
+    let finality_update = get_light_client_finality_update(client).await?;
     step_args_from_finality_update(client, finality_update).await
 }
 

@@ -56,6 +56,9 @@ where
     [(); S::FINALIZED_HEADER_DEPTH]:,
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
 {
     match proof {
         Proof::CommitteeUpdate(args) => {

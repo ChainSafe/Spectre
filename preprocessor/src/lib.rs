@@ -35,6 +35,57 @@ pub async fn get_block_header<C: ClientTypes>(
     Ok(block.header.message)
 }
 
+pub async fn get_light_client_update_at_current_period<
+    C: ClientTypes,
+    const SYNC_COMMITTEE_SIZE: usize,
+    const NEXT_SYNC_COMMITTEE_GINDEX: usize,
+    const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
+    const FINALIZED_ROOT_GINDEX: usize,
+    const FINALIZED_ROOT_PROOF_SIZE: usize,
+    const BYTES_PER_LOGS_BLOOM: usize,
+    const MAX_EXTRA_DATA_BYTES: usize,
+>(
+    client: &Client<C>,
+) -> eyre::Result<
+    LightClientUpdateCapella<
+        SYNC_COMMITTEE_SIZE,
+        NEXT_SYNC_COMMITTEE_GINDEX,
+        NEXT_SYNC_COMMITTEE_PROOF_SIZE,
+        FINALIZED_ROOT_GINDEX,
+        FINALIZED_ROOT_PROOF_SIZE,
+        BYTES_PER_LOGS_BLOOM,
+        MAX_EXTRA_DATA_BYTES,
+    >,
+> {
+    let block = get_block_header(client, BlockId::Head).await?;
+    let slot = block.slot;
+    let period = slot / (32 * 256);
+
+    let route = format!("eth/v1/beacon/light_client/updates");
+    let mut updates: Vec<
+        VersionedValue<
+            LightClientUpdateCapella<
+                SYNC_COMMITTEE_SIZE,
+                NEXT_SYNC_COMMITTEE_GINDEX,
+                NEXT_SYNC_COMMITTEE_PROOF_SIZE,
+                FINALIZED_ROOT_GINDEX,
+                FINALIZED_ROOT_PROOF_SIZE,
+                BYTES_PER_LOGS_BLOOM,
+                MAX_EXTRA_DATA_BYTES,
+            >,
+        >,
+    > = client
+        .http
+        .get(client.endpoint.join(&route)?)
+        .query(&[("start_period", period), ("count", 1)])
+        .send()
+        .await?
+        .json()
+        .await?;
+    assert!(updates.len() == 1, "should only get one update");
+    Ok(updates.pop().unwrap().data)
+}
+
 pub async fn get_light_client_update_at_period<
     C: ClientTypes,
     const SYNC_COMMITTEE_SIZE: usize,

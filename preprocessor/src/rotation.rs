@@ -14,7 +14,16 @@ use crate::{get_block_header, get_light_client_update_at_period};
 
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let block = get_block_header(client, BlockId::Head).await?;
     let slot = block.slot;
     let period = slot / (32 * 256);
@@ -23,9 +32,31 @@ pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
         slot, period
     );
 
-    let mut update: LightClientUpdateCapella<512, 55, 5, 105, 6, 256, 32> =
-        get_light_client_update_at_period(client, period).await?;
+    let update = get_light_client_update_at_period(client, period).await?;
+    rotation_args_from_update(client, update).await
+}
 
+pub async fn rotation_args_from_update<S: Spec, C: ClientTypes>(
+    _client: &Client<C>,
+    mut update: LightClientUpdateCapella<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_ROOT_INDEX },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::FINALIZED_HEADER_INDEX },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let pubkeys_compressed = update
         .next_sync_committee
         .pubkeys
