@@ -15,7 +15,7 @@ use crate::{get_block_header, get_light_client_update_at_period};
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let block = get_block_header(&client, BlockId::Head).await?;
+    let block = get_block_header(client, BlockId::Head).await?;
     let slot = block.slot;
     let period = slot / (32 * 256);
     debug!(
@@ -24,7 +24,7 @@ pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     );
 
     let mut update: LightClientUpdateCapella<512, 55, 5, 105, 6, 256, 32> =
-        get_light_client_update_at_period(&client, period).await?;
+        get_light_client_update_at_period(client, period).await?;
 
     let pubkeys_compressed = update
         .next_sync_committee
@@ -113,6 +113,7 @@ mod tests {
         committee_update_circuit::CommitteeUpdateCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
+    use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]

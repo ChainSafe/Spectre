@@ -27,8 +27,8 @@ where
         { S::FINALIZED_HEADER_DEPTH },
         { S::BYTES_PER_LOGS_BLOOM },
         { S::MAX_EXTRA_DATA_BYTES },
-    > = get_light_client_finality_update(&client).await?;
-    step_args_from_finality_update(&client, finality_update).await
+    > = get_light_client_finality_update(client).await?;
+    step_args_from_finality_update(client, finality_update).await
 }
 
 pub async fn step_args_from_finality_update<S: Spec, C: ClientTypes>(
@@ -45,7 +45,7 @@ pub async fn step_args_from_finality_update<S: Spec, C: ClientTypes>(
         .await
         .unwrap();
     let bootstrap: LightClientBootstrap<512, 5, 256, 32> =
-        get_light_client_bootstrap(&client, block_root).await?;
+        get_light_client_bootstrap(client, block_root).await?;
 
     let pubkeys_uncompressed = bootstrap
         .current_sync_committee
