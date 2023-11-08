@@ -13,6 +13,7 @@ use lightclient_circuits::witness::CommitteeRotationArgs;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
+use std::ops::Deref;
 use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
@@ -34,7 +35,7 @@ async fn test_rotate_public_input_evm_equivalence(
         .clone()
         .hash_tree_root()
         .unwrap()
-        .as_ref()
+        .deref()
         .try_into()
         .unwrap();
 
@@ -92,7 +93,7 @@ where
         let sync_committee_ssz = pk_vector
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .try_into()
             .unwrap();
 

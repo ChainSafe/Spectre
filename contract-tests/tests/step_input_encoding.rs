@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::path::PathBuf;
 
 use contract_tests::make_client;
@@ -56,7 +57,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .try_into()
             .unwrap();
 
