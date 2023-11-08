@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::ops::Deref;
+
 
 use beacon_api_client::mainnet::Client;
 use eth_types::Spec;

@@ -343,7 +343,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     Params(params): Params<GenProofStepWithWitnessParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
-    let GenProofStepWithWitnessParams { spec, k, witness } = params.clone();
+    let GenProofStepWithWitnessParams { spec, k, witness } = params;
 
     let config_path = PathBuf::from("../lightclient-circuits/config/sync_step.json");
     let build_dir = PathBuf::from("./build");

@@ -4,10 +4,10 @@ use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
-use halo2_base::safe_types::ScalarField;
-use halo2curves::bls12_381;
-use halo2curves::bn256::{self, Fr};
-use halo2curves::group::UncompressedEncoding;
+
+
+use halo2curves::bn256::{Fr};
+
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;

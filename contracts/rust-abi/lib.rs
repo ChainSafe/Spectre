@@ -53,7 +53,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
         SyncStepInput {
             attested_slot: args.attested_header.slot,
             finalized_slot: args.finalized_header.slot,
-            participation: participation,
+            participation,
             finalized_header_root,
             execution_payload_root,
         }

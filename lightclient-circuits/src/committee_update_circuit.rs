@@ -330,7 +330,7 @@ mod tests {
             pubkeys_compressed,
             randomness: constant_randomness(),
             _spec: PhantomData,
-            finalized_header: finalized_header,
+            finalized_header,
             sync_committee_branch: committee_root_branch,
         }
     }
@@ -437,7 +437,7 @@ mod tests {
         let agg_circuit = AggregationCircuit::create_circuit(
             CircuitBuilderStage::Prover,
             Some(agg_config),
-            &vec![snark.clone()],
+            &vec![snark],
             AGG_K,
         )
         .unwrap();
@@ -556,7 +556,7 @@ mod tests {
                 Some(pinning.break_points),
                 lookup_bits,
                 &p1,
-                iter::once(l0_snark.clone()),
+                iter::once(l0_snark),
             );
             circuit.expose_previous_instances(false);
 
@@ -589,7 +589,7 @@ mod tests {
             );
             let mut circuit = AggregationCircuit::prover::<SHPLONK>(
                 &p2,
-                iter::once(l1_snark.clone()),
+                iter::once(l1_snark),
                 pinning.break_points,
             );
             circuit.expose_previous_instances(true);

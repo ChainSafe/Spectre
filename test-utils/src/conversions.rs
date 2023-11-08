@@ -26,7 +26,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
     SyncStepInput {
         attested_slot: args.attested_header.slot,
         finalized_slot: args.finalized_header.slot,
-        participation: participation,
+        participation,
         finalized_header_root,
         execution_payload_root,
     }
