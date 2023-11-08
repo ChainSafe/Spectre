@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::ops::Deref;
 
 use beacon_api_client::mainnet::Client;
 use eth_types::Spec;
@@ -71,36 +72,33 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
 
     assert!(
         ssz_rs::is_valid_merkle_branch(
-            &Node::try_from(execution_payload_root.as_slice())?,
-            execution_payload_branch
-                .iter()
-                .map(|n| Node::try_from(n.as_slice()).unwrap())
-                .collect_vec()
-                .iter(),
+            Node::try_from(execution_payload_root.as_slice())?,
+            &execution_payload_branch,
             S::EXECUTION_STATE_ROOT_DEPTH,
             S::EXECUTION_STATE_ROOT_INDEX,
-            &finality_update.finalized_header.beacon.body_root,
-        ),
+            finality_update.finalized_header.beacon.body_root,
+        )
+        .is_ok(),
         "Execution payload merkle proof verification failed"
     );
     assert!(
         ssz_rs::is_valid_merkle_branch(
-            &finality_update
+            finality_update
                 .finalized_header
                 .beacon
                 .clone()
                 .hash_tree_root()
                 .unwrap(),
-            finality_update
+            &finality_update
                 .finality_branch
                 .iter()
-                .map(|n| Node::try_from(n.0.as_slice()).unwrap())
-                .collect_vec()
-                .iter(),
+                .map(|n| n.as_ref())
+                .collect_vec(),
             S::FINALIZED_HEADER_DEPTH,
             S::FINALIZED_HEADER_INDEX,
-            &finality_update.attested_header.beacon.state_root,
-        ),
+            finality_update.attested_header.beacon.state_root,
+        )
+        .is_ok(),
         "Finality merkle proof verification failed"
     );
 

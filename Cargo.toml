@@ -24,14 +24,14 @@ incremental = true
 [workspace.dependencies]
 lightclient-circuits = { path = "lightclient-circuits" }
 test-utils = { path = "test-utils" }
-ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "c4cb56994cc97f5a35d771d997a4479042f2aeb1" }
+ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
 eth-types = { path = "eth-types" }
 contracts = { path = "contracts" }
 preprocessor = { path = "preprocessor" }
-zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "c4cb56994cc97f5a35d771d997a4479042f2aeb1" }
-zipline-cryptography =  { package = "cryptography", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "c4cb56994cc97f5a35d771d997a4479042f2aeb1" }
-light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "c4cb56994cc97f5a35d771d997a4479042f2aeb1" }
-beacon-api-client = { git = "https://github.com/ralexstokes/ethereum-consensus.git", branch = "main" }
+zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
+zipline-cryptography =  { package = "cryptography", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
+light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
+beacon-api-client = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f" }
 
 # halo2
 halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", tag = "v2023_02_02", features = [
@@ -60,12 +60,6 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 ] }
 halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
 
-# ethereum types
-# sync-committee-primitives = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0" }
-# sync-committee-prover = { git = "https://github.com/polytope-labs/sync-committee-rs", version = "0.1.0", features = [
-#     "testnet",
-# ] }
-# ssz-rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "adf1a0b14cef90b9536f28ef89da1fab316465e1" }
 ssz_rs = "0.9"
 
 # crypto
@@ -98,11 +92,4 @@ snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch =
 snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm" }
 
 [patch.crates-io]
-ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "7e6986da74876f3e5d02547a01e17e8a3a1704e7" }
-
-# [patch."https://github.com/ralexstokes/ssz-rs"]
-# ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main" }
-
-# [patch."https://github.com/polytope-labs/sync-committee-rs"]
-# sync-committee-prover = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
-# sync-committee-primitives = { git = "https://github.com/timoftime/sync-committee-rs", branch = "dev/accept-ssz" }
+ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }

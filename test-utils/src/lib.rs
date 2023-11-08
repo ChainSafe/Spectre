@@ -17,6 +17,7 @@ use lightclient_circuits::poseidon::{
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
+use std::ops::Deref;
 use std::path::PathBuf;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
@@ -26,6 +27,8 @@ use ethereum_consensus_types::BeaconBlockHeader;
 pub mod conversions;
 mod execution_payload_header;
 mod test_types;
+
+pub(crate) const U256_BYTE_COUNT: usize = 32;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
@@ -112,7 +115,7 @@ pub fn read_test_files_and_gen_witness(
         .light_client_update
         .next_sync_committee_branch
         .iter()
-        .map(|n| n.as_ref().to_vec())
+        .map(|n| n.deref().to_vec())
         .collect_vec();
 
     let agg_pubkeys_compressed = zipline_witness
@@ -124,7 +127,7 @@ pub fn read_test_files_and_gen_witness(
 
     let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
-    sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().as_ref().to_vec());
+    sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
     let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
         pubkeys_compressed: zipline_witness
@@ -303,14 +306,14 @@ fn to_sync_ciruit_witness<
         execution_payload_header
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .to_vec()
     };
     args.finality_branch = zipline_witness
         .light_client_update
         .finality_branch
         .iter()
-        .map(|b| b.as_ref().to_vec())
+        .map(|b| b.deref().to_vec())
         .collect();
     args
 }

@@ -1,4 +1,6 @@
 #![feature(generic_const_exprs)]
+use std::ops::Deref;
+
 use ethers::contract::abigen;
 use halo2_base::utils::ScalarField;
 use halo2curves::bls12_381::{self};
@@ -42,7 +44,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .try_into()
             .unwrap();
 
@@ -88,7 +90,7 @@ where
         let sync_committee_ssz = pk_vector
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .try_into()
             .unwrap();
 

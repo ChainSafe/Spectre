@@ -68,12 +68,16 @@ pub async fn fetch_rotation_args<S: Spec>(
 
     assert!(
         ssz_rs::is_valid_merkle_branch(
-            &update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
-            sync_committee_branch.iter(),
+            update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
+            &sync_committee_branch
+                .iter()
+                .map(|n| n.as_ref())
+                .collect_vec(),
             S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-            &update.attested_header.beacon.state_root,
-        ),
+            update.attested_header.beacon.state_root,
+        )
+        .is_ok(),
         "Execution payload merkle proof verification failed"
     );
 
