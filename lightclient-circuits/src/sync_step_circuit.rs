@@ -121,11 +121,6 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
-        let fp12_one = {
-            use halo2curves::ff::Field;
-            fp12_chip.load_constant(builder.main(), Fq12::ONE)
-        };
-
         // Verify attestted header
         let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
         let attested_header_state_root = args

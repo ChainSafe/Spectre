@@ -82,24 +82,31 @@ log = "0.4.14"
 hex = "0.4"
 
 [patch."https://github.com/axiom-crypto/halo2curves"]
-# halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "bls12-381/hash_to_curve" }
-halo2curves = { path = "../halo2curves" }
+halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "support_bls12-381" }
+# halo2curves = { path = "../halo2curves" }
 
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
     "halo2-pse",
     "display",
 ] }
-halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
     "halo2-pse",
 ] }
+# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+#     "halo2-pse",
+#     "display",
+# ] }
+# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+#     "halo2-pse",
+# ] }
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
-# snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
-# snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "timoftime/bump-revm", default-features = false }
-snark-verifier = { path = "../snark-verifier/snark-verifier" }
-snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
+snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
+snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
+# snark-verifier = { path = "../snark-verifier/snark-verifier" }
+# snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
 
 [patch."https://github.com/ralexstokes/ssz-rs"]
 ssz-rs = { git = "https://github.com/polytope-labs/ssz-rs", branch = "main" }
