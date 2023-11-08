@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-
 use beacon_api_client::mainnet::Client;
 use eth_types::Spec;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};

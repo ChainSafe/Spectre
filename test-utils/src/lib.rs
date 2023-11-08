@@ -5,8 +5,7 @@ use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClie
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
 
-
-use halo2curves::bn256::{Fr};
+use halo2curves::bn256::Fr;
 
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
@@ -18,7 +17,7 @@ use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::Path;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
@@ -32,7 +31,7 @@ pub(crate) const U256_BYTE_COUNT: usize = 32;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
-    path: &PathBuf,
+    path: &Path,
 ) -> anyhow::Result<(usize, [u8; 32])> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -58,7 +57,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
     Ok((sync_period, committee_poseidon))
 }
 
-pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
+pub fn validators_root_from_test_path(path: &Path) -> Root {
     let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
     Root::try_from(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
@@ -71,15 +70,12 @@ pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
 // Load the updates for a given test and only includes the first sequence of steps that Spectre can perform
 // e.g. the the steps are cut at the first `ForceUpdate` step
 pub fn valid_updates_from_test_path(
-    path: &PathBuf,
+    path: &Path,
 ) -> Vec<ethereum_consensus_types::LightClientUpdateCapella<32, 55, 5, 105, 6, 256, 32>> {
     let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
     let updates = steps
         .iter()
-        .take_while(|step| match step {
-            TestStep::ProcessUpdate { .. } => true,
-            _ => false,
-        })
+        .take_while(|step| matches!(step, TestStep::ProcessUpdate { .. }))
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
                 let update: LightClientUpdateCapella = load_snappy_ssz(
@@ -97,7 +93,7 @@ pub fn valid_updates_from_test_path(
 }
 
 pub fn read_test_files_and_gen_witness(
-    path: &PathBuf,
+    path: &Path,
 ) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();

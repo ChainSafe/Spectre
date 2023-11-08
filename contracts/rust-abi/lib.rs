@@ -101,9 +101,7 @@ where
     }
 }
 
-pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
-) -> [u8; 32] {
+pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> [u8; 32] {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
         bytes[47] &= 0b00011111;
         bls12_381::Fq::from_bytes_le(&bytes)

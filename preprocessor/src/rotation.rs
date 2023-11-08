@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use beacon_api_client::{mainnet::Client, BlockId, Value, VersionedValue};
-use eth_types::{Spec};
+use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella, Root};
 use halo2curves::bn256::Fr;
 use itertools::Itertools;

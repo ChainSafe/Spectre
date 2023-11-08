@@ -90,7 +90,7 @@ pub fn poseidon_sponge<F: Field>(
 }
 
 pub fn poseidon_committee_commitment_from_uncompressed(
-    pubkeys_uncompressed: &Vec<Vec<u8>>,
+    pubkeys_uncompressed: &[Vec<u8>],
 ) -> Result<[u8; 32], Error> {
     let pubkey_affines = pubkeys_uncompressed
         .iter()
@@ -108,7 +108,7 @@ pub fn poseidon_committee_commitment_from_uncompressed(
 }
 
 pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
+    pubkeys_compressed: &[Vec<u8>],
 ) -> Result<[u8; 32], Error> {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
         bytes[47] &= 0b00011111;
