@@ -1,4 +1,5 @@
-pub use jsonrpc_v2::{Error, Id, RequestObject, V2};
+pub use jsonrpc_v2;
+use jsonrpc_v2::{Error, Id, RequestObject, V2};
 use reqwest::IntoUrl;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;

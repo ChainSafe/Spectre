@@ -1,54 +1,31 @@
 use std::marker::PhantomData;
 
-use beacon_api_client::{mainnet::Client, BlockId, Value, VersionedValue};
+use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella, Root};
+use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
 use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
 use log::debug;
-use reqwest::Url;
-use serde::{Deserialize, Serialize};
 use ssz_rs::Merkleized;
 use tokio::fs;
-use zipline_cryptography::bls::BlsSignature;
-pub async fn fetch_rotation_args<S: Spec>(
-    node_url: String,
+
+use crate::{get_block_header, get_light_client_update_at_period};
+
+pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
 ) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let client = Client::new(Url::parse(&node_url)?);
+    let block = get_block_header(&client, BlockId::Head).await?;
+    let slot = block.slot;
+    let period = slot / (32 * 256);
+    debug!(
+        "Fetching light client update at current Slot: {} at Period: {}",
+        slot, period
+    );
 
-    // TODO: Once the API is updated, we can avoid this struct definition
-    #[derive(Serialize, Deserialize)]
-    struct BeaconHeaderSummary {
-        pub root: Root,
-        pub canonical: bool,
-        pub header: SignedBeaconBlockHeader,
-    }
-    #[derive(Serialize, Deserialize)]
-    struct SignedBeaconBlockHeader {
-        pub message: BeaconBlockHeader,
-        pub signature: BlsSignature,
-    }
+    let mut update: LightClientUpdateCapella<512, 55, 5, 105, 6, 256, 32> =
+        get_light_client_update_at_period(&client, period).await?;
 
-    let id = BlockId::Head;
-    let route = format!("eth/v1/beacon/headers/{id}");
-    let block: BeaconHeaderSummary = client.get::<Value<_>>(&route).await?.data;
-    let slot = block.header.message.slot;
-    let start_period = slot / (32 * 256);
-    debug!("start period: {}", start_period);
-    let count = 1;
-    let route = format!("eth/v1/beacon/light_client/updates");
-    let mut updates: Vec<VersionedValue<LightClientUpdateCapella<512, 55, 5, 105, 6, 256, 32>>> =
-        client
-            .http
-            .get(client.endpoint.join(&route)?)
-            .query(&[("start_period", start_period), ("count", count)])
-            .send()
-            .await?
-            .json()
-            .await?;
-    assert!(updates.len() == 1, "should only get one update");
-    let mut update = updates.pop().unwrap().data;
     let pubkeys_compressed = update
         .next_sync_committee
         .pubkeys
@@ -126,6 +103,8 @@ pub async fn read_rotation_args<S: Spec>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
     use halo2_base::gates::builder::CircuitBuilderStage;
     use halo2_proofs::dev::MockProver;
@@ -136,16 +115,12 @@ mod tests {
     };
     use snark_verifier_sdk::CircuitExt;
 
-    use super::*;
-
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-
-        let witness = fetch_rotation_args::<Testnet>("http://65.109.55.120:9596".to_string())
-            .await
-            .unwrap();
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
@@ -173,10 +148,8 @@ mod tests {
             false,
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
-
-        let witness = fetch_rotation_args::<Testnet>("http://65.109.55.120:9596".to_string())
-            .await
-            .unwrap();
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

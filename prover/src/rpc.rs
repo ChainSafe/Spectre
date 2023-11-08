@@ -20,6 +20,7 @@ use snark_verifier_sdk::{
     CircuitExt, Snark, SHPLONK,
 };
 use std::path::PathBuf;
+use url::Url;
 
 use crate::rpc_api::{
     EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
@@ -93,21 +94,27 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 
     let (l0_snark, _pk_filename) = match spec {
         Spec::Minimal => {
-            let witness = fetch_rotation_args(beacon_api).await?;
+            let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
+            let witness: lightclient_circuits::witness::CommitteeRotationArgs<
+                eth_types::Minimal,
+                Fr,
+            > = fetch_rotation_args(&client).await?;
             (
                 gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?,
                 "agg_rotation_circuit_minimal.pkey",
             )
         }
         Spec::Testnet => {
-            let witness = fetch_rotation_args(beacon_api).await?;
+            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
+            let witness = fetch_rotation_args(&client).await?;
             (
                 gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?,
                 "agg_rotation_circuit_testnet.pkey",
             )
         }
         Spec::Mainnet => {
-            let witness = fetch_rotation_args(beacon_api).await?;
+            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
+            let witness = fetch_rotation_args(&client).await?;
             (
                 gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?,
                 "agg_rotation_circuit_mainnet.pkey",
@@ -295,7 +302,9 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
     let (proof, instances) = match spec {
         Spec::Minimal => {
             let pk_filename = format!("step_circuit_minimal.pkey");
-            let witness = fetch_step_args(beacon_api).await.unwrap();
+            let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
+
+            let witness = fetch_step_args(&client).await.unwrap();
             gen_evm_proof::<SyncStepCircuit<eth_types::Minimal, Fr>>(
                 k,
                 build_dir,
@@ -306,7 +315,9 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         }
         Spec::Testnet => {
             let pk_filename = format!("step_circuit_testnet.pkey");
-            let witness = fetch_step_args(beacon_api).await.unwrap();
+            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
+
+            let witness = fetch_step_args(&client).await.unwrap();
 
             gen_evm_proof::<SyncStepCircuit<eth_types::Testnet, Fr>>(
                 k,
@@ -318,7 +329,9 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         }
         Spec::Mainnet => {
             let pk_filename = format!("step_circuit_mainnet.pkey");
-            let witness = fetch_step_args(beacon_api).await.unwrap();
+            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
+
+            let witness = fetch_step_args(&client).await.unwrap();
 
             gen_evm_proof::<SyncStepCircuit<eth_types::Mainnet, Fr>>(
                 k,

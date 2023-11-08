@@ -1,31 +1,51 @@
 use std::marker::PhantomData;
 
-use beacon_api_client::mainnet::Client;
+use beacon_api_client::Client;
 use eth_types::Spec;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
-use reqwest::Url;
 use ssz_rs::{Merkleized, Node};
 
-use beacon_api_client::{BlockId, StateId, VersionedValue};
+use beacon_api_client::{BlockId, ClientTypes, StateId};
 use tokio::fs;
 
-pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStepArgs<S>> {
-    let client = Client::new(Url::parse(&node_url)?);
-    let block = client.get_beacon_block_root(BlockId::Head).await.unwrap();
-    let route = format!("eth/v1/beacon/light_client/bootstrap/{block:?}");
-    let bootstrap = client
-        .get::<VersionedValue<LightClientBootstrap<512, 5, 256, 32>>>(&route)
-        .await?
-        .data;
-    let finality_update = client
-        .get::<VersionedValue<LightClientFinalityUpdate<512, 6, 256, 32>>>(
-            "eth/v1/beacon/light_client/finality_update",
-        )
-        .await?
-        .data;
+use crate::{get_light_client_bootstrap, get_light_client_finality_update};
+
+pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
+) -> eyre::Result<SyncStepArgs<S>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+{
+    let finality_update: LightClientFinalityUpdate<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    > = get_light_client_finality_update(&client).await?;
+    step_args_from_finality_update(&client, finality_update).await
+}
+
+pub async fn step_args_from_finality_update<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
+    finality_update: LightClientFinalityUpdate<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+) -> eyre::Result<SyncStepArgs<S>> {
+    let block_root = client
+        .get_beacon_block_root(BlockId::Slot(finality_update.finalized_header.beacon.slot))
+        .await
+        .unwrap();
+    let bootstrap: LightClientBootstrap<512, 5, 256, 32> =
+        get_light_client_bootstrap(&client, block_root).await?;
 
     let pubkeys_uncompressed = bootstrap
         .current_sync_committee
@@ -45,6 +65,7 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         .collect_vec();
 
     let attested_state_id = finality_update.attested_header.beacon.state_root;
+
     let fork_version = client
         .get_fork(StateId::Root(attested_state_id))
         .await?
@@ -164,15 +185,16 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
+    use beacon_api_client::mainnet::Client as MainnetClient;
+    use reqwest::Url;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step.json";
         const K: u32 = 21;
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
 
-        let witness = fetch_step_args::<Testnet>("http://65.109.55.120:9596".to_string())
-            .await
-            .unwrap();
+        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
@@ -200,10 +222,8 @@ mod tests {
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
-
-        let witness = fetch_step_args::<Testnet>("http://65.109.55.120:9596".to_string())
-            .await
-            .unwrap();
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         SyncStepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
