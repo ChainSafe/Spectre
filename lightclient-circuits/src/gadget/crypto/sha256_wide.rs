@@ -287,6 +287,7 @@ mod test {
     }
 
     #[test]
+    #[serial]
     fn test_sha256_chip_constant_size() {
         let k = 10;
 
