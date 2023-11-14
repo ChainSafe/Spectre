@@ -86,46 +86,34 @@ pub async fn get_block_header<C: ClientTypes>(
     Ok(block.header.message)
 }
 
-pub async fn get_light_client_update_at_current_period<
-    C: ClientTypes,
-    const SYNC_COMMITTEE_SIZE: usize,
-    const NEXT_SYNC_COMMITTEE_GINDEX: usize,
-    const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
-    const FINALIZED_ROOT_GINDEX: usize,
-    const FINALIZED_ROOT_PROOF_SIZE: usize,
-    const BYTES_PER_LOGS_BLOOM: usize,
-    const MAX_EXTRA_DATA_BYTES: usize,
->(
+pub async fn get_light_client_update_at_current_period<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<
     LightClientUpdateCapella<
-        SYNC_COMMITTEE_SIZE,
-        NEXT_SYNC_COMMITTEE_GINDEX,
-        NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-        FINALIZED_ROOT_GINDEX,
-        FINALIZED_ROOT_PROOF_SIZE,
-        BYTES_PER_LOGS_BLOOM,
-        MAX_EXTRA_DATA_BYTES,
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_ROOT_INDEX },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::FINALIZED_HEADER_INDEX },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
     >,
-> {
+>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let block = get_block_header(client, BlockId::Head).await?;
     let slot = block.slot;
     let period = slot / (32 * 256);
 
     let route = format!("eth/v1/beacon/light_client/updates");
-    let mut updates: Vec<
-        VersionedValue<
-            LightClientUpdateCapella<
-                SYNC_COMMITTEE_SIZE,
-                NEXT_SYNC_COMMITTEE_GINDEX,
-                NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-                FINALIZED_ROOT_GINDEX,
-                FINALIZED_ROOT_PROOF_SIZE,
-                BYTES_PER_LOGS_BLOOM,
-                MAX_EXTRA_DATA_BYTES,
-            >,
-        >,
-    > = client
+    let mut updates: Vec<VersionedValue<_>> = client
         .http
         .get(client.endpoint.join(&route)?)
         .query(&[("start_period", period), ("count", 1)])
@@ -137,43 +125,31 @@ pub async fn get_light_client_update_at_current_period<
     Ok(updates.pop().unwrap().data)
 }
 
-pub async fn get_light_client_update_at_period<
-    C: ClientTypes,
-    const SYNC_COMMITTEE_SIZE: usize,
-    const NEXT_SYNC_COMMITTEE_GINDEX: usize,
-    const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
-    const FINALIZED_ROOT_GINDEX: usize,
-    const FINALIZED_ROOT_PROOF_SIZE: usize,
-    const BYTES_PER_LOGS_BLOOM: usize,
-    const MAX_EXTRA_DATA_BYTES: usize,
->(
+pub async fn get_light_client_update_at_period<S: Spec, C: ClientTypes>(
     client: &Client<C>,
     period: u64,
 ) -> eyre::Result<
     LightClientUpdateCapella<
-        SYNC_COMMITTEE_SIZE,
-        NEXT_SYNC_COMMITTEE_GINDEX,
-        NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-        FINALIZED_ROOT_GINDEX,
-        FINALIZED_ROOT_PROOF_SIZE,
-        BYTES_PER_LOGS_BLOOM,
-        MAX_EXTRA_DATA_BYTES,
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_ROOT_INDEX },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::FINALIZED_HEADER_INDEX },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
     >,
-> {
+>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let route = format!("eth/v1/beacon/light_client/updates");
-    let mut updates: Vec<
-        VersionedValue<
-            LightClientUpdateCapella<
-                SYNC_COMMITTEE_SIZE,
-                NEXT_SYNC_COMMITTEE_GINDEX,
-                NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-                FINALIZED_ROOT_GINDEX,
-                FINALIZED_ROOT_PROOF_SIZE,
-                BYTES_PER_LOGS_BLOOM,
-                MAX_EXTRA_DATA_BYTES,
-            >,
-        >,
-    > = client
+    let mut updates: Vec<VersionedValue<_>> = client
         .http
         .get(client.endpoint.join(&route)?)
         .query(&[("start_period", period), ("count", 1)])
@@ -185,63 +161,46 @@ pub async fn get_light_client_update_at_period<
     Ok(updates.pop().unwrap().data)
 }
 
-pub async fn get_light_client_bootstrap<
-    C: ClientTypes,
-    const SYNC_COMMITTEE_SIZE: usize,
-    const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
-    const BYTES_PER_LOGS_BLOOM: usize,
-    const MAX_EXTRA_DATA_BYTES: usize,
->(
+pub async fn get_light_client_bootstrap<S: Spec, C: ClientTypes>(
     client: &Client<C>,
     block_root: Node,
 ) -> eyre::Result<
     LightClientBootstrap<
-        SYNC_COMMITTEE_SIZE,
-        NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-        BYTES_PER_LOGS_BLOOM,
-        MAX_EXTRA_DATA_BYTES,
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
     >,
-> {
+>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+{
     let route = format!("eth/v1/beacon/light_client/bootstrap/{block_root:?}");
-    let bootstrap = client
-        .get::<VersionedValue<
-            LightClientBootstrap<
-                SYNC_COMMITTEE_SIZE,
-                NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-                BYTES_PER_LOGS_BLOOM,
-                MAX_EXTRA_DATA_BYTES,
-            >,
-        >>(&route)
-        .await?
-        .data;
+    let bootstrap = client.get::<VersionedValue<_>>(&route).await?.data;
     Ok(bootstrap)
 }
 
-pub async fn get_light_client_finality_update<
-    C: ClientTypes,
-    const SYNC_COMMITTEE_SIZE: usize,
-    const FINALIZED_ROOT_PROOF_SIZE: usize,
-    const BYTES_PER_LOGS_BLOOM: usize,
-    const MAX_EXTRA_DATA_BYTES: usize,
->(
+pub async fn get_light_client_finality_update<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<
     LightClientFinalityUpdate<
-        SYNC_COMMITTEE_SIZE,
-        FINALIZED_ROOT_PROOF_SIZE,
-        BYTES_PER_LOGS_BLOOM,
-        MAX_EXTRA_DATA_BYTES,
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
     >,
-> {
+>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+{
     Ok(client
-        .get::<VersionedValue<
-            LightClientFinalityUpdate<
-                SYNC_COMMITTEE_SIZE,
-                FINALIZED_ROOT_PROOF_SIZE,
-                BYTES_PER_LOGS_BLOOM,
-                MAX_EXTRA_DATA_BYTES,
-            >,
-        >>("eth/v1/beacon/light_client/finality_update")
+        .get::<VersionedValue<_>>("eth/v1/beacon/light_client/finality_update")
         .await?
         .data)
 }
