@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 
 use beacon_api_client::Client;
+use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
+use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
-
-use beacon_api_client::{BlockId, ClientTypes, StateId};
 use tokio::fs;
+use zipline_cryptography::bls::BlsPublicKey;
 
 use crate::{get_light_client_bootstrap, get_light_client_finality_update};
 
@@ -19,45 +20,23 @@ pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
     let finality_update = get_light_client_finality_update(client).await?;
-    step_args_from_finality_update(client, finality_update).await
-}
-
-pub async fn step_args_from_finality_update<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
-    finality_update: LightClientFinalityUpdate<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
-) -> eyre::Result<SyncStepArgs<S>> {
     let block_root = client
         .get_beacon_block_root(BlockId::Slot(finality_update.finalized_header.beacon.slot))
         .await
         .unwrap();
-    let bootstrap: LightClientBootstrap<512, 5, 256, 32> =
-        get_light_client_bootstrap(client, block_root).await?;
+    let bootstrap: LightClientBootstrap<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    > = get_light_client_bootstrap(client, block_root).await?;
 
-    let pubkeys_uncompressed = bootstrap
-        .current_sync_committee
-        .pubkeys
-        .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
-        .collect_vec();
+    let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
 
     let attested_state_id = finality_update.attested_header.beacon.state_root;
 
@@ -71,6 +50,34 @@ pub async fn step_args_from_finality_update<S: Spec, C: ClientTypes>(
         fork_version,
     };
     let domain = compute_domain(DomainType::SyncCommittee, &fork_data)?;
+
+    step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
+}
+
+pub async fn step_args_from_finality_update<S: Spec>(
+    finality_update: LightClientFinalityUpdate<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+    domain: [u8; 32],
+) -> eyre::Result<SyncStepArgs<S>> {
+    let pubkeys_uncompressed = pubkeys_compressed
+        .iter()
+        .map(|pk| {
+            let p = pk.decompressed_bytes();
+            let mut x = p[0..48].to_vec();
+            let mut y = p[48..96].to_vec();
+            x.reverse();
+            y.reverse();
+            let mut res = vec![];
+            res.append(&mut x);
+            res.append(&mut y);
+            res
+        })
+        .collect_vec();
 
     let execution_payload_root = finality_update
         .finalized_header

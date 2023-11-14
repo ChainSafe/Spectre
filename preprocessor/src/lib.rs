@@ -17,10 +17,9 @@ use ssz_rs::{Node, Vector};
 pub use sync::*;
 mod rotation;
 pub use rotation::*;
+use zipline_cryptography::bls::BlsPublicKey;
 use zipline_cryptography::bls::BlsSignature;
-
-pub async fn light_client_update_to_args<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
+pub async fn light_client_update_to_args<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
         { S::SYNC_COMMITTEE_ROOT_INDEX },
@@ -30,6 +29,8 @@ pub async fn light_client_update_to_args<S: Spec, C: ClientTypes>(
         { S::BYTES_PER_LOGS_BLOOM },
         { S::MAX_EXTRA_DATA_BYTES },
     >,
+    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+    domain: [u8; 32],
 ) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S, Fr>)>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -55,9 +56,10 @@ where
         signature_slot: update.signature_slot,
     };
 
-    let rotation_args = rotation::rotation_args_from_update(client, update).await?;
+    let rotation_args = rotation::rotation_args_from_update(update).await?;
 
-    let sync_args = sync::step_args_from_finality_update(client, finality_update).await?;
+    let sync_args =
+        sync::step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await?;
 
     Ok((sync_args, rotation_args))
 }

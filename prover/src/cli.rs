@@ -80,7 +80,7 @@ where
                 args,
                 client,
                 fetch_step_args,
-                "sync_step",
+                "step_circuit_testnet",
                 <SyncStepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await?;

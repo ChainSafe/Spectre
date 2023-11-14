@@ -1,5 +1,6 @@
 use super::args::Spec;
 
+use ethereum_consensus_types::{LightClientFinalityUpdate, LightClientUpdateCapella};
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
 
@@ -10,11 +11,14 @@ use lightclient_circuits::{
     sync_step_circuit::SyncStepCircuit,
     util::{gen_srs, AppCircuit, Halo2ConfigPinning},
 };
-use preprocessor::{fetch_rotation_args, fetch_step_args};
+use preprocessor::{
+    fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
+};
 
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::gates::builder::CircuitBuilderStage;
 use snark_verifier_sdk::{
+    evm::evm_verify,
     gen_pk,
     halo2::{aggregation::AggregationCircuit, gen_snark_shplonk},
     CircuitExt, Snark, SHPLONK,
@@ -70,6 +74,12 @@ fn gen_evm_proof<C: AppCircuit>(
         .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
         .unwrap();
 
+    println!("Proof size: {}", proof.len());
+    let deployment_code =
+        C::gen_evm_verifier_shplonk(&params, &pk, Some("contractyul"), &witness).unwrap();
+    println!("deployment_code size: {}", deployment_code.len());
+    evm_verify(deployment_code, instances.clone(), proof.clone());
+    println!("Gen evm proof done");
     (proof, instances)
 }
 
@@ -187,7 +197,11 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     Params(params): Params<GenProofRotationWithWitnessParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
-    let GenProofRotationWithWitnessParams { spec, k, witness } = params;
+    let GenProofRotationWithWitnessParams {
+        spec,
+        k,
+        light_client_update,
+    } = params;
 
     // TODO: use config/build paths from CLI flags
     let app_config_path = PathBuf::from("../lightclient-circuits/config/committee_update.json");
@@ -201,14 +215,18 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
 
     let (l0_snark, _pk_filename) = match spec {
         Spec::Minimal => {
-            let witness = serde_json::from_slice(&witness).unwrap();
+            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+
+            let witness = rotation_args_from_update(&mut update).await.unwrap();
             (
                 gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?,
                 "agg_rotation_circuit_minimal.pkey",
             )
         }
         Spec::Testnet => {
-            let witness = serde_json::from_slice(&witness).unwrap();
+            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+
+            let witness = rotation_args_from_update(&mut update).await.unwrap();
 
             (
                 gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?,
@@ -216,7 +234,9 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             )
         }
         Spec::Mainnet => {
-            let witness = serde_json::from_slice(&witness).unwrap();
+            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+
+            let witness = rotation_args_from_update(&mut update).await.unwrap();
 
             (
                 gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?,
@@ -356,7 +376,13 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     Params(params): Params<GenProofStepWithWitnessParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
-    let GenProofStepWithWitnessParams { spec, k, witness } = params;
+    let GenProofStepWithWitnessParams {
+        spec,
+        k,
+        light_client_finality_update,
+        domain,
+        pubkeys,
+    } = params;
 
     let config_path = PathBuf::from("../lightclient-circuits/config/sync_step.json");
     let build_dir = PathBuf::from("./build");
@@ -364,7 +390,13 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     let (proof, instances) = match spec {
         Spec::Minimal => {
             let pk_filename = format!("step_circuit_minimal.pkey");
-            let witness = serde_json::from_slice(&witness).unwrap();
+
+            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
+            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
+
+            let witness = step_args_from_finality_update(update, pubkeys, domain)
+                .await
+                .unwrap();
             gen_evm_proof::<SyncStepCircuit<eth_types::Minimal, Fr>>(
                 k,
                 build_dir,
@@ -375,8 +407,12 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
         }
         Spec::Testnet => {
             let pk_filename = format!("step_circuit_testnet.pkey");
-            let witness = serde_json::from_slice(&witness).unwrap();
+            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
+            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
 
+            let witness = step_args_from_finality_update(update, pubkeys, domain)
+                .await
+                .unwrap();
             gen_evm_proof::<SyncStepCircuit<eth_types::Testnet, Fr>>(
                 k,
                 build_dir,
@@ -387,8 +423,12 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
         }
         Spec::Mainnet => {
             let pk_filename = format!("step_circuit_mainnet.pkey");
-            let witness = serde_json::from_slice(&witness).unwrap();
+            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
+            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
 
+            let witness = step_args_from_finality_update(update, pubkeys, domain)
+                .await
+                .unwrap();
             gen_evm_proof::<SyncStepCircuit<eth_types::Mainnet, Fr>>(
                 k,
                 build_dir,

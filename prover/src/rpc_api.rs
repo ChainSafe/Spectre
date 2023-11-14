@@ -26,7 +26,11 @@ pub struct GenProofStepWithWitnessParams {
 
     pub k: Option<u32>,
 
-    pub witness: Vec<u8>,
+    // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
+    pub light_client_finality_update: Vec<u8>,
+    pub pubkeys: Vec<u8>,
+
+    pub domain: [u8; 32],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,7 +39,8 @@ pub struct GenProofRotationWithWitnessParams {
 
     pub k: Option<u32>,
 
-    pub witness: Vec<u8>,
+    // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
+    pub light_client_update: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

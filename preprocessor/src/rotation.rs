@@ -33,11 +33,10 @@ where
     );
 
     let mut update = get_light_client_update_at_period(client, period).await?;
-    rotation_args_from_update(client, &mut update).await
+    rotation_args_from_update(&mut update).await
 }
 
-pub async fn rotation_args_from_update<S: Spec, C: ClientTypes>(
-    _client: &Client<C>,
+pub async fn rotation_args_from_update<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
         { S::SYNC_COMMITTEE_ROOT_INDEX },
