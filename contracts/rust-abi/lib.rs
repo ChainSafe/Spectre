@@ -11,23 +11,21 @@ use lightclient_circuits::{
     witness::{CommitteeRotationArgs, SyncStepArgs},
 };
 use ssz_rs::{Merkleized, Vector};
-abigen!(Spectre, "./out/Spectre.sol/Spectre.json");
-
-abigen!(StepVerifier, "./out/sync_step.sol/Verifier.json");
-
 abigen!(
+    Spectre,
+    "./out/Spectre.sol/Spectre.json";
+    StepVerifier,
+    "./out/sync_step.sol/Verifier.json";
     CommitteeUpdateVerifier,
-    "./out/committee_update_aggregated.sol/Verifier.json"
-);
-
-abigen!(
+    "./out/committee_update_aggregated.sol/Verifier.json";
     StepMockVerifier,
-    "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json"
-);
-
-abigen!(
+    "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json";
     CommitteeUpdateMockVerifier,
-    "./out/CommitteeUpdateMockVerifier.sol/CommitteeUpdateMockVerifier.json"
+    "./out/CommitteeUpdateMockVerifier.sol/CommitteeUpdateMockVerifier.json";
+    RotateExternal,
+    "./out/RotateExternal.sol/RotateExternal.json";
+    SyncStepExternal,
+    "./out/SyncStepExternal.sol/SyncStepExternal.json";
 );
 
 // SyncStepInput type produced by abigen macro matches the solidity struct type
