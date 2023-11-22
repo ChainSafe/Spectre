@@ -1,3 +1,6 @@
+set dotenv-load # automatically loads .env file in the current directory
+set positional-arguments
+
 test:
     cargo test --workspace
 
@@ -27,6 +30,14 @@ gen-rotation-evm-verifier:
 
 build-contracts:
     cd contracts && forge build
+
+deploy-contracts-local:
+    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --fork-url $LOCAL_RPC_URL --broadcast
+
+deploy-contracts network: # network one of [MAINNET, GOERLI, SEPOLIA]
+    #! /usr/bin/env bash
+    RPC_URL="$1_RPC_URL"
+    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --rpc-url ${!RPC_URL} --broadcast --verify -vvvv
 
 # downloads spec tests and copies them to the right locations.
 download-spec-tests: clean-spec-tests
