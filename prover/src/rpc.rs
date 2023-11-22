@@ -4,6 +4,7 @@ use ethereum_consensus_types::{LightClientFinalityUpdate, LightClientUpdateCapel
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
 
+use itertools::Itertools;
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
     aggregation::AggregationConfigPinning,
@@ -28,9 +29,10 @@ use url::Url;
 
 use crate::rpc_api::{
     EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
-    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT,
-    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
+    GenProofStepWithWitnessParams, SyncCommitteePoseidonParams, SyncCommitteePoseidonResult,
+    EVM_PROOF_ROTATION_CIRCUIT, EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, SYNC_COMMITTEE_POSEIDON_COMPRESSED,
+    SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED,
 };
 
 fn gen_app_snark<S: eth_types::Spec>(
@@ -449,6 +451,46 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     })
 }
 
+pub(crate) async fn sync_committee_poseidon_compressed_handler(
+    Params(params): Params<SyncCommitteePoseidonParams>,
+) -> Result<SyncCommitteePoseidonResult, JsonRpcError> {
+    let SyncCommitteePoseidonParams { pubkeys } = params;
+
+    let pubkeys = pubkeys
+        .into_iter()
+        .map(|mut b| {
+            b.reverse();
+            b
+        })
+        .collect_vec();
+
+    let commitment = lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed(
+        pubkeys.as_slice(),
+    )?;
+
+    Ok(SyncCommitteePoseidonResult { commitment })
+}
+pub(crate) async fn sync_committee_poseidon_uncompressed_handler(
+    Params(params): Params<SyncCommitteePoseidonParams>,
+) -> Result<SyncCommitteePoseidonResult, JsonRpcError> {
+    let SyncCommitteePoseidonParams { pubkeys } = params;
+
+    let pubkeys = pubkeys
+        .into_iter()
+        .map(|mut b| {
+            b.reverse();
+            b
+        })
+        .collect_vec();
+
+    let commitment =
+        lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed(
+            pubkeys.as_slice(),
+        )?;
+
+    Ok(SyncCommitteePoseidonResult { commitment })
+}
+
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
     JsonRpcServer::new()
         .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
@@ -463,6 +505,14 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
         .with_method(
             EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
             gen_evm_proof_step_circuit_with_witness_handler,
+        )
+        .with_method(
+            SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED,
+            sync_committee_poseidon_uncompressed_handler,
+        )
+        .with_method(
+            SYNC_COMMITTEE_POSEIDON_COMPRESSED,
+            sync_committee_poseidon_compressed_handler,
         )
         .finish_unwrapped()
 }

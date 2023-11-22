@@ -49,6 +49,16 @@ pub struct EvmProofResult {
     pub public_inputs: Vec<U256>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncCommitteePoseidonParams {
+    pub pubkeys: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncCommitteePoseidonResult {
+    pub commitment: [u8; 32],
+}
+
 fn default_beacon_api() -> String {
     String::from("http://127.0.0.1:5052")
 }
@@ -60,3 +70,6 @@ pub const EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS: &str =
     "genEvmProofAndInstancesStepSyncCircuitWithWitness";
 pub const EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS: &str =
     "genEvmProofAndInstancesRotationCircuitWithWitness";
+
+pub const SYNC_COMMITTEE_POSEIDON_COMPRESSED: &str = "syncCommitteePoseidonCompressed";
+pub const SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED: &str = "syncCommitteePoseidonUncompressed";
