@@ -11,7 +11,6 @@ use std::{
     rc::Rc,
     vec,
 };
-
 use crate::{
     gadget::crypto::{
         calculate_ysquared, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, Sha256Chip,
@@ -54,25 +53,23 @@ use halo2_ecc::{
     },
     fields::{fp12, fp2, vector::FieldVector, FieldChip, FieldExtConstructor},
 };
-use halo2curves::bls12_381::{Fq, Fq12, Fr, G1Affine, G2Affine, G2Prepared, G1, G2};
 use halo2curves::{
+    bls12_381::{Fq, Fq12, Fr, G1Affine, G2Affine, G2Prepared, G1, G2},
     ff::PrimeField,
     group::{GroupEncoding, UncompressedEncoding},
 };
 use itertools::Itertools;
-use lazy_static::__Deref;
 use num_bigint::BigUint;
-// use snark_verifier_sdk::{evm::gen_evm_verifier_shplonk, CircuitExt};
 use ssz_rs::{Merkleized, Node};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
-pub struct SyncStepCircuit<S: Spec + ?Sized, F: Field> {
+pub struct StepCircuit<S: Spec + ?Sized, F: Field> {
     _f: PhantomData<F>,
     _spec: PhantomData<S>,
 }
 
-impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
+impl<S: Spec, F: Field> StepCircuit<S, F> {
     fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         fp_chip: &FpChip<F>,
@@ -358,7 +355,7 @@ pub fn to_bytes_le<F: Field, const MAX_BYTES: usize>(
     assigned_bytes
 }
 
-impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
+impl<S: Spec, F: Field> StepCircuit<S, F> {
     fn assign_signature(
         ctx: &mut Context<F>,
         g2_chip: &G2Chip<F>,
@@ -427,7 +424,7 @@ impl<S: Spec, F: Field> SyncStepCircuit<S, F> {
     }
 }
 
-impl<S: Spec> AppCircuit for SyncStepCircuit<S, bn256::Fr> {
+impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
     type Pinning = Eth2ConfigPinning;
     type Witness = witness::SyncStepArgs<S>;
 
@@ -516,7 +513,7 @@ mod tests {
 
         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
@@ -524,7 +521,7 @@ mod tests {
         )
         .unwrap();
 
-        let sync_pi_commit = SyncStepCircuit::<Testnet, Fr>::instance_commitment(&witness, 112);
+        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, 112);
 
         let timer = start_timer!(|| "sync_step mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
@@ -537,7 +534,7 @@ mod tests {
         const K: u32 = 22;
         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
             "../build/sync_step.pkey",
             "./config/sync_step.json",
@@ -547,7 +544,7 @@ mod tests {
 
         let witness = load_circuit_args();
 
-        let _ = SyncStepCircuit::<Testnet, Fr>::gen_proof_shplonk(
+        let _ = StepCircuit::<Testnet, Fr>::gen_proof_shplonk(
             &params,
             &pk,
             "./config/sync_step.json",
@@ -561,7 +558,7 @@ mod tests {
         const K: u32 = 22;
         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
             "../build/sync_step.pkey",
             "./config/sync_step.json",
@@ -573,7 +570,7 @@ mod tests {
 
         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
             &witness,
@@ -585,7 +582,7 @@ mod tests {
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
         println!("proof size: {}", proof.len());
-        let deployment_code = SyncStepCircuit::<Testnet, Fr>::gen_evm_verifier_shplonk(
+        let deployment_code = StepCircuit::<Testnet, Fr>::gen_evm_verifier_shplonk(
             &params,
             &pk,
             None::<String>,

@@ -4,8 +4,8 @@ use halo2_base::gates::circuit::CircuitBuilderStage;
 use halo2_base::halo2_proofs::dev::MockProver;
 use halo2_base::halo2_proofs::halo2curves::bn256;
 use lightclient_circuits::LIMB_BITS;
-use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
-use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
+use lightclient_circuits::rotation_circuit::CommitteeUpdateCircuit;
+use lightclient_circuits::step_circuit::StepCircuit;
 use lightclient_circuits::util::gen_srs;
 use lightclient_circuits::util::AppCircuit;
 use lightclient_circuits::util::Eth2ConfigPinning;
@@ -64,7 +64,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     let sync_circuit = {
         let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-        SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+        StepCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &sync_witness,
@@ -74,7 +74,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     };
 
     let sync_pi_commit =
-        SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
+        StepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
 
     let timer = start_timer!(|| "sync_step mock prover run");
     let prover =
@@ -93,7 +93,7 @@ fn test_eth2_spec_proofgen(
     let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let params = gen_srs(K);
-    let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
+    let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
         &params,
         "../build/sync_step.pkey",
         "./config/sync_step.json",
@@ -101,7 +101,7 @@ fn test_eth2_spec_proofgen(
         &SyncStepArgs::<Minimal>::default(),
     );
 
-    let _ = SyncStepCircuit::<Minimal, bn256::Fr>::gen_proof_shplonk(
+    let _ = StepCircuit::<Minimal, bn256::Fr>::gen_proof_shplonk(
         &params,
         &pk,
         "./config/sync_step.json",
@@ -119,7 +119,7 @@ fn test_eth2_spec_evm_verify(
     const K: u32 = 21;
     let params = gen_srs(K);
 
-    let pk = SyncStepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
+    let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
         &params,
         "../build/sync_step.pkey",
         "./config/sync_step.json",
@@ -131,7 +131,7 @@ fn test_eth2_spec_evm_verify(
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
 
-    let circuit = SyncStepCircuit::<Minimal, bn256::Fr>::create_circuit(
+    let circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
         CircuitBuilderStage::Prover,
         Some(pinning),
         &witness,
@@ -143,7 +143,7 @@ fn test_eth2_spec_evm_verify(
     let proof =
         snark_verifier_sdk::evm::gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
     println!("proof size: {}", proof.len());
-    let deployment_code = SyncStepCircuit::<Minimal, bn256::Fr>::gen_evm_verifier_shplonk(
+    let deployment_code = StepCircuit::<Minimal, bn256::Fr>::gen_evm_verifier_shplonk(
         &params,
         &pk,
         None::<String>,

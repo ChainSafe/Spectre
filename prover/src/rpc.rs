@@ -5,8 +5,8 @@ use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
-    committee_update_circuit::CommitteeUpdateCircuit,
-    sync_step_circuit::SyncStepCircuit,
+    rotation_circuit::CommitteeUpdateCircuit,
+    step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
@@ -173,7 +173,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
         Spec::Minimal => {
             let pk_filename = format!("step_circuit_minimal.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
-            gen_evm_proof::<SyncStepCircuit<eth_types::Minimal, Fr>>(
+            gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
                 k,
                 build_dir,
                 pk_filename,
@@ -185,7 +185,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
             let pk_filename = format!("step_circuit_testnet.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
 
-            gen_evm_proof::<SyncStepCircuit<eth_types::Testnet, Fr>>(
+            gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
                 k,
                 build_dir,
                 pk_filename,
@@ -197,7 +197,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
             let pk_filename = format!("step_circuit_mainnet.pkey");
             let witness = fetch_step_args(beacon_api).await.unwrap();
 
-            gen_evm_proof::<SyncStepCircuit<eth_types::Mainnet, Fr>>(
+            gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
                 k,
                 build_dir,
                 pk_filename,

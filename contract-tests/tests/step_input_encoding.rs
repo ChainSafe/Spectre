@@ -5,7 +5,7 @@ use eth_types::Minimal;
 use ethers::contract::abigen;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256;
 use lightclient_circuits::witness::SyncStepArgs;
-use lightclient_circuits::{sync_step_circuit::SyncStepCircuit, LIMB_BITS};
+use lightclient_circuits::{step_circuit::StepCircuit, LIMB_BITS};
 use rstest::rstest;
 use ssz_rs::Merkleized;
 use test_utils::{
@@ -55,7 +55,7 @@ async fn test_step_instance_commitment_evm_equivalence(
     path: PathBuf,
 ) -> anyhow::Result<()> {
     let (witness, _) = read_test_files_and_gen_witness(&path);
-    let instance = SyncStepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness, LIMB_BITS);
+    let instance = StepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness, LIMB_BITS);
     let poseidon_commitment_le =
         poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed)?;
 

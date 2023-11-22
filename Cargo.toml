@@ -34,6 +34,7 @@ preprocessor = { path = "preprocessor" }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
     "halo2-pse",
     "display",
+    "jemallocator"
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
 halo2curves = { git = "https://github.com/axiom-crypto/halo2curves", version = "0.4.0" }
@@ -90,9 +91,11 @@ halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "supp
 halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
     "halo2-pse",
     "display",
+    "jemallocator"
 ] }
 halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
     "halo2-pse",
+    "jemallocator"
 ] }
 # halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
 #     "halo2-pse",

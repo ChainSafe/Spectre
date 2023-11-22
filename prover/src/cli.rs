@@ -5,8 +5,8 @@ use ethers::providers::{Http, Provider};
 use itertools::Itertools;
 use lightclient_circuits::{
     halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine},
-    committee_update_circuit::CommitteeUpdateCircuit,
-    sync_step_circuit::SyncStepCircuit,
+    rotation_circuit::CommitteeUpdateCircuit,
+    step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
 use primitive_types::U256;
@@ -45,11 +45,11 @@ pub(crate) async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<
             .await
         }
         Proof::SyncStep(args) => {
-            generic_circuit_cli::<SyncStepCircuit<S, Fr>, _, _>(
+            generic_circuit_cli::<StepCircuit<S, Fr>, _, _>(
                 args,
                 fetch_step_args,
                 "sync_step",
-                <SyncStepCircuit<S, Fr> as AppCircuit>::Witness::default(),
+                <StepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await
         }

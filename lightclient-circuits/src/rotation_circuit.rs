@@ -1,5 +1,4 @@
 use std::{env::var, iter, marker::PhantomData, vec};
-
 use crate::{
     gadget::crypto::{
         calculate_ysquared, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, Sha256ChipWide,
@@ -7,7 +6,7 @@ use crate::{
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
-    sync_step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
+    step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
     util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
     Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
@@ -36,7 +35,6 @@ use halo2_ecc::{
 };
 use halo2curves::bls12_381::{self, Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2};
 use itertools::Itertools;
-use lazy_static::__Deref;
 use num_bigint::BigUint;
 use snark_verifier_sdk::CircuitExt;
 use ssz_rs::{Merkleized, Vector};
@@ -322,11 +320,12 @@ mod tests {
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
         witness: &CommitteeRotationArgs<Testnet, Fr>,
+        pinning_path: &str,
     ) -> Snark {
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             params,
             pk,
-            "./config/committee_update.json",
+            pinning_path,
             None::<String>,
             witness,
         )
@@ -399,7 +398,7 @@ mod tests {
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
         let witness = load_circuit_args();
-        let snark = gen_application_snark(&params_app, &pk_app, &witness);
+        let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
 
         let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());
@@ -439,7 +438,7 @@ mod tests {
         );
 
         let witness = load_circuit_args();
-        let snark = gen_application_snark(&params_app, &pk_app, &witness);
+        let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
 
         let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());

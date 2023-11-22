@@ -179,7 +179,7 @@ mod tests {
     use eth_types::Testnet;
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage,
-        sync_step_circuit::SyncStepCircuit,
+        step_circuit::StepCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use snark_verifier_sdk::CircuitExt;
@@ -196,7 +196,7 @@ mod tests {
             .unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
@@ -214,7 +214,7 @@ mod tests {
         const K: u32 = 21;
         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
             "../build/sync_step.pkey",
             CONFIG_PATH,
@@ -226,7 +226,7 @@ mod tests {
             .await
             .unwrap();
 
-        SyncStepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+        StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
             &pk,
             CONFIG_PATH,
