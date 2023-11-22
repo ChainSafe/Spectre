@@ -1,4 +1,3 @@
-use ethereum_consensus_types::SyncCommittee;
 pub use jsonrpc_v2;
 use jsonrpc_v2::{Error, Id, RequestObject, V2};
 use reqwest::IntoUrl;

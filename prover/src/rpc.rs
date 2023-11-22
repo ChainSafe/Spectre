@@ -1,6 +1,5 @@
 use super::args::Spec;
 
-use ethereum_consensus_types::{LightClientFinalityUpdate, LightClientUpdateCapella};
 use ethers::prelude::*;
 use halo2curves::bn256::Fr;
 
