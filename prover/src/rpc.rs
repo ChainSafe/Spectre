@@ -81,35 +81,30 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 
     // TODO: use config/build paths from CLI flags
     let app_config_path = PathBuf::from("../lightclient-circuits/config/committee_update.json");
-    let app_pk_path = PathBuf::from("./build/committee_update_circuit.pkey");
+
+    let agg_l2_pk_path = PathBuf::from("./build/step_agg_l2.pkey");
+    let agg_l1_pk_path = PathBuf::from("./build/step_agg_l1.pkey");
 
     let agg_l2_config_path =
         PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_2.json");
     let agg_l1_config_path =
         PathBuf::from("../lightclient-circuits/config/committee_update_aggregation_1.json");
-    let _build_dir = PathBuf::from("./build");
 
-    let (l0_snark, _pk_filename) = match spec {
+    let l0_snark = match spec {
         Spec::Minimal => {
             let witness = fetch_rotation_args(beacon_api).await?;
-            (
-                gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?,
-                "agg_rotation_circuit_minimal.pkey",
-            )
+            let app_pk_path = PathBuf::from("./build/committee_update_circuit_minimal.pkey");
+            gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?
         }
         Spec::Testnet => {
             let witness = fetch_rotation_args(beacon_api).await?;
-            (
-                gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?,
-                "agg_rotation_circuit_testnet.pkey",
-            )
+            let app_pk_path = PathBuf::from("./build/committee_update_circuit_testnet.pkey");
+            gen_app_snark::<eth_types::Testnet>(app_config_path, app_pk_path, witness)?
         }
         Spec::Mainnet => {
             let witness = fetch_rotation_args(beacon_api).await?;
-            (
-                gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?,
-                "agg_rotation_circuit_mainnet.pkey",
-            )
+            let app_pk_path = PathBuf::from("./build/committee_update_circuit_mainnet.pkey");
+            gen_app_snark::<eth_types::Mainnet>(app_config_path, app_pk_path, witness)?
         }
     };
 
@@ -121,7 +116,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
 
         println!("L1 Keygen num_instances: {:?}", circuit.num_instance());
 
-        let pk_l1 = gen_pk(&p1, &circuit, None);
+        let pk_l1 = gen_pk(&p1, &circuit, Some(&agg_l1_pk_path));
         let pinning = AggregationConfigPinning::from_path(agg_l1_config_path);
         let lookup_bits = k as usize - 1;
         let mut circuit = AggregationCircuit::new::<SHPLONK>(
@@ -147,7 +142,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
             AggregationCircuit::keygen::<SHPLONK>(&p2, std::iter::once(l1_snark.clone()));
         circuit.expose_previous_instances(true);
 
-        let pk_l2 = gen_pk(&p2, &circuit, None);
+        let pk_l2 = gen_pk(&p2, &circuit, Some(&agg_l2_pk_path));
         let pinning = AggregationConfigPinning::from_path(agg_l2_config_path);
 
         let mut circuit = AggregationCircuit::prover::<SHPLONK>(
