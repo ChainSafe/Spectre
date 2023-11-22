@@ -6,20 +6,16 @@ mod sha256_wide;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
 use eth_types::Field;
-use halo2_base::{AssignedValue, QuantumCell};
 use halo2_ecc::{
     bigint::ProperCrtUint,
     bls12_381::{Fp2Chip, Fp2Point, FpChip},
     ecc::{EcPoint, EccChip},
-    fields::{fp2, vector::FieldVector, FieldExtConstructor},
 };
-use lazy_static::lazy_static;
 pub use sha256_flex::{Sha256Chip, ShaContexts, ShaFlexGateManager};
 pub use sha256_wide::{Sha256ChipWide, ShaBitGateManager};
 
 pub use ecc::calculate_ysquared;
 
-use crate::witness::HashInput;
 pub type G1Point<F> = EcPoint<F, ProperCrtUint<F>>;
 pub type G2Point<F> = EcPoint<F, Fp2Point<F>>;
 

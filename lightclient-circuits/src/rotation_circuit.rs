@@ -1,44 +1,29 @@
-use std::{env::var, iter, marker::PhantomData, vec};
 use crate::{
-    gadget::crypto::{
-        calculate_ysquared, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, Sha256ChipWide,
-        ShaBitGateManager, ShaCircuitBuilder,
-    },
-    poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
+    gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
+    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
-    step_circuit::{clear_3_bits, to_bytes_le, truncate_sha256_into_single_elem},
-    util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
+    step_circuit::clear_3_bits,
+    util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
     Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
     gates::{
-        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeChip,
-        RangeInstructions,
+        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
     },
-    halo2_proofs::{
-        circuit::{Layouter, Region, SimpleFloorPlanner, Value},
-        dev::MockProver,
-        halo2curves::bn256,
-        plonk::{Circuit, ConstraintSystem, Error, ProvingKey},
-        poly::{commitment::Params, kzg::commitment::ParamsKZG},
-    },
-    utils::{fs::gen_srs, CurveAffineExt, ScalarField},
+    halo2_proofs::{halo2curves::bn256, plonk::Error},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
     bigint::{utils::decode_into_bn, ProperCrtUint},
-    bls12_381::{bls_signature, pairing::PairingChip, Fp12Chip, Fp2Chip, FpChip},
-    ecc::{EcPoint, EccChip},
-    fields::{fp12, vector::FieldVector, FieldChip, FieldExtConstructor, PrimeFieldChip},
+    bls12_381::FpChip,
+    fields::FieldChip,
 };
-use halo2curves::bls12_381::{self, Fq, Fq12, G1Affine, G2Affine, G2Prepared, G1, G2};
+use halo2curves::bls12_381;
 use itertools::Itertools;
-use num_bigint::BigUint;
-use snark_verifier_sdk::CircuitExt;
 use ssz_rs::{Merkleized, Vector};
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use std::{env::var, iter, marker::PhantomData, vec};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -54,8 +39,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         args: &witness::CommitteeRotationArgs<S, F>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let range = fp_chip.range();
-        let fp2_chip = Fp2Chip::<F>::new(fp_chip);
-        let g1_chip = EccChip::new(fp2_chip.fp_chip());
 
         let sha256_chip = Sha256ChipWide::new(range, args.randomness);
 
@@ -178,7 +161,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         limb_bits: usize,
     ) -> Vec<Vec<bn256::Fr>>
     where
-        [(); { S::SYNC_COMMITTEE_SIZE }]:,
+        [(); S::SYNC_COMMITTEE_SIZE]:,
     {
         let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
             bytes.reverse();
@@ -253,17 +236,11 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env::{set_var, var},
-        fs,
-        path::PathBuf,
-    };
+    use std::fs;
 
     use crate::{
-        aggregation::AggregationConfigPinning,
-        gadget::crypto::constant_randomness,
-        util::{gen_pkey, Halo2ConfigPinning, PinnableCircuit},
-        witness::{CommitteeRotationArgs, SyncStepArgs},
+        aggregation::AggregationConfigPinning, gadget::crypto::constant_randomness,
+        util::Halo2ConfigPinning, witness::CommitteeRotationArgs,
     };
 
     use super::*;
@@ -271,27 +248,16 @@ mod tests {
     use eth_types::Testnet;
     use halo2_base::{
         halo2_proofs::{
-            circuit::SimpleFloorPlanner,
             dev::MockProver,
             halo2curves::bn256::Fr,
-            plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
+            plonk::ProvingKey,
             poly::{commitment::Params, kzg::commitment::ParamsKZG},
         },
         utils::fs::gen_srs,
     };
-    use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
-    use rand::rngs::OsRng;
-    use rayon::iter::ParallelIterator;
-    use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
-    use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk};
-    use snark_verifier_sdk::{
-        gen_pk,
-        halo2::{
-            aggregation::{AggregationCircuit, AggregationConfigParams},
-            gen_proof_shplonk, gen_snark_shplonk,
-        },
-        CircuitExt, Snark, SHPLONK,
-    };
+    use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
+    use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
+    use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
     fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
         #[derive(serde::Deserialize)]
@@ -372,7 +338,7 @@ mod tests {
 
         let witness = load_circuit_args();
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::gen_proof_shplonk(
+        let _ = CommitteeUpdateCircuit::<Testnet, Fr>::gen_proof_shplonk(
             &params,
             &pk,
             PINNING_PATH,
@@ -411,7 +377,7 @@ mod tests {
             &vec![snark.clone()],
         );
 
-        let circuit = AggregationCircuit::gen_proof_shplonk(
+        let _ = AggregationCircuit::gen_proof_shplonk(
             &params,
             &pk,
             AGG_CONFIG_PATH,
@@ -424,7 +390,6 @@ mod tests {
     fn test_circuit_aggregation_evm() {
         const APP_K: u32 = 21;
         const APP_PINNING_PATH: &str = "./config/committee_update_21.json";
-        const APP_PK_PATH: &str = "../build/committee_update_21.pkey";
         const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
         let params_app = gen_srs(APP_K);
 
@@ -442,7 +407,6 @@ mod tests {
 
         let params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", params.k());
-        let lookup_bits = params.k() as usize - 1;
 
         let pk = AggregationCircuit::read_or_create_pk(
             &params,

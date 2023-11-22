@@ -1,13 +1,5 @@
 use eth_types::Field;
-use halo2_base::{
-    halo2_proofs::circuit::AssignedCell,
-    utils::{biguint_to_fe, fe_to_biguint},
-    AssignedValue,
-};
-use itertools::Itertools;
-use num_bigint::BigUint;
-
-use crate::witness::HashInput;
+use halo2_base::AssignedValue;
 
 pub(crate) const NUM_BITS_PER_BYTE: usize = 8;
 pub(crate) const NUM_BYTES_PER_WORD: usize = 4;
@@ -20,7 +12,6 @@ pub(crate) const RATE_IN_BITS: usize = RATE * NUM_BITS_PER_BYTE;
 pub(crate) const NUM_WORDS_TO_ABSORB: usize = 16;
 pub(crate) const ABSORB_WIDTH_PER_ROW_BYTES: usize = 4;
 pub(crate) const NUM_BITS_PADDING_LENGTH: usize = 64;
-pub(crate) const NUM_START_ROWS: usize = 4;
 pub(crate) const NUM_END_ROWS: usize = 4;
 pub(crate) const NUM_BYTES_FINAL_HASH: usize = 32;
 pub(crate) const MAX_DEGREE: usize = 5;

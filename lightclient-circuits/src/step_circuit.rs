@@ -1,66 +1,40 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    env::{set_var, var},
-    fs,
-    io::Read,
-    iter,
-    marker::PhantomData,
-    ops::Neg,
-    path::Path,
-    rc::Rc,
-    vec,
-};
 use crate::{
     gadget::crypto::{
-        calculate_ysquared, G1Chip, G1Point, G2Chip, G2Point, HashInstructions, Sha256Chip,
+        calculate_ysquared, G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip,
         ShaCircuitBuilder, ShaFlexGateManager,
     },
-    poseidon::{fq_array_poseidon, fq_array_poseidon_native, poseidon_sponge},
+    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
-    util::{gen_pkey, AppCircuit, Challenges, CommonGateManager, Eth2ConfigPinning, IntoWitness},
+    util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
     Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
 };
 use eth_types::{Field, Spec};
 use halo2_base::{
     gates::{
-        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, range::RangeConfig,
-        GateInstructions, RangeChip, RangeInstructions,
+        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, GateInstructions,
+        RangeInstructions,
     },
-    halo2_proofs::{
-        circuit::{Layouter, Region, SimpleFloorPlanner, Value},
-        dev::MockProver,
-        halo2curves::bn256,
-        plonk::{Circuit, Column, ConstraintSystem, Error, Instance, ProvingKey},
-        poly::{commitment::Params, kzg::commitment::ParamsKZG},
-    },
-    poseidon::PoseidonChip,
-    utils::{decompose, fe_to_bigint, fe_to_biguint, fs::gen_srs, CurveAffineExt, ScalarField},
-    AssignedValue, Context,
-    QuantumCell::{self, Witness},
+    halo2_proofs::{halo2curves::bn256, plonk::Error},
+    utils::CurveAffineExt,
+    AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
-    bigint::ProperCrtUint,
-    bls12_381::{
-        bls_signature::{self, BlsSignatureChip},
-        pairing::PairingChip,
-        Fp12Chip, Fp2Chip, Fp2Point, FpChip,
-    },
+    bls12_381::{bls_signature::BlsSignatureChip, pairing::PairingChip, Fp2Chip, Fp2Point, FpChip},
     ecc::{
         hash_to_curve::{ExpandMsgXmd, HashToCurveChip},
         EcPoint, EccChip,
     },
-    fields::{fp12, fp2, vector::FieldVector, FieldChip, FieldExtConstructor},
+    fields::FieldChip,
 };
 use halo2curves::{
-    bls12_381::{Fq, Fq12, Fr, G1Affine, G2Affine, G2Prepared, G1, G2},
-    ff::PrimeField,
+    bls12_381::{G1Affine, G2Affine},
     group::{GroupEncoding, UncompressedEncoding},
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
-use ssz_rs::{Merkleized, Node};
+use ssz_rs::Merkleized;
+use std::{env::var, marker::PhantomData, vec};
 
 #[allow(type_alias_bounds)]
 #[derive(Clone, Debug, Default)]
@@ -84,9 +58,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let gate = range.gate();
         let sha256_chip = Sha256Chip::new(range);
         let fp2_chip = Fp2Chip::<F>::new(fp_chip);
-        let g1_chip = EccChip::new(fp2_chip.fp_chip());
         let g2_chip = EccChip::new(&fp2_chip);
-        let fp12_chip = Fp12Chip::<F>::new(fp2_chip.fp_chip());
         let pairing_chip = PairingChip::new(fp_chip);
         let bls_chip = BlsSignatureChip::new(fp_chip, &pairing_chip);
         let h2c_chip = HashToCurveChip::new(&sha256_chip, &fp2_chip);
@@ -375,7 +347,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         pariticipation_bits: &[bool],
         assigned_affines: &mut Vec<G1Point<F>>,
     ) -> (G1Point<F>, AssignedValue<F>) {
-        let range = fp_chip.range();
         let gate = fp_chip.gate();
 
         let g1_chip = G1Chip::<F>::new(fp_chip);
@@ -466,39 +437,17 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env::{set_var, var},
-        fs,
-        os::unix::thread,
-    };
+    use std::fs;
 
-    use crate::{
-        util::{gen_pkey, Halo2ConfigPinning},
-        witness::SyncStepArgs,
-    };
+    use crate::{util::Halo2ConfigPinning, witness::SyncStepArgs};
 
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
     use halo2_base::{
-        halo2_proofs::{
-            circuit::SimpleFloorPlanner,
-            dev::MockProver,
-            halo2curves::bn256::Fr,
-            plonk::{keygen_pk, keygen_vk, Circuit, FloorPlanner},
-            poly::kzg::commitment::ParamsKZG,
-        },
-        utils::{decompose, fs::gen_srs},
+        halo2_proofs::dev::MockProver, halo2_proofs::halo2curves::bn256::Fr, utils::fs::gen_srs,
     };
-    use halo2curves::{bls12_381::G1Affine, bn256::Bn256};
-    use rand::{rngs::OsRng, thread_rng};
-    use rayon::iter::ParallelIterator;
-    use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
-    use snark_verifier_sdk::{
-        evm::{encode_calldata, evm_verify, gen_evm_proof_shplonk},
-        halo2::{aggregation::AggregationCircuit, gen_proof_shplonk, gen_snark_shplonk},
-        CircuitExt, SHPLONK,
-    };
+    use snark_verifier_sdk::{evm::{evm_verify, gen_evm_proof_shplonk}, CircuitExt};
 
     fn load_circuit_args() -> SyncStepArgs<Testnet> {
         serde_json::from_slice(&fs::read("../test_data/sync_step_512.json").unwrap()).unwrap()
@@ -507,8 +456,6 @@ mod tests {
     #[test]
     fn test_sync_circuit() {
         const K: u32 = 21;
-        let params = gen_srs(K);
-
         let witness = load_circuit_args();
 
         let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
@@ -578,7 +525,6 @@ mod tests {
         )
         .unwrap();
 
-        let num_instances = circuit.num_instance();
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(&params, &pk, circuit, instances.clone());
         println!("proof size: {}", proof.len());

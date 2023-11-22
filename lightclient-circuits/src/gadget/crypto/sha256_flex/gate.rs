@@ -2,7 +2,6 @@ use std::any::TypeId;
 
 use getset::CopyGetters;
 use halo2_base::{
-    gates::circuit::CircuitBuilderStage,
     halo2_proofs::circuit::{Region, Value},
     utils::BigPrimeField,
     virtual_region::{

@@ -3,36 +3,22 @@ mod gate;
 mod spread;
 mod util;
 
+use crate::gadget::crypto::sha256_flex::compression::{sha256_compression, INIT_STATE};
+use eth_types::Field;
 pub use gate::ShaFlexGateManager;
 use halo2_base::gates::flex_gate::threads::CommonCircuitBuilder;
 use halo2_base::gates::RangeChip;
-pub use spread::SpreadConfig;
-
-use eth_types::Field;
-use itertools::Itertools;
-use sha2::compress256;
-use sha2::digest::generic_array::GenericArray;
-use std::collections::HashMap;
-use std::{cell::RefCell, char::MAX};
-
-use crate::gadget::crypto::sha256_flex::compression::{sha256_compression, INIT_STATE};
-use crate::witness::HashInput;
+use halo2_base::halo2_proofs::plonk::Error;
 use halo2_base::QuantumCell;
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
-    AssignedValue, Context,
+    AssignedValue,
 };
-use halo2_base::{
-    halo2_proofs::{
-        circuit::{self, AssignedCell, Region},
-        plonk::{Assigned, Error},
-    },
-    utils::value_to_option,
-    ContextCell,
-};
+use itertools::Itertools;
+pub use spread::SpreadConfig;
 
 pub use self::gate::ShaContexts;
-pub(super) use self::gate::{assign_threads_sha, FIRST_PHASE};
+pub(super) use self::gate::FIRST_PHASE;
 pub use self::spread::SpreadChip;
 
 use super::{HashInstructions, ShaCircuitBuilder};
@@ -87,7 +73,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         } else {
             input_byte_size_with_9 / one_round_size + 1
         };
-        let max_round = max_processed_bytes / one_round_size;
         let padded_size = one_round_size * num_round;
         let zero_padding_byte_size = padded_size - input_byte_size_with_9;
         // let remaining_byte_size = MAX_INPUT_SIZE - padded_size;
@@ -124,7 +109,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         let assigned_num_round = builder.main().load_witness(F::from(num_round as u64));
 
         // compute an initial state from the precomputed_input.
-        let mut last_state = INIT_STATE;
+        let last_state = INIT_STATE;
 
         let mut assigned_last_state_vec = vec![last_state
             .iter()
@@ -198,26 +183,25 @@ impl<'a, F: Field> Sha256Chip<'a, F> {
 
 #[cfg(test)]
 mod test {
-    use std::env::var;
-    use std::vec;
-    use std::{cell::RefCell, marker::PhantomData};
+    // use std::env::var;
+    // use std::vec;
+    // use std::{cell::RefCell, marker::PhantomData};
 
-    use crate::gadget::crypto::ShaCircuitBuilder;
-    use crate::util::{gen_pkey, Challenges, IntoWitness};
-
-    use super::*;
-    use ark_std::{end_timer, start_timer};
-    use eth_types::Testnet;
-    use halo2_base::gates::range::RangeConfig;
-    use halo2_base::halo2_proofs::{
-        circuit::{Layouter, SimpleFloorPlanner},
-        dev::MockProver,
-        halo2curves::bn256::Fr,
-        plonk::{Circuit, ConstraintSystem},
-    };
-    use halo2_base::utils::fs::gen_srs;
-    use halo2_base::SKIP_FIRST_PASS;
-    use sha2::{Digest, Sha256};
+    // use crate::gadget::crypto::ShaCircuitBuilder;
+    // use crate::util::{gen_pkey, IntoWitness};
+    // use super::*;
+    // use ark_std::{end_timer, start_timer};
+    // use eth_types::Testnet;
+    // use halo2_base::gates::range::RangeConfig;
+    // use halo2_base::halo2_proofs::{
+    //     circuit::{Layouter, SimpleFloorPlanner},
+    //     dev::MockProver,
+    //     halo2curves::bn256::Fr,
+    //     plonk::{Circuit, ConstraintSystem},
+    // };
+    // use halo2_base::utils::fs::gen_srs;
+    // use halo2_base::SKIP_FIRST_PASS;
+    // use sha2::{Digest, Sha256};
 
     // fn test_circuit<F: Field>(
     //     k: usize,

@@ -1,35 +1,14 @@
-use std::cell::RefMut;
-
-use crate::gadget::crypto::ShaCircuitBuilder;
-use crate::util::CommonGateManager;
-
-use super::gate::ShaContexts;
-use super::spread::{self, SpreadChip, SpreadConfig};
+use super::spread::SpreadChip;
 use super::util::{bits_le_to_fe, fe_to_bits_le};
 use super::ShaFlexGateManager;
+use crate::gadget::crypto::ShaCircuitBuilder;
 use eth_types::Field;
 use halo2_base::{
-    gates::{
-        flex_gate::{threads::CommonCircuitBuilder, FlexGateConfig},
-        range::RangeConfig,
-        GateInstructions, RangeInstructions,
-    },
-    halo2_proofs::{
-        circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
-        plonk::{
-            Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, Selector,
-            TableColumn, VirtualCells,
-        },
-        poly::Rotation,
-    },
-    utils::{bigint_to_fe, biguint_to_fe, fe_to_bigint, fe_to_biguint, modulus},
+    gates::{flex_gate::threads::CommonCircuitBuilder, GateInstructions, RangeInstructions},
+    halo2_proofs::plonk::Error,
     AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
-use sha2::{Digest, Sha256};
-
-// const BLOCK_BYTE: usize = 64;
-// const DIGEST_BYTE: usize = 32;
 
 pub const NUM_ROUND: usize = 64;
 pub const NUM_STATE_WORD: usize = 8;
@@ -149,7 +128,9 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     // let mut e_bits = gate.num_to_bits(ctx, &e, 32);
     // let mut f_bits = gate.num_to_bits(ctx, &f, 32);
     // let mut g_bits = gate.num_to_bits(ctx, &g, 32);
+    #[allow(unused_assignments)]
     let mut t1 = thread_pool.main().load_zero();
+    #[allow(unused_assignments)]
     let mut t2 = thread_pool.main().load_zero();
     for idx in 0..64 {
         t1 = {
@@ -594,7 +575,7 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
         bits.append(&mut fe_to_bits_le(hi, 32));
         bits
     };
-    let mut assign_bits = |bits: &Vec<bool>, start: usize, end: usize, padding: usize| {
+    let mut assign_bits = |bits: &Vec<bool>, start: usize, end: usize, _padding: usize| {
         let fe_val: F = {
             let mut bits = bits[(2 * start)..(2 * end)].to_vec();
             bits.extend_from_slice(&vec![false; 64 - bits.len()]);

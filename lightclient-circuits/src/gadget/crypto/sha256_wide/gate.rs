@@ -1,24 +1,16 @@
-use std::{any::TypeId, cell::RefCell, collections::HashMap, iter, mem};
-
+use super::config::Sha256BitConfig;
+use crate::util::{CommonGateManager, GateBuilderConfig};
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
-    gates::{circuit::CircuitBuilderStage, flex_gate::FlexGateConfig},
-    halo2_proofs::{
-        circuit::{self, Region, Value},
-        plonk::{Advice, Column, Error, Selector},
-    },
-    utils::ScalarField,
+    gates::circuit::CircuitBuilderStage,
+    halo2_proofs::circuit::Region,
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
     Context,
 };
-use itertools::Itertools;
-
-use crate::util::{CommonGateManager, GateBuilderConfig};
-
-use super::{config::Sha256BitConfig, witness::ShaRow};
+use std::any::TypeId;
 
 pub const FIRST_PHASE: usize = 0;
 
@@ -34,8 +26,6 @@ pub struct ShaBitGateManager<F: Field> {
 
     /// Threads for spread table assignment.
     sha_contexts: Sha256BitContexts<F>,
-
-    sha_offset: usize,
 
     pub copy_manager: SharedCopyConstraintManager<F>,
 }
@@ -88,7 +78,6 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
                 _f: std::marker::PhantomData,
                 offset: 0,
             },
-            sha_offset: 0,
             copy_manager: SharedCopyConstraintManager::default(),
         }
     }

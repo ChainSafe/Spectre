@@ -1,18 +1,14 @@
-use std::os::unix::thread;
-
-use eth_types::Field;
-use halo2_base::{
-    gates::flex_gate::threads::CommonCircuitBuilder,
-    halo2_proofs::{circuit::Region, plonk::Error},
-    AssignedValue, Context, QuantumCell,
-};
-use itertools::Itertools;
-
 use crate::{
-    gadget::crypto::{HashInstructions, ShaContexts, ShaFlexGateManager},
-    util::{CommonGateManager, IntoConstant, IntoWitness},
+    gadget::crypto::HashInstructions,
+    util::IntoConstant,
     witness::{HashInput, HashInputChunk},
 };
+use eth_types::Field;
+use halo2_base::{
+    gates::flex_gate::threads::CommonCircuitBuilder, halo2_proofs::plonk::Error, AssignedValue,
+    QuantumCell,
+};
+use itertools::Itertools;
 
 pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     builder: &mut CircuitBuilder,

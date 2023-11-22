@@ -1,9 +1,9 @@
-use std::env::{args, set_var, var};
+use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
-use halo2_base::gates::circuit::{CircuitBuilderStage, BaseCircuitParams};
-use halo2_base::gates::flex_gate::{FlexGateConfigParams, MultiPhaseThreadBreakPoints};
+use halo2_base::gates::circuit::{BaseCircuitParams, CircuitBuilderStage};
+use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
 use halo2_base::halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::ProvingKey,
@@ -14,9 +14,8 @@ use halo2_base::halo2_proofs::{
 use halo2_base::utils::BigPrimeField;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
-    encode_calldata, evm_verify, gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
+    encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
 };
-use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use snark_verifier_sdk::halo2::gen_proof_shplonk;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
@@ -115,13 +114,9 @@ pub trait AppCircuit {
         path: impl AsRef<Path>,
         witness_args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
-        let circuit = Self::create_circuit(
-            CircuitBuilderStage::Keygen,
-            None,
-            witness_args,
-            params.k(),
-        )
-        .unwrap();
+        let circuit =
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())
+                .unwrap();
         custom_read_pk(path, &circuit)
     }
 
@@ -133,13 +128,9 @@ pub trait AppCircuit {
         pinning_path: impl AsRef<Path>,
         witness_args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
-        let circuit = Self::create_circuit(
-            CircuitBuilderStage::Keygen,
-            None,
-            witness_args,
-            params.k(),
-        )
-        .unwrap();
+        let circuit =
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())
+                .unwrap();
 
         let pk_exists = pk_path.as_ref().exists();
         let pk = gen_pk(params, &circuit, Some(pk_path.as_ref()));
@@ -213,7 +204,8 @@ pub trait AppCircuit {
         yul_path: Option<impl AsRef<Path>>,
         witness_args: &Self::Witness,
     ) -> Result<Vec<u8>, Error> {
-        let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())?;
+        let circuit =
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())?;
         let deployment_code =
             custom_gen_evm_verifier_shplonk(params, pk.get_vk(), &circuit, yul_path);
 
@@ -236,6 +228,10 @@ pub trait AppCircuit {
         )?;
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(params, pk, circuit, instances.clone());
+
+        if let Some(deployment_code) = deployment_code {
+            evm_verify(deployment_code, instances.clone(), proof.clone());
+        }
 
         Ok((proof, instances))
     }

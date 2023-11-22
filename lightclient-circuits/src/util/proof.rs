@@ -4,22 +4,10 @@ use std::{fs::File, path::Path};
 use ark_std::{end_timer, start_timer};
 use halo2_base::halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr, G1Affine},
-    plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Circuit, ProvingKey, VerifyingKey},
-    poly::{
-        commitment::{Params, ParamsProver},
-        kzg::{
-            commitment::{KZGCommitmentScheme, ParamsKZG},
-            multiopen::{ProverGWC, ProverSHPLONK, VerifierSHPLONK},
-            strategy::SingleStrategy,
-        },
-    },
-    transcript::{
-        Blake2bRead, Blake2bWrite, Challenge255, TranscriptReadBuffer, TranscriptWriterBuffer,
-    },
+    plonk::{keygen_pk, keygen_vk, Circuit, ProvingKey, VerifyingKey},
+    poly::kzg::commitment::ParamsKZG,
     SerdeFormat::RawBytesUnchecked,
 };
-use rand::rngs::OsRng;
-use snark_verifier_sdk::CircuitExt;
 
 pub use halo2_base::utils::fs::{gen_srs, read_or_create_srs, read_params};
 
@@ -29,7 +17,10 @@ pub use halo2_base::utils::fs::{gen_srs, read_or_create_srs, read_params};
 /// If the provided `k` value is larger than the `k` value of the loaded parameters, an error is returned, as the provided `k` is too large.
 /// Otherwise, if the `k` value is smaller than the `k` value of the loaded parameters, the parameters are downsized to fit the requested `k`.
 #[allow(clippy::type_complexity)]
-pub fn read_vkey<C: Circuit<Fr>>(path: &Path, params: C::Params) -> Result<VerifyingKey<G1Affine>, &'static str> {
+pub fn read_vkey<C: Circuit<Fr>>(
+    path: &Path,
+    params: C::Params,
+) -> Result<VerifyingKey<G1Affine>, &'static str> {
     let timer = start_timer!(|| "Loading vkey");
 
     let mut file = File::open(path).map_err(|_| "failed to read file")?;
@@ -63,8 +54,12 @@ pub fn gen_pkey<C: Circuit<Fr>>(
         match File::open(&vkey_path) {
             Ok(mut file) => (
                 start_timer!(|| "Loading vkey"),
-                VerifyingKey::<G1Affine>::read::<_, C>(&mut file, RawBytesUnchecked, circuit.params())
-                    .expect("failed to read vkey"),
+                VerifyingKey::<G1Affine>::read::<_, C>(
+                    &mut file,
+                    RawBytesUnchecked,
+                    circuit.params(),
+                )
+                .expect("failed to read vkey"),
             ),
             Err(_) => {
                 let timer = start_timer!(|| "Creating and writting vkey");
@@ -89,4 +84,3 @@ pub fn gen_pkey<C: Circuit<Fr>>(
 
     Ok(pkey)
 }
-

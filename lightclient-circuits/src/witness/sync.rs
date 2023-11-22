@@ -1,13 +1,10 @@
-use std::iter;
-use std::marker::PhantomData;
-
-use super::HashInput;
-use eth_types::{Field, Spec};
+use eth_types::Spec;
 use itertools::Itertools;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use ssz_rs::{Merkleized, Node};
-use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
+use ssz_rs::Node;
+use std::{iter, marker::PhantomData};
+use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
@@ -57,11 +54,10 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let beacon_block_body_root =
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
-        let mut finalized_block = BeaconBlockHeader {
+        let finalized_block = BeaconBlockHeader {
             body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
             ..Default::default()
         };
-        let finalized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
 
         let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 

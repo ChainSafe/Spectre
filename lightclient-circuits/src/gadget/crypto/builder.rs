@@ -1,5 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, env::set_var, marker::PhantomData, mem};
+use std::env::set_var;
 
+use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, PinnableCircuit};
 use eth_types::Field;
 use getset::Getters;
 use halo2_base::{
@@ -18,18 +19,12 @@ use halo2_base::{
         plonk::{Circuit, ConstraintSystem, Error},
     },
     utils::BigPrimeField,
-    virtual_region::manager::VirtualRegionManager,
-    Context, AssignedValue,
+    AssignedValue, Context,
 };
 use itertools::Itertools;
 use snark_verifier_sdk::CircuitExt;
 
-use crate::{
-    gadget::crypto::{Sha256Chip, ShaFlexGateManager},
-    util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, PinnableCircuit},
-};
-
-use super::sha256_flex::{assign_threads_sha, SpreadConfig, FIRST_PHASE};
+use super::sha256_flex::FIRST_PHASE;
 
 #[derive(Debug, Clone)]
 pub struct SHAConfig<F: Field, CustomConfig: GateBuilderConfig<F>> {
@@ -122,7 +117,11 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
     }
 
     /// Returns new with `self.assigned_instances` resized to specified number of instance columns.
-    pub fn use_instances(mut self, column: usize, assigned_instances: Vec<AssignedValue<F>>) -> Self {
+    pub fn use_instances(
+        mut self,
+        column: usize,
+        assigned_instances: Vec<AssignedValue<F>>,
+    ) -> Self {
         self.set_instances(column, assigned_instances);
         self
     }
@@ -195,7 +194,7 @@ impl<F: Field, GateManager: CommonGateManager<F>> CommonCircuitBuilder<F>
         unimplemented!()
     }
 
-    fn new_context(&self, context_id: usize) -> Context<F> {
+    fn new_context(&self, _context_id: usize) -> Context<F> {
         unimplemented!()
     }
 

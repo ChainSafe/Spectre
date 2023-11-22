@@ -1,18 +1,7 @@
-use std::{
-    env::{set_var, var},
-    fs::File,
-    iter,
-    path::Path,
-};
-
-use eth_types::Testnet;
+use crate::util::{AppCircuit, Halo2ConfigPinning, PinnableCircuit};
 use halo2_base::{
     gates::{circuit::CircuitBuilderStage, flex_gate::MultiPhaseThreadBreakPoints},
-    halo2_proofs::{
-        halo2curves::bn256::Fr,
-        plonk::Error,
-        poly::{commitment::Params, kzg::commitment::ParamsKZG},
-    },
+    halo2_proofs::{halo2curves::bn256::Fr, plonk::Error},
     utils::fs::gen_srs,
 };
 use serde::{Deserialize, Serialize};
@@ -20,8 +9,11 @@ use snark_verifier_sdk::{
     halo2::aggregation::{AggregationCircuit, AggregationConfigParams},
     Snark, SHPLONK,
 };
-
-use crate::util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning, PinnableCircuit};
+use std::{
+    env::{set_var, var},
+    fs::File,
+    path::Path,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationConfigPinning {

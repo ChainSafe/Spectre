@@ -7,10 +7,6 @@ use eth_types::Field;
 use halo2_base::gates::flex_gate::threads::CommonCircuitBuilder;
 use halo2_base::gates::RangeChip;
 use itertools::Itertools;
-use std::collections::HashMap;
-use std::iter;
-use std::os::unix::thread;
-use std::{cell::RefCell, char::MAX};
 
 use crate::gadget::crypto::sha256_wide::util::Sha256AssignedRows;
 use crate::gadget::crypto::sha256_wide::witness::multi_sha256;
@@ -19,21 +15,14 @@ use crate::witness::HashInput;
 
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
-    halo2_proofs::{
-        circuit::{self, AssignedCell, Region},
-        plonk::{Assigned, Error},
-    },
-    utils::value_to_option,
-    AssignedValue, Context, ContextCell, QuantumCell,
+    halo2_proofs::plonk::Error,
+    AssignedValue, QuantumCell,
 };
 
-use self::config::Sha256BitConfig;
 pub use self::gate::ShaBitGateManager;
 use self::util::{NUM_BYTES_FINAL_HASH, NUM_WORDS_TO_ABSORB};
 
 use super::{HashInstructions, ShaCircuitBuilder};
-
-const SHA256_CONTEXT_ID: usize = usize::MAX;
 
 #[derive(Debug)]
 pub struct Sha256ChipWide<'a, F: Field> {
@@ -66,9 +55,9 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         &self,
         builder: &mut Self::CircuitBuilder,
         input: impl IntoIterator<Item = QuantumCell<F>>,
-        strict: bool,
+        _strict: bool,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        let mut assigned_input = input
+        let assigned_input = input
             .into_iter()
             .map(|cell| match cell {
                 QuantumCell::Existing(v) => v,
@@ -101,7 +90,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
             self.load_digest::<MAX_INPUT_SIZE>(builder, binary_input, &mut assigned_rounds)?;
 
         let one_round_size = Self::BLOCK_SIZE;
-        let num_round = 1;
 
         let num_round = if input_byte_size % one_round_size == 0 {
             input_byte_size / one_round_size

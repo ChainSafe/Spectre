@@ -6,7 +6,7 @@
 #![feature(trait_alias)]
 #![feature(generic_arg_infer)]
 #![feature(return_position_impl_trait_in_trait)]
-#![allow(unused, clippy::needless_range_loop)]
+#![allow(clippy::needless_range_loop)]
 pub mod gadget;
 pub mod util;
 pub mod witness;

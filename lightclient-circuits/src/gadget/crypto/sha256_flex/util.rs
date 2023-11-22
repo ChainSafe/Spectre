@@ -3,8 +3,6 @@ use halo2_base::utils::{biguint_to_fe, fe_to_biguint};
 use itertools::Itertools;
 use num_bigint::BigUint;
 
-use crate::witness::HashInput;
-
 pub fn fe_to_bits_le<F: Field>(val: &F, size: usize) -> Vec<bool> {
     let val_bytes = fe_to_biguint(val).to_bytes_le();
     let mut bits = val_bytes

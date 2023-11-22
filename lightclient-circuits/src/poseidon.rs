@@ -1,14 +1,10 @@
-use crate::gadget::crypto::G1Point;
-use eth_types::{Field, Spec};
+use eth_types::Field;
 use halo2_base::{
-    gates::GateInstructions,
-    halo2_proofs::plonk::Error,
-    poseidon::{hasher::PoseidonSponge, PoseidonChip},
-    utils::ScalarField,
+    gates::GateInstructions, halo2_proofs::plonk::Error, poseidon::hasher::PoseidonSponge,
     AssignedValue, Context,
 };
-use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
-use halo2curves::bls12_381::{Fq, G1Affine, G1};
+use halo2_ecc::bigint::ProperCrtUint;
+use halo2curves::bls12_381::Fq;
 use itertools::Itertools;
 use pse_poseidon::Poseidon as PoseidonNative;
 
@@ -37,8 +33,7 @@ pub fn fq_array_poseidon<'a, F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
+        let _ = current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())
@@ -65,7 +60,7 @@ pub fn fq_array_poseidon_native<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-        current_poseidon_hash.insert(poseidon.squeeze());
+        let _ = current_poseidon_hash.insert(poseidon.squeeze());
     }
     Ok(current_poseidon_hash.unwrap())
 }
@@ -84,7 +79,7 @@ pub fn poseidon_sponge<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
+        let _ = current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())

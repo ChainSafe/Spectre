@@ -1,21 +1,16 @@
+#![allow(dead_code)]
 use crate::gadget::Expr;
 use eth_types::*;
 use halo2_base::{
-    gates::{
-        circuit::CircuitBuilderStage,
-        flex_gate::{FlexGateConfig, MultiPhaseThreadBreakPoints},
-    },
+    gates::circuit::CircuitBuilderStage,
     halo2_proofs::{
-        circuit::{AssignedCell, Cell as Halo2Cell, Layouter, Region, Value},
-        plonk::{
-            Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
-        },
+        circuit::{AssignedCell, Layouter, Region, Value},
+        plonk::{Advice, Column, ConstraintSystem, Error, Expression, VirtualCells},
         poly::Rotation,
     },
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
-    Context,
 };
 
 use std::hash::Hash;
@@ -157,19 +152,4 @@ pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
     }
 
     fn unknown(self, use_unknown: bool) -> Self;
-
-    //     /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
-    //     /// * `phase`: The challenge phase (as an index) of the gate thread.
-    //     fn main(&mut self) -> &mut Context<F>;
-
-    //     fn witness_gen_only(&self) -> bool;
-
-    //     /// Returns the `use_unknown` flag.
-    //     fn use_unknown(&self) -> bool;
-
-    //     /// Returns the current number of threads in the [GateThreadBuilder].
-    //     fn thread_count(&self) -> usize;
-
-    //     /// Creates a new thread id by incrementing the `thread count`
-    //     fn get_new_thread_id(&mut self) -> usize;
 }
