@@ -1,12 +1,16 @@
-use eth_types::Spec;
-use itertools::Itertools;
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use ssz_rs::Node;
-use std::{iter, marker::PhantomData};
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use std::iter;
+use std::marker::PhantomData;
 
-#[derive(Debug, Clone, Deserialize)]
+use super::HashInput;
+use eth_types::{Field, Spec};
+use ethereum_consensus_types;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use ssz_rs::{Merkleized, Node};
+use ethereum_consensus_types::BeaconBlockHeader;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
     pub signature_compressed: Vec<u8>,
 
@@ -54,8 +58,8 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let beacon_block_body_root =
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
-        let finalized_block = BeaconBlockHeader {
-            body_root: Node::from_bytes(beacon_block_body_root.try_into().unwrap()),
+        let mut finalized_block = BeaconBlockHeader {
+            body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
             ..Default::default()
         };
 

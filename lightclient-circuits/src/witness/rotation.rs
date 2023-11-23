@@ -1,11 +1,15 @@
 use crate::gadget::crypto::constant_randomness;
 use eth_types::{Field, Spec};
+use ethereum_consensus_types::BeaconBlockHeader;
+use halo2curves::bls12_381::Fq;
+use halo2curves::bls12_381::G1;
 use itertools::Itertools;
-use std::iter;
-use std::marker::PhantomData;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use ssz_rs::Merkleized;
+use ssz_rs::Node;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeRotationArgs<S: Spec, F: Field> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 

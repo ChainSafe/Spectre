@@ -9,12 +9,14 @@ use ethers::contract::abigen;
 use itertools::Itertools;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::{self, Fr};
+use lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed;
 use lightclient_circuits::witness::CommitteeRotationArgs;
 use lightclient_circuits::LIMB_BITS;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use test_utils::{poseidon_committee_commitment_from_compressed, read_test_files_and_gen_witness};
+use std::ops::Deref;
+use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
     RotateExternal,
@@ -78,7 +80,7 @@ async fn test_rotate_public_input_evm_equivalence(
         .clone()
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .deref()
         .try_into()
         .unwrap();
 
@@ -103,4 +105,46 @@ async fn test_rotate_public_input_evm_equivalence(
     assert_eq!(result_decoded.len(), instance[0].len());
     assert_eq!(vec![result_decoded], instance);
     Ok(())
+}
+
+// CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
+impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput
+where
+    [(); Spec::SYNC_COMMITTEE_SIZE]:,
+{
+    fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
+        let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
+            &args
+                .pubkeys_compressed
+                .iter()
+                .cloned()
+                .map(|mut b| {
+                    b.reverse();
+                    b
+                })
+                .collect_vec(),
+        )
+        .unwrap();
+
+        let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
+            .pubkeys_compressed
+            .iter()
+            .cloned()
+            .map(|v| v.try_into().unwrap())
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        let sync_committee_ssz = pk_vector
+            .hash_tree_root()
+            .unwrap()
+            .deref()
+            .try_into()
+            .unwrap();
+
+        RotateInput {
+            sync_committee_ssz,
+            sync_committee_poseidon: poseidon_commitment_le,
+        }
+    }
 }

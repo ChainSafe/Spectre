@@ -24,8 +24,8 @@ sha2.workspace = true
 pse-poseidon = { git = "https://github.com/axiom-crypto/pse-poseidon.git" }
 
 # ethereum
-sync-committee-primitives.workspace = true
-ssz-rs.workspace = true
+ssz_rs = { workspace = true, features = ["serde"] }
+ethereum-consensus-types ={ workspace = true, features = ["serde"] }
 
 # local
 eth-types.workspace = true

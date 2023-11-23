@@ -1,62 +1,71 @@
 use std::marker::PhantomData;
 
+use beacon_api_client::Client;
+use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
-use halo2curves::{bls12_381::G1Affine, group::GroupEncoding, group::UncompressedEncoding};
+use ethereum_consensus_types::signing::{compute_domain, DomainType};
+use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
-use ssz_rs::Merkleized;
-use sync_committee_primitives::{
-    consensus_types::BeaconBlockHeader, domains::DomainType, types::LightClientState,
-    util::compute_domain,
-};
-use sync_committee_prover::SyncCommitteeProver;
+use ssz_rs::Vector;
+use ssz_rs::{Merkleized, Node};
 use tokio::fs;
+use zipline_cryptography::bls::BlsPublicKey;
 
-pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStepArgs<S>> {
-    let client = SyncCommitteeProver::new(node_url);
-    let state_id = "head";
-    let state = client
-        .fetch_beacon_state(state_id)
+use crate::{get_light_client_bootstrap, get_light_client_finality_update};
+
+pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
+) -> eyre::Result<SyncStepArgs<S>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+{
+    let finality_update = get_light_client_finality_update(client).await?;
+    let block_root = client
+        .get_beacon_block_root(BlockId::Slot(finality_update.finalized_header.beacon.slot))
         .await
-        .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
+        .unwrap();
+    let bootstrap: LightClientBootstrap<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    > = get_light_client_bootstrap(client, block_root).await?;
 
-    let mut finalized_block = client.fetch_block("finalized").await.unwrap();
+    let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
 
-    let finalized_header = BeaconBlockHeader {
-        slot: finalized_block.slot,
-        proposer_index: finalized_block.proposer_index,
-        parent_root: finalized_block.parent_root,
-        state_root: finalized_block.state_root,
-        body_root: finalized_block.body.hash_tree_root().unwrap(),
+    let attested_state_id = finality_update.attested_header.beacon.state_root;
+
+    let fork_version = client
+        .get_fork(StateId::Root(attested_state_id))
+        .await?
+        .current_version;
+    let genesis_validators_root = client.get_genesis_details().await?.genesis_validators_root;
+    let fork_data = ForkData {
+        genesis_validators_root,
+        fork_version,
     };
+    let domain = compute_domain(DomainType::SyncCommittee, &fork_data)?;
 
-    let client_state = LightClientState {
-        finalized_header: finalized_header.clone(),
-        latest_finalized_epoch: 0,
-        current_sync_committee: state.current_sync_committee.clone(),
-        next_sync_committee: state.next_sync_committee.clone(),
-    };
+    step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
+}
 
-    let mut light_client_update = client
-        .fetch_light_client_update(
-            client_state.clone(),
-            state.finalized_checkpoint.clone(),
-            "prover",
-        )
-        .await
-        .map_err(|e| eyre::eyre!("Error fetching light client update. Error: {}", e))?
-        .expect("Light client update should be present");
-
-    let mut state = client
-        .fetch_beacon_state(&light_client_update.attested_header.slot.to_string())
-        .await
-        .map_err(|e| eyre::eyre!("Error fetching state from node. Error: {}", e))?;
-
-    let pubkeys_uncompressed = client_state
-        .current_sync_committee
-        .public_keys
+pub async fn step_args_from_finality_update<S: Spec>(
+    finality_update: LightClientFinalityUpdate<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+    domain: [u8; 32],
+) -> eyre::Result<SyncStepArgs<S>> {
+    let pubkeys_uncompressed = pubkeys_compressed
         .iter()
-        .take(S::SYNC_COMMITTEE_SIZE)
         .map(|pk| {
             G1Affine::from_bytes_unchecked(&pk.as_slice().try_into().unwrap())
                 .unwrap()
@@ -66,102 +75,86 @@ pub async fn fetch_step_args<S: Spec>(node_url: String) -> eyre::Result<SyncStep
         })
         .collect_vec();
 
-    let domain = compute_domain(
-        DomainType::SyncCommittee,
-        Some(state.fork.current_version),
-        Some(state.genesis_validators_root),
-        [0u8; 4],
-    )
-    .map_err(|e| eyre::eyre!("domain computation error: {:?}", e))?;
-
-    let state_root = state
-        .hash_tree_root()
-        .map_err(|e| eyre::eyre!("merkleization error: {:?}", e))?;
-
-    let mut finality_branch =
-        ssz_rs::generate_proof(&mut state, &[S::FINALIZED_HEADER_INDEX]).unwrap();
-
-    // FIXME: `ssz_rs::generate_proof` generates branch without `finalized_checkpoint.epoch` leaf. Why?
-    finality_branch.insert(
-        0,
-        state.finalized_checkpoint.epoch.hash_tree_root().unwrap(),
-    );
-
-    let finalized_header_root = light_client_update
+    let execution_payload_root = finality_update
         .finalized_header
-        .hash_tree_root()
-        .unwrap();
-
-    assert!(
-        ssz_rs::verify_merkle_proof(
-            &finalized_header_root,
-            &finality_branch,
-            &ssz_rs::GeneralizedIndex(S::FINALIZED_HEADER_INDEX),
-            &state_root,
-        ),
-        "Execution payload merkle proof verification failed"
-    );
-
-    // TODO: why execution payload proof from `light_client_update` is invalid for S::EXECUTION_STATE_ROOT_INDEX?
-    // let execution_payload_branch = light_client_update
-    //     .execution_payload
-    //     .execution_payload_branch
-    //     .iter()
-    //     .take(4)
-    //     .map(|n| n.as_bytes().to_vec())
-    //     .collect_vec();
-
-    let execution_payload_branch =
-        ssz_rs::generate_proof(&mut finalized_block.body, &[S::EXECUTION_STATE_ROOT_INDEX])
-            .unwrap();
-
-    let execution_payload_root = finalized_block
-        .body
-        .execution_payload
-        .hash_tree_root()
-        .unwrap();
-
-    assert!(
-        ssz_rs::verify_merkle_proof(
-            &execution_payload_root,
-            &execution_payload_branch,
-            &ssz_rs::GeneralizedIndex(S::EXECUTION_STATE_ROOT_INDEX),
-            &finalized_header.body_root,
-        ),
-        "Execution payload merkle proof verification failed"
-    );
-
-    let signature_compressed = light_client_update
-        .sync_aggregate
-        .sync_committee_signature
+        .execution
+        .clone()
+        .hash_tree_root()?
         .to_vec();
+    let execution_payload_branch = finality_update
+        .finalized_header
+        .execution_branch
+        .iter()
+        .map(|n| n.0.to_vec())
+        .collect_vec();
 
-    let args = SyncStepArgs::<S> {
-        signature_compressed,
+    assert!(
+        ssz_rs::is_valid_merkle_branch(
+            Node::try_from(execution_payload_root.as_slice())?,
+            &execution_payload_branch,
+            S::EXECUTION_STATE_ROOT_DEPTH,
+            S::EXECUTION_STATE_ROOT_INDEX,
+            finality_update.finalized_header.beacon.body_root,
+        )
+        .is_ok(),
+        "Execution payload merkle proof verification failed"
+    );
+    assert!(
+        ssz_rs::is_valid_merkle_branch(
+            finality_update
+                .finalized_header
+                .beacon
+                .clone()
+                .hash_tree_root()
+                .unwrap(),
+            &finality_update
+                .finality_branch
+                .iter()
+                .map(|n| n.as_ref())
+                .collect_vec(),
+            S::FINALIZED_HEADER_DEPTH,
+            S::FINALIZED_HEADER_INDEX,
+            finality_update.attested_header.beacon.state_root,
+        )
+        .is_ok(),
+        "Finality merkle proof verification failed"
+    );
+
+    Ok(SyncStepArgs {
+        signature_compressed: finality_update
+            .sync_aggregate
+            .sync_committee_signature
+            .to_bytes()
         pubkeys_uncompressed,
-        pariticipation_bits: light_client_update
+        pariticipation_bits: finality_update
             .sync_aggregate
             .sync_committee_bits
             .iter()
             .by_vals()
-            .take(S::SYNC_COMMITTEE_SIZE)
             .collect_vec(),
-        attested_header: light_client_update.attested_header,
-        finalized_header: light_client_update.finalized_header,
+        attested_header: finality_update.attested_header.beacon,
+        finalized_header: finality_update.finalized_header.beacon,
+        finality_branch: finality_update
+            .finality_branch
+            .iter()
+            .map(|n| n.0.to_vec())
+            .collect_vec(),
+        execution_payload_root: finality_update
+            .finalized_header
+            .execution
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .to_vec(),
+        execution_payload_branch: finality_update
+            .finalized_header
+            .execution_branch
+            .iter()
+            .map(|n| n.0.to_vec())
+            .collect_vec(),
         domain,
-        execution_payload_branch: execution_payload_branch
-            .iter()
-            .map(|n| n.as_bytes().to_vec())
-            .collect_vec(),
-        execution_payload_root: execution_payload_root.0.to_vec(),
-        finality_branch: finality_branch
-            .iter()
-            .map(|n| n.as_bytes().to_vec())
-            .collect_vec(),
         _spec: PhantomData,
-    };
-
-    Ok(args)
+    })
 }
 
 pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<S>> {
@@ -185,15 +178,16 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
+    use beacon_api_client::mainnet::Client as MainnetClient;
+    use reqwest::Url;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step.json";
         const K: u32 = 21;
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
 
-        let witness = fetch_step_args::<Testnet>("http://3.128.78.74:5052".to_string())
-            .await
-            .unwrap();
+        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -221,6 +215,8 @@ mod tests {
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         let witness = fetch_step_args::<Testnet>("http://3.128.78.74:5052".to_string())
             .await

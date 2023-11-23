@@ -1,65 +1,104 @@
 use std::marker::PhantomData;
 
 use crate::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
+use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
+use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
+use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
+use log::debug;
 use ssz_rs::Merkleized;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
-use sync_committee_prover::SyncCommitteeProver;
 use tokio::fs;
 
-pub async fn fetch_rotation_args<S: Spec>(
-    node_url: String,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
-    let client = SyncCommitteeProver::new(node_url);
-    let finalized_header = client.fetch_header("finalized").await.unwrap();
-    let mut finalized_state = client
-        .fetch_beacon_state(&finalized_header.state_root.to_string())
-        .await
-        .unwrap();
-    let pubkeys_compressed = finalized_state
-        .next_sync_committee
-        .public_keys
-        .iter()
-        .map(|pk| pk.to_vec())
-        .collect_vec();
+use crate::{get_block_header, get_light_client_update_at_period};
 
-    let mut sync_committee_branch =
-        ssz_rs::generate_proof(&mut finalized_state, &[S::SYNC_COMMITTEE_ROOT_INDEX * 2]).unwrap();
+pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
+    client: &Client<C>,
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
+    let block = get_block_header(client, BlockId::Head).await?;
+    let slot = block.slot;
+    let period = slot / (32 * 256);
+    debug!(
+        "Fetching light client update at current Slot: {} at Period: {}",
+        slot, period
+    );
+
+    let mut update = get_light_client_update_at_period(client, period).await?;
+    rotation_args_from_update(&mut update).await
+}
+
+pub async fn rotation_args_from_update<S: Spec>(
+    update: &mut LightClientUpdateCapella<
+        { S::SYNC_COMMITTEE_SIZE },
+        { S::SYNC_COMMITTEE_ROOT_INDEX },
+        { S::SYNC_COMMITTEE_DEPTH },
+        { S::FINALIZED_HEADER_INDEX },
+        { S::FINALIZED_HEADER_DEPTH },
+        { S::BYTES_PER_LOGS_BLOOM },
+        { S::MAX_EXTRA_DATA_BYTES },
+    >,
+) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
+    let pubkeys_compressed = update
+        .next_sync_committee
+        .pubkeys
+        .iter()
+        .map(|pk| pk.to_bytes().to_vec())
+        .collect_vec();
+    let mut sync_committee_branch = update.next_sync_committee_branch.as_ref().to_vec();
 
     sync_committee_branch.insert(
         0,
-        finalized_state
+        update
             .next_sync_committee
-            .aggregate_public_key
+            .aggregate_pubkey
             .hash_tree_root()
             .unwrap(),
     );
+
     assert!(
-        ssz_rs::verify_merkle_proof(
-            &finalized_state
-                .next_sync_committee
-                .public_keys
-                .hash_tree_root()
-                .unwrap(),
-            &sync_committee_branch,
-            &ssz_rs::GeneralizedIndex(S::SYNC_COMMITTEE_ROOT_INDEX * 2),
-            &finalized_header.state_root,
-        ),
+        ssz_rs::is_valid_merkle_branch(
+            update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
+            &sync_committee_branch
+                .iter()
+                .map(|n| n.as_ref())
+                .collect_vec(),
+            S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+            update.attested_header.beacon.state_root,
+        )
+        .is_ok(),
         "Execution payload merkle proof verification failed"
     );
+
     let args = CommitteeRotationArgs::<S, Fr> {
         pubkeys_compressed,
         randomness: crypto::constant_randomness(),
-        finalized_header,
+        finalized_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
-            .iter()
-            .map(|n| n.as_bytes().to_vec())
+            .into_iter()
+            .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
     };
-
     Ok(args)
 }
 
@@ -95,24 +134,23 @@ pub async fn read_rotation_args<S: Spec>(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
     use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning}, halo2_base::gates::circuit::CircuitBuilderStage,
     };
+    use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
-
-    use super::*;
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-
-        let witness = fetch_rotation_args::<Testnet>("http://3.128.78.74:5052".to_string())
-            .await
-            .unwrap();
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
@@ -140,10 +178,8 @@ mod tests {
             false,
             &CommitteeRotationArgs::<Testnet, Fr>::default(),
         );
-
-        let witness = fetch_rotation_args::<Testnet>("http://3.128.78.74:5052".to_string())
-            .await
-            .unwrap();
+        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

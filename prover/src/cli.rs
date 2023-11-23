@@ -1,5 +1,7 @@
 use crate::args::{Args, Out, Proof};
 
+use beacon_api_client::Client;
+use beacon_api_client::ClientTypes;
 use ethers::abi::Address;
 use ethers::providers::{Http, Provider};
 use itertools::Itertools;
@@ -9,6 +11,7 @@ use lightclient_circuits::{
     sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
+use preprocessor::{fetch_rotation_args, fetch_step_args};
 use primitive_types::U256;
 use snark_verifier::{
     loader::halo2::halo2_ecc::halo2_base::halo2_proofs::{
@@ -25,35 +28,66 @@ use std::{
     path::Path,
     sync::Arc,
 };
-
-use preprocessor::{fetch_rotation_args, fetch_step_args};
+use url::Url;
 ethers::contract::abigen!(
     SnarkVerifierSol,
     r#"[
         function verify(uint256[1] calldata pubInputs,bytes calldata proof) public view returns (bool)
     ]"#,
 );
-pub(crate) async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<()> {
+
+pub trait FetchFn<Arg>: FnOnce(Arg) -> <Self as FetchFn<Arg>>::Fut {
+    type Fut: Future<Output = <Self as FetchFn<Arg>>::Output>;
+    type Output;
+}
+
+impl<Arg, F, Fut> FetchFn<Arg> for F
+where
+    F: FnOnce(Arg) -> Fut,
+    Fut: Future,
+{
+    type Fut = Fut;
+    type Output = Fut::Output;
+}
+
+pub(crate) async fn spec_app<S: eth_types::Spec, C: ClientTypes>(proof: &Proof) -> eyre::Result<()>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     match proof {
         Proof::CommitteeUpdate(args) => {
-            generic_circuit_cli::<CommitteeUpdateCircuit<S, Fr>, _, _>(
+            let client: Client<C> = Client::new(Url::parse(&args.beacon_api_url).unwrap());
+
+            generic_circuit_cli::<CommitteeUpdateCircuit<S, Fr>, C, _>(
                 args,
+                client,
                 fetch_rotation_args,
                 "committee_update",
                 <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
-            .await
+            .await?;
         }
         Proof::SyncStep(args) => {
-            generic_circuit_cli::<StepCircuit<S, Fr>, _, _>(
+            let client: Client<C> = Client::new(Url::parse(&args.beacon_api_url).unwrap());
+
+            generic_circuit_cli::<SyncStepCircuit<S, Fr>, C, _>(
                 args,
+                client,
                 fetch_step_args,
-                "sync_step",
-                <StepCircuit<S, Fr> as AppCircuit>::Witness::default(),
+                "step_circuit_testnet",
+                <SyncStepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
-            .await
+            .await?;
         }
         Proof::Aggregation(args) => {
+            let client: Client<C> = Client::new(Url::parse("").unwrap());
+
             let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(
                 &args.app_config_path,
             ));
@@ -72,34 +106,37 @@ pub(crate) async fn spec_app<S: eth_types::Spec>(proof: &Proof) -> eyre::Result<
                     .as_ref()
                     .expect("path to SNARK is required"),
             )?;
-
-            generic_circuit_cli::<AggregationCircuit, _, _>(
+            let snark_clone = snark.clone();
+            let get_args = move |_client: &Client<C>| async { Ok(vec![snark_clone]) };
+            generic_circuit_cli::<AggregationCircuit, C, _>(
                 &args.aggregation,
-                |_| async { Ok(vec![snark.clone()]) },
+                client,
+                get_args,
                 "aggregation",
-                vec![snark.clone()],
+                vec![snark],
             )
-            .await
+            .await?;
         }
     }
+    Ok(())
 }
 
-pub(crate) async fn generic_circuit_cli<
-    Circuit: AppCircuit,
-    FnFetch: FnOnce(String) -> Fut,
-    Fut: Future<Output = eyre::Result<Circuit::Witness>>,
->(
+pub(crate) async fn generic_circuit_cli<Circuit: AppCircuit, C: ClientTypes, FnFetch>(
     args: &Args,
+    client: Client<C>,
     fetch: FnFetch,
     name: &str,
     default_witness: Circuit::Witness,
-) -> eyre::Result<()> {
+) -> eyre::Result<()>
+where
+    for<'a> FnFetch: FetchFn<&'a Client<C>, Output = eyre::Result<Circuit::Witness>>,
+{
     let k = args
         .k
         .unwrap_or_else(|| Circuit::get_degree(&args.config_path));
     let params = gen_srs(k);
     let pk_filename = format!("{}.pkey", name);
-
+    // let client = Client::new(Url::parse(&args.beacon_api_url).unwrap());
     match args.out {
         Out::Snark => {
             let pk = Circuit::read_or_create_pk(
@@ -109,7 +146,7 @@ pub(crate) async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let witness = fetch(args.beacon_api_url.clone()).await?;
+            let witness = fetch(&client).await?;
             Circuit::gen_snark_shplonk(
                 &params,
                 &pk,
@@ -159,7 +196,8 @@ pub(crate) async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let witness = fetch(args.beacon_api_url.clone()).await?;
+
+            let witness = fetch(&client).await?;
 
             let deplyment_code =
                 Circuit::gen_evm_verifier_shplonk(&params, &pk, None::<&Path>, &default_witness)
@@ -187,7 +225,7 @@ pub(crate) async fn generic_circuit_cli<
                 true,
                 &default_witness,
             );
-            let witness = fetch(args.beacon_api_url.clone()).await?;
+            let witness = fetch(&client).await?;
 
             let (proof, instances) =
                 Circuit::gen_evm_proof_shplonk(&params, &pk, &args.config_path, None, &witness)

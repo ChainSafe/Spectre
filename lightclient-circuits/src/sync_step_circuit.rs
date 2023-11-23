@@ -233,7 +233,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_bytes()
+            .as_ref()
             .try_into()
             .unwrap();
 
