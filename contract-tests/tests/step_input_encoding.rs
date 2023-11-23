@@ -1,16 +1,16 @@
+use std::ops::Deref;
 use std::path::PathBuf;
 
 use contract_tests::make_client;
 use eth_types::Minimal;
 use ethers::contract::abigen;
 use halo2curves::bn256;
+use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
 use ssz_rs::Merkleized;
-use test_utils::{
-    poseidon_committee_commitment_from_uncompressed, read_test_files_and_gen_witness,
-};
+use test_utils::read_test_files_and_gen_witness;
 
 abigen!(
     SyncStepExternal,
@@ -57,7 +57,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             .clone()
             .hash_tree_root()
             .unwrap()
-            .as_bytes()
+            .deref()
             .try_into()
             .unwrap();
 
@@ -66,7 +66,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
         SyncStepInput {
             attested_slot: args.attested_header.slot,
             finalized_slot: args.finalized_header.slot,
-            participation: participation,
+            participation,
             finalized_header_root,
             execution_payload_root,
         }

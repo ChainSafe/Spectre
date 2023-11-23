@@ -3,6 +3,7 @@ use contracts::{RotateInput, SyncStepInput};
 use itertools::Itertools;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
+use std::ops::Deref;
 
 pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> SyncStepInput {
     let participation = args
@@ -16,7 +17,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
         .clone()
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .deref()
         .try_into()
         .unwrap();
 
@@ -25,7 +26,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
     SyncStepInput {
         attested_slot: args.attested_header.slot,
         finalized_slot: args.finalized_header.slot,
-        participation: participation,
+        participation,
         finalized_header_root,
         execution_payload_root,
     }
@@ -62,7 +63,7 @@ where
     let sync_committee_ssz = pk_vector
         .hash_tree_root()
         .unwrap()
-        .as_bytes()
+        .deref()
         .try_into()
         .unwrap();
 
