@@ -6,9 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use contract_tests::make_client;
-use contracts::{
-    CommitteeUpdateMockVerifier, Spectre, StepMockVerifier,
-};
+use contracts::{CommitteeUpdateMockVerifier, Spectre, StepMockVerifier};
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
 use rstest::rstest;

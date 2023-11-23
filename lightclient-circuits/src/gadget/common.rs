@@ -177,12 +177,7 @@ impl<F: Field> Expr<F> for i32 {
     #[inline]
     fn expr(&self) -> Expression<F> {
         Expression::Constant(
-            F::from(self.unsigned_abs() as u64)
-                * if self.is_negative() {
-                    -F::ONE
-                } else {
-                    F::ONE
-                },
+            F::from(self.unsigned_abs() as u64) * if self.is_negative() { -F::ONE } else { F::ONE },
         )
     }
 }
@@ -205,7 +200,7 @@ pub mod rlc {
     use std::ops::{Add, Mul};
 
     use super::{Expr, Expression, Field};
-    use halo2_base::{AssignedValue, Context, QuantumCell, gates::GateInstructions};
+    use halo2_base::{gates::GateInstructions, AssignedValue, Context, QuantumCell};
 
     /// Returns an expression that represents the random linear combination.
     pub fn expr<F: Field, E: Expr<F>>(expressions: &[E], randomness: E) -> Expression<F> {

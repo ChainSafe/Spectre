@@ -24,7 +24,6 @@ pub trait AsBits<const N: usize> {
     fn as_bits(&self) -> [bool; N];
 }
 
-
 /// Packs bits into bytes
 pub mod to_bytes {
     use crate::gadget::Expr;

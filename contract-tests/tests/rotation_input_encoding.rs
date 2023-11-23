@@ -30,11 +30,7 @@ where
 {
     fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
         let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
-            &args
-                .pubkeys_compressed
-                .iter()
-                .cloned()
-                .collect_vec(),
+            &args.pubkeys_compressed.iter().cloned().collect_vec(),
         )
         .unwrap();
 
@@ -101,4 +97,3 @@ async fn test_rotate_public_input_evm_equivalence(
     assert_eq!(vec![result_decoded], instance);
     Ok(())
 }
-

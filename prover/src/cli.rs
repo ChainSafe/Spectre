@@ -6,8 +6,8 @@ use ethers::abi::Address;
 use ethers::providers::{Http, Provider};
 use itertools::Itertools;
 use lightclient_circuits::{
-    halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine},
     committee_update_circuit::CommitteeUpdateCircuit,
+    halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine},
     sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
