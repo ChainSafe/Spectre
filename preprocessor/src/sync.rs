@@ -66,13 +66,7 @@ pub async fn step_args_from_finality_update<S: Spec>(
 ) -> eyre::Result<SyncStepArgs<S>> {
     let pubkeys_uncompressed = pubkeys_compressed
         .iter()
-        .map(|pk| {
-            G1Affine::from_bytes_unchecked(&pk.as_slice().try_into().unwrap())
-                .unwrap()
-                .to_uncompressed()
-                .as_ref()
-                .to_vec()
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
 
     let execution_payload_root = finality_update
@@ -125,6 +119,7 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .sync_aggregate
             .sync_committee_signature
             .to_bytes()
+            .to_vec(),
         pubkeys_uncompressed,
         pariticipation_bits: finality_update
             .sync_aggregate
@@ -168,8 +163,8 @@ pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<
 
 #[cfg(test)]
 mod tests {
-    use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use eth_types::Testnet;
+    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage,
         sync_step_circuit::StepCircuit,
@@ -217,10 +212,6 @@ mod tests {
         );
         let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
-
-        let witness = fetch_step_args::<Testnet>("http://3.128.78.74:5052".to_string())
-            .await
-            .unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

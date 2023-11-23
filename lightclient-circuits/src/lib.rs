@@ -21,9 +21,6 @@ mod ssz_merkle;
 pub use halo2_base;
 pub use halo2_base::halo2_proofs;
 
-pub const NUM_LIMBS: usize = 4;
-pub const LIMB_BITS: usize = 112;
-
 use halo2_base::halo2_proofs::halo2curves::bn256;
 #[allow(type_alias_bounds)]
 pub type Eth2CircuitBuilder<GateManager: util::CommonGateManager<bn256::Fr>> =

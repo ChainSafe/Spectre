@@ -1,10 +1,13 @@
-use eth_types::Field;
+use eth_types::{Field, LIMB_BITS};
 use halo2_base::{
-    gates::GateInstructions, halo2_proofs::plonk::Error, poseidon::hasher::PoseidonSponge,
-    AssignedValue, Context,
+    gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,
+    poseidon::hasher::PoseidonSponge, AssignedValue, Context,
 };
 use halo2_ecc::bigint::ProperCrtUint;
-use halo2curves::bls12_381::Fq;
+use halo2curves::{
+    bls12_381::{self, Fq},
+    group::UncompressedEncoding,
+};
 use itertools::Itertools;
 use pse_poseidon::Poseidon as PoseidonNative;
 
@@ -99,7 +102,8 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         })
         .collect_vec();
     let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
+        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
+            .unwrap();
     Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
@@ -110,6 +114,6 @@ pub fn poseidon_committee_commitment_from_compressed(
         bytes[47] &= 0b00011111;
         bls12_381::Fq::from_bytes_le(&bytes)
     });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
+    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS).unwrap();
     Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }

@@ -31,6 +31,9 @@ impl Spec for Minimal {
     const EXECUTION_STATE_ROOT_DEPTH: usize = 4;
     const FINALIZED_HEADER_INDEX: usize = 105;
     const FINALIZED_HEADER_DEPTH: usize = 6;
+
+    const BYTES_PER_LOGS_BLOOM: usize = 256;
+    const MAX_EXTRA_DATA_BYTES: usize = 32;
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
@@ -47,6 +50,9 @@ impl Spec for Testnet {
     const EXECUTION_STATE_ROOT_DEPTH: usize = 4;
     const FINALIZED_HEADER_INDEX: usize = 105;
     const FINALIZED_HEADER_DEPTH: usize = 6;
+
+    const BYTES_PER_LOGS_BLOOM: usize = 256;
+    const MAX_EXTRA_DATA_BYTES: usize = 32;
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
@@ -63,4 +69,7 @@ impl Spec for Mainnet {
     const EXECUTION_STATE_ROOT_DEPTH: usize = 4;
     const FINALIZED_HEADER_INDEX: usize = 105;
     const FINALIZED_HEADER_DEPTH: usize = 6;
+
+    const BYTES_PER_LOGS_BLOOM: usize = 256;
+    const MAX_EXTRA_DATA_BYTES: usize = 32;
 }

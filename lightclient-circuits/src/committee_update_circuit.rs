@@ -5,9 +5,9 @@ use crate::{
     sync_step_circuit::clear_3_bits,
     util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
-    Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
+    Eth2CircuitBuilder,
 };
-use eth_types::{Field, Spec};
+use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
     gates::{
         circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
@@ -103,44 +103,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         Ok(public_inputs)
     }
 
-    pub fn instance(args: &witness::CommitteeRotationArgs<S, F>) -> Vec<Vec<bn256::Fr>>
-    where
-        [(); { S::SYNC_COMMITTEE_SIZE }]:,
-    {
-        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
-            bytes.reverse();
-            bytes[47] &= 0b00011111;
-            bls12_381::Fq::from_bytes_le(&bytes)
-        });
-
-        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-
-        let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
-            .pubkeys_compressed
-            .iter()
-            .cloned()
-            .map(|v| v.try_into().unwrap())
-            .collect_vec()
-            .try_into()
-            .unwrap();
-
-        let ssz_root = pk_vector.hash_tree_root().unwrap();
-
-        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
-
-        let instance_vec = iter::once(poseidon_commitment)
-            .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
-            .chain(
-                finalized_header_root
-                    .as_ref()
-                    .iter()
-                    .map(|b| bn256::Fr::from(*b as u64)),
-            )
-            .collect();
-
-        vec![instance_vec]
-    }
-
     fn decode_pubkeys_x(
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,
@@ -224,8 +186,13 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
 
         let instance_vec = iter::once(poseidon_commitment)
-            .chain(ssz_root.0.map(|b| bn256::Fr::from(b as u64)))
-            .chain(finalized_header_root.0.map(|b| bn256::Fr::from(b as u64)))
+            .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
+            .chain(
+                finalized_header_root
+                    .as_ref()
+                    .iter()
+                    .map(|b| bn256::Fr::from(*b as u64)),
+            )
             .collect();
 
         vec![instance_vec]
@@ -296,7 +263,6 @@ mod tests {
     };
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
     use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
-    use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 
     fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
         #[derive(serde::Deserialize)]

@@ -1,11 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
+use lightclient_circuits::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
 use log::debug;
 use ssz_rs::Merkleized;
@@ -137,10 +136,11 @@ mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
-    use crate::halo2_base::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning}, halo2_base::gates::circuit::CircuitBuilderStage,
+        halo2_base::gates::circuit::CircuitBuilderStage,
+        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;

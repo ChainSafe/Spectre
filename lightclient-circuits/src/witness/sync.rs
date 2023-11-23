@@ -1,14 +1,12 @@
-use std::iter;
-use std::marker::PhantomData;
-
-use super::HashInput;
-use eth_types::{Field, Spec};
+use eth_types::Spec;
 use ethereum_consensus_types;
+use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use ssz_rs::{Merkleized, Node};
-use ethereum_consensus_types::BeaconBlockHeader;
+use ssz_rs::Node;
+use std::iter;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
@@ -58,7 +56,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let beacon_block_body_root =
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
-        let mut finalized_block = BeaconBlockHeader {
+        let finalized_block = BeaconBlockHeader {
             body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
             ..Default::default()
         };

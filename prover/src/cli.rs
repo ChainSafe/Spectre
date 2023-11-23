@@ -76,12 +76,12 @@ where
         Proof::SyncStep(args) => {
             let client: Client<C> = Client::new(Url::parse(&args.beacon_api_url).unwrap());
 
-            generic_circuit_cli::<SyncStepCircuit<S, Fr>, C, _>(
+            generic_circuit_cli::<StepCircuit<S, Fr>, C, _>(
                 args,
                 client,
                 fetch_step_args,
                 "step_circuit_testnet",
-                <SyncStepCircuit<S, Fr> as AppCircuit>::Witness::default(),
+                <StepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await?;
         }

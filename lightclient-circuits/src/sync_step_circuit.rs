@@ -7,9 +7,9 @@ use crate::{
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
-    Eth2CircuitBuilder, LIMB_BITS, NUM_LIMBS,
+    Eth2CircuitBuilder,
 };
-use eth_types::{Field, Spec};
+use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
     gates::{
         circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, GateInstructions,
@@ -447,7 +447,10 @@ mod tests {
     use halo2_base::{
         halo2_proofs::dev::MockProver, halo2_proofs::halo2curves::bn256::Fr, utils::fs::gen_srs,
     };
-    use snark_verifier_sdk::{evm::{evm_verify, gen_evm_proof_shplonk}, CircuitExt};
+    use snark_verifier_sdk::{
+        evm::{evm_verify, gen_evm_proof_shplonk},
+        CircuitExt,
+    };
 
     fn load_circuit_args() -> SyncStepArgs<Testnet> {
         serde_json::from_slice(&fs::read("../test_data/sync_step_512.json").unwrap()).unwrap()

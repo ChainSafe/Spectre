@@ -2,13 +2,12 @@ use std::ops::Deref;
 use std::path::PathBuf;
 
 use contract_tests::make_client;
-use eth_types::Minimal;
+use eth_types::{Minimal, LIMB_BITS};
 use ethers::contract::abigen;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
-use lightclient_circuits::sync_step_circuit::SyncStepCircuit;
+use lightclient_circuits::sync_step_circuit::StepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
-use lightclient_circuits::{sync_step_circuit::StepCircuit, LIMB_BITS};
 use rstest::rstest;
 use ssz_rs::Merkleized;
 use test_utils::read_test_files_and_gen_witness;

@@ -1,9 +1,8 @@
 use ark_std::{end_timer, start_timer};
-use eth_types::Minimal;
+use eth_types::{Minimal, LIMB_BITS};
 use halo2_base::gates::circuit::CircuitBuilderStage;
 use halo2_base::halo2_proofs::dev::MockProver;
 use halo2_base::halo2_proofs::halo2curves::bn256;
-use lightclient_circuits::LIMB_BITS;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::sync_step_circuit::StepCircuit;
 use lightclient_circuits::util::gen_srs;

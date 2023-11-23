@@ -1,6 +1,7 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 use std::ops::Deref;
-
+use eth_types::LIMB_BITS;
 use ethers::contract::abigen;
 use halo2_base::utils::ScalarField;
 use halo2curves::bls12_381::{self};
@@ -104,6 +105,6 @@ pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u
         bytes[47] &= 0b00011111;
         bls12_381::Fq::from_bytes_le(&bytes)
     });
-    let poseidon_commitment = fq_array_poseidon_native::<Fr>(pubkeys_x).unwrap();
+    let poseidon_commitment = fq_array_poseidon_native::<Fr>(pubkeys_x, LIMB_BITS).unwrap();
     poseidon_commitment.to_bytes_le().try_into().unwrap()
 }

@@ -6,27 +6,21 @@ use crate::test_types::{ByteVector, TestMeta, TestStep};
 use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
+use ethereum_consensus_types::BeaconBlockHeader;
 use ethereum_consensus_types::{ForkData, Root};
-use halo2curves::bls12_381;
-use halo2curves::group::UncompressedEncoding;
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::{self, Fr};
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::poseidon::{
     poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
 };
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
-use lightclient_circuits::LIMB_BITS;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
+use std::ops::Deref;
 use std::path::Path;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
-
-use crate::execution_payload_header::ExecutionPayloadHeader;
-use crate::test_types::{ByteVector, TestMeta, TestStep};
-use ethereum_consensus_types::BeaconBlockHeader;
 pub mod conversions;
 mod execution_payload_header;
 mod test_types;
