@@ -43,10 +43,6 @@ where
             .pubkeys_compressed
             .iter()
             .cloned()
-            // .map(|mut b| {
-            //     b.reverse();
-            //     b
-            // })
             .collect_vec(),
     )
     .unwrap();

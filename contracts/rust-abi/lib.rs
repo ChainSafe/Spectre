@@ -1,17 +1,14 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
-use std::ops::Deref;
-use eth_types::LIMB_BITS;
 use ethers::contract::abigen;
-use halo2_base::utils::ScalarField;
-use halo2curves::bls12_381::{self};
 use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{
-    poseidon::fq_array_poseidon_native,
+    poseidon::poseidon_committee_commitment_from_compressed,
     witness::{CommitteeRotationArgs, SyncStepArgs},
 };
 use ssz_rs::{Merkleized, Vector};
+use std::ops::Deref;
 abigen!(
     Spectre,
     "./out/Spectre.sol/Spectre.json";
@@ -66,16 +63,9 @@ where
 {
     fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
         let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
-            &args
-                .pubkeys_compressed
-                .iter()
-                .cloned()
-                .map(|mut b| {
-                    b.reverse();
-                    b
-                })
-                .collect_vec(),
-        );
+            &args.pubkeys_compressed.iter().cloned().collect_vec(),
+        )
+        .unwrap();
 
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -100,11 +90,12 @@ where
     }
 }
 
-pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> [u8; 32] {
-    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
-    });
-    let poseidon_commitment = fq_array_poseidon_native::<Fr>(pubkeys_x, LIMB_BITS).unwrap();
-    poseidon_commitment.to_bytes_le().try_into().unwrap()
-}
+// pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> [u8; 32] {
+//     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
+//         bytes[0] &= 0b00011111;
+//         bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+//             .expect("bad bls12_381::Fq encoding")
+//     });
+//     let poseidon_commitment = fq_array_poseidon_native::<Fr>(pubkeys_x, LIMB_BITS).unwrap();
+//     poseidon_commitment.to_bytes()
+// }

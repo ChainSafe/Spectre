@@ -104,16 +104,17 @@ pub fn poseidon_committee_commitment_from_uncompressed(
     let poseidon_commitment =
         fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
             .unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    Ok(poseidon_commitment.to_bytes())
 }
 
 pub fn poseidon_committee_commitment_from_compressed(
     pubkeys_compressed: &[Vec<u8>],
 ) -> Result<[u8; 32], Error> {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
+        bytes[0] &= 0b00011111;
+        bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+            .expect("bad bls12_381::Fq encoding")
     });
     let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    Ok(poseidon_commitment.to_bytes())
 }
