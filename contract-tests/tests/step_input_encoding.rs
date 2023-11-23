@@ -5,7 +5,7 @@ use eth_types::Minimal;
 use ethers::contract::abigen;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256;
 use lightclient_circuits::witness::SyncStepArgs;
-use lightclient_circuits::{step_circuit::StepCircuit, LIMB_BITS};
+use lightclient_circuits::{sync_step_circuit::StepCircuit, LIMB_BITS};
 use rstest::rstest;
 use ssz_rs::Merkleized;
 use test_utils::{

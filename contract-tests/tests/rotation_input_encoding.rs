@@ -7,7 +7,7 @@ use contract_tests::make_client;
 use eth_types::Minimal;
 use ethers::contract::abigen;
 use itertools::Itertools;
-use lightclient_circuits::rotation_circuit::CommitteeUpdateCircuit;
+use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::{self, Fr};
 use lightclient_circuits::witness::CommitteeRotationArgs;
 use lightclient_circuits::LIMB_BITS;

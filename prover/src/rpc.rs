@@ -5,8 +5,8 @@ use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use lightclient_circuits::{
-    rotation_circuit::CommitteeUpdateCircuit,
-    step_circuit::StepCircuit,
+    committee_update_circuit::CommitteeUpdateCircuit,
+    sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};

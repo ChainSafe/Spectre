@@ -12,8 +12,8 @@ pub mod util;
 pub mod witness;
 
 pub mod aggregation;
-pub mod rotation_circuit;
-pub mod step_circuit;
+pub mod committee_update_circuit;
+pub mod sync_step_circuit;
 
 pub mod poseidon;
 mod ssz_merkle;

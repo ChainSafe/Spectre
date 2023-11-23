@@ -179,7 +179,7 @@ mod tests {
     use eth_types::Testnet;
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage,
-        step_circuit::StepCircuit,
+        sync_step_circuit::StepCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use snark_verifier_sdk::CircuitExt;
