@@ -21,6 +21,19 @@ use itertools::Itertools;
 use log::debug;
 use std::iter;
 use std::marker::PhantomData;
+use zkevm_hashes::sha256::vanilla::columns::Sha256CircuitConfig;
+
+impl<F: Field> GateBuilderConfig<F> for Sha256CircuitConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self {
+        Sha256CircuitConfig::new(meta)
+    }
+
+    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn annotate_columns_in_region(&self, region: &mut Region<F>) {}
+}
 
 /// Configuration for [`Sha256WideChip`].
 #[derive(Clone, Debug)]

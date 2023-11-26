@@ -39,7 +39,9 @@ halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "comm
     "jemallocator"
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
-halo2curves = { git = "https://github.com/axiom-crypto/halo2curves", version = "0.4.0" }
+zkevm-hashes = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
+
+halo2curves = { package = "halo2curves-axiom", version = "0.4.2" }
 
 
 # verifier SDK
@@ -73,7 +75,7 @@ ff = "0.12"
 sha2 = { version = "0.10.6", features = ["compress"] }
 uint = "0.9.1"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
-poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
+# poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 
 # misc
 itertools = "0.11.0"
@@ -82,34 +84,33 @@ serde_json = "1.0.78"
 log = "0.4.14"
 hex = "0.4"
 
-[patch."https://github.com/axiom-crypto/halo2curves"]
-halo2curves = { git = "https://github.com/timoftime/halo2curves", branch = "support_bls12-381" }
-# halo2curves = { path = "../halo2curves" }
+[patch.crates-io]
+halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "f3bb3f5a7d3a8ca806368f185c112283a73a94cb"  }
+ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
-    "halo2-pse",
-    "display",
-    "jemallocator"
-] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
-    "halo2-pse",
-    "jemallocator"
-] }
-# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+# halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
 #     "halo2-pse",
 #     "display",
+#     "jemallocator"
 # ] }
-# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
 #     "halo2-pse",
+#     "jemallocator"
 # ] }
+halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+    "halo2-pse",
+    "display",
+] }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+    "halo2-pse",
+] }
+zkevm-hashes = { path = "../halo2-lib/hashes/zkevm", default-features = false }
+
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
 snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
 snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
 # snark-verifier = { path = "../snark-verifier/snark-verifier" }
 # snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
-
-[patch.crates-io]
-ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }

@@ -1,3 +1,4 @@
+use eth_types::Field;
 use halo2_base::utils::{decompose, ScalarField};
 use halo2_base::QuantumCell;
 use halo2_base::{
@@ -23,7 +24,7 @@ use super::util::{bits_le_to_fe, fe_to_bits_le};
 use super::ShaFlexGateManager;
 
 #[derive(Debug, Clone)]
-pub struct SpreadConfig<F: BigPrimeField> {
+pub struct SpreadConfig<F: Field> {
     pub denses: Vec<Column<Advice>>,
     pub spreads: Vec<Column<Advice>>,
     pub table_dense: TableColumn,
@@ -33,7 +34,7 @@ pub struct SpreadConfig<F: BigPrimeField> {
     _f: PhantomData<F>,
 }
 
-impl<F: BigPrimeField> SpreadConfig<F> {
+impl<F: Field> SpreadConfig<F> {
     pub fn configure(
         meta: &mut ConstraintSystem<F>,
         num_bits_lookup: usize,
@@ -77,7 +78,7 @@ impl<F: BigPrimeField> SpreadConfig<F> {
     }
 }
 
-impl<F: BigPrimeField> GateBuilderConfig<F> for SpreadConfig<F> {
+impl<F: Field> GateBuilderConfig<F> for SpreadConfig<F> {
     fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         Self::configure(meta, 8, 1) // todo: configure
     }
@@ -129,7 +130,7 @@ pub struct SpreadChip<'a, F: ScalarField> {
     range: &'a RangeChip<F>,
 }
 
-impl<'a, F: BigPrimeField> SpreadChip<'a, F> {
+impl<'a, F: Field> SpreadChip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
         debug_assert_eq!(16 % range.lookup_bits(), 0);
 

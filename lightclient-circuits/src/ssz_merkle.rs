@@ -31,7 +31,7 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
             .tuples()
             .map(|(left, right)| {
                 hasher
-                    .digest::<64>(builder, HashInput::TwoToOne(left, right), false)
+                    .digest(builder, HashInput::TwoToOne(left, right))
                     .map(|res| res.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -59,14 +59,13 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
 
     for witness in proof.into_iter() {
         computed_hash = hasher
-            .digest::<64>(
+            .digest(
                 builder,
                 if gindex % 2 == 0 {
                     HashInput::TwoToOne(computed_hash, witness)
                 } else {
                     HashInput::TwoToOne(witness, computed_hash)
                 },
-                false,
             )?
             .into();
         gindex /= 2;

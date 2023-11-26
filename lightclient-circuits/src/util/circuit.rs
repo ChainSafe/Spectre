@@ -2,6 +2,7 @@ use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
+use eth_types::Field;
 use halo2_base::gates::circuit::{BaseCircuitParams, CircuitBuilderStage};
 use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
 use halo2_base::halo2_proofs::{
@@ -79,7 +80,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 }
 
-pub trait PinnableCircuit<F: BigPrimeField>: CircuitExt<F> {
+pub trait PinnableCircuit<F: Field>: CircuitExt<F> {
     type Pinning: Halo2ConfigPinning;
 
     fn break_points(&self) -> <Self::Pinning as Halo2ConfigPinning>::BreakPoints;

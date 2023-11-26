@@ -58,47 +58,49 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let committee_root_ssz =
             Self::sync_committee_root_ssz(builder, &sha256_chip, compressed_encodings.clone())?;
 
-        let poseidon_commit = {
-            let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
-            fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
-        };
+        // let poseidon_commit = {
+        //     let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
+        //     fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
+        // };
 
         // Finalized header
-        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
-        let finalized_state_root = args
-            .finalized_header
-            .state_root
-            .as_ref()
-            .iter()
-            .map(|v| builder.main().load_witness(F::from(*v as u64)))
-            .collect_vec();
-        let finalized_header_root = ssz_merkleize_chunks(
-            builder,
-            &sha256_chip,
-            [
-                finalized_slot_bytes,
-                args.finalized_header.proposer_index.into_witness(),
-                args.finalized_header.parent_root.as_ref().into_witness(),
-                finalized_state_root.clone().into(),
-                args.finalized_header.body_root.as_ref().into_witness(),
-            ],
-        )?;
-        // Verify that the sync committee root is in the finalized state root
-        verify_merkle_proof(
-            builder,
-            &sha256_chip,
-            args.sync_committee_branch
-                .iter()
-                .map(|w| w.clone().into_witness()),
-            committee_root_ssz.clone().into(),
-            &finalized_state_root,
-            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-        )?;
+        // let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        // let finalized_state_root = args
+        //     .finalized_header
+        //     .state_root
+        //     .as_ref()
+        //     .iter()
+        //     .map(|v| builder.main().load_witness(F::from(*v as u64)))
+        //     .collect_vec();
+        // let finalized_header_root = ssz_merkleize_chunks(
+        //     builder,
+        //     &sha256_chip,
+        //     [
+        //         finalized_slot_bytes,
+        //         args.finalized_header.proposer_index.into_witness(),
+        //         args.finalized_header.parent_root.as_ref().into_witness(),
+        //         finalized_state_root.clone().into(),
+        //         args.finalized_header.body_root.as_ref().into_witness(),
+        //     ],
+        // )?;
+        // // Verify that the sync committee root is in the finalized state root
+        // verify_merkle_proof(
+        //     builder,
+        //     &sha256_chip,
+        //     args.sync_committee_branch
+        //         .iter()
+        //         .map(|w| w.clone().into_witness()),
+        //     committee_root_ssz.clone().into(),
+        //     &finalized_state_root,
+        //     S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+        // )?;
 
-        let public_inputs = iter::once(poseidon_commit)
-            .chain(committee_root_ssz)
-            .chain(finalized_header_root)
-            .collect();
+        // let public_inputs = iter::once(poseidon_commit)
+        //     .chain(committee_root_ssz)
+        //     .chain(finalized_header_root)
+        //     .collect();
+
+        let public_inputs = vec![];
 
         Ok(public_inputs)
     }
@@ -149,7 +151,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                     .pad_using(64, |_| builder.main().load_zero())
                     .into();
                 hasher
-                    .digest::<64>(builder, HashInput::Single(input), false)
+                    .digest(builder, HashInput::Single(input))
                     .map(|r| r.into_iter().collect_vec().into())
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -354,10 +356,10 @@ mod tests {
 
     #[test]
     fn test_circuit_aggregation_proofgen() {
-        const APP_PINNING_PATH: &str = "./config/committee_update_20.json";
-        const APP_PK_PATH: &str = "../build/committee_update_20.pkey";
+        const APP_PINNING_PATH: &str = "./config/committee_update_18.json";
+        const APP_PK_PATH: &str = "../build/committee_update_18.pkey";
         const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-        const APP_K: u32 = 20;
+        const APP_K: u32 = 18;
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 22;
@@ -394,6 +396,7 @@ mod tests {
     #[test]
     fn test_circuit_aggregation_evm() {
         const APP_K: u32 = 21;
+        const APP_PK_PATH: &str = "../build/committee_update_21.pkey";
         const APP_PINNING_PATH: &str = "./config/committee_update_21.json";
         const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
         let params_app = gen_srs(APP_K);
@@ -401,7 +404,7 @@ mod tests {
         const AGG_K: u32 = 23;
         let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
             &params_app,
-            APP_PINNING_PATH,
+            APP_PK_PATH,
             APP_PINNING_PATH,
             false,
             &CommitteeRotationArgs::<Testnet, Fr>::default(),

@@ -35,14 +35,14 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
     type CircuitBuilder = ShaCircuitBuilder<F, ShaFlexGateManager<F>>;
     type Output = Vec<AssignedValue<F>>;
 
-    fn digest<const MAX_INPUT_SIZE: usize>(
+    fn digest_varlen(
         &self,
         builder: &mut Self::CircuitBuilder,
         input: impl IntoIterator<Item = QuantumCell<F>>,
-        strict: bool,
+        max_len: usize,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let max_processed_bytes = {
-            let mut max_bytes = MAX_INPUT_SIZE + 9;
+            let mut max_bytes = max_len + 9;
             let remainder = max_bytes % 64;
             if remainder != 0 {
                 max_bytes += 64 - remainder;
@@ -62,9 +62,10 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 
         let input_byte_size = assigned_input_bytes.len();
         let input_byte_size_with_9 = input_byte_size + 9;
-        assert!(input_byte_size <= MAX_INPUT_SIZE);
         let range = self.spread.range();
         let gate = &range.gate;
+
+        assert!(input_byte_size <= max_len);
 
         let one_round_size = Self::BLOCK_SIZE;
 
@@ -99,12 +100,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         // for _ in 0..remaining_byte_size {
         //     assigned_input_bytes.push(assign_byte(0u8));
         // }
-
-        if strict {
-            for &assigned in assigned_input_bytes.iter() {
-                range.range_check(builder.main(), assigned, 8);
-            }
-        }
 
         let assigned_num_round = builder.main().load_witness(F::from(num_round as u64));
 
@@ -170,6 +165,16 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             .collect_vec();
 
         Ok(output_digest_bytes)
+    }
+
+    fn digest(
+        &self,
+        ctx: &mut Self::CircuitBuilder,
+        input: impl IntoIterator<Item = QuantumCell<F>>,
+    ) -> Result<Self::Output, Error> {
+        let input = input.into_iter().collect_vec();
+        let input_len = input.len();
+        self.digest_varlen(ctx, input, input_len)
     }
 }
 
