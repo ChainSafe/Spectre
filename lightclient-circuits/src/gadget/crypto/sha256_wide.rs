@@ -1,52 +1,23 @@
-mod config;
 mod gate;
-mod util;
-mod witness;
 
 use eth_types::Field;
 use halo2_base::gates::RangeChip;
 use halo2_base::{gates::flex_gate::threads::CommonCircuitBuilder, Context};
 use itertools::Itertools;
+use zkevm_hashes::sha256::vanilla::param::NUM_WORDS_TO_ABSORB;
 use zkevm_hashes::sha256::vanilla::util::get_num_sha2_blocks;
-use zkevm_hashes::{
-    sha256::vanilla::{
-        util::to_be_bytes,
-        witness::{generate_witnesses_multi_sha256, generate_witnesses_sha256},
-    },
-    util::word::Word,
-};
+use zkevm_hashes::{sha256::vanilla::witness::generate_witnesses_sha256, util::word::Word};
 
 use crate::witness::HashInput;
-use halo2_base::{
-    gates::{GateInstructions, RangeInstructions},
-    halo2_proofs::plonk::Error,
-    AssignedValue, QuantumCell,
-};
-use sha2::Digest;
+use halo2_base::{gates::GateInstructions, halo2_proofs::plonk::Error, AssignedValue, QuantumCell};
 
 pub use self::gate::ShaBitGateManager;
-use self::util::{NUM_BYTES_FINAL_HASH, NUM_WORDS_TO_ABSORB};
 use super::{HashInstructions, ShaCircuitBuilder};
 use crate::gadget::common::to_bytes_le;
 
 #[derive(Debug)]
 pub struct Sha256ChipWide<'a, F: Field> {
     range: &'a RangeChip<F>,
-    randomness: F,
-}
-
-#[derive(Clone, Debug)]
-pub struct AssignedSha256Round<F: Field> {
-    /// Whether the row is final.
-    pub is_final: AssignedValue<F>,
-    /// Input length at the row.
-    pub input_len: AssignedValue<F>,
-    /// Input words at the row.
-    pub input_rlcs: [AssignedValue<F>; NUM_WORDS_TO_ABSORB],
-    /// Whether the row is padding.
-    pub padding_selectors: [[AssignedValue<F>; 4]; NUM_WORDS_TO_ABSORB],
-    /// Output words at the row.
-    pub output_rlc: AssignedValue<F>,
 }
 
 impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
@@ -80,10 +51,8 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         );
 
         let input_len = assigned_bytes.len();
-        let max_byte_size = assigned_bytes.len();
-        let range = &self.range;
+        let range = self.range;
         let gate = &range.gate;
-
 
         let mut virtual_rows = vec![];
         let input_bytes = binary_input.to_vec();
@@ -97,35 +66,41 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         let num_input_rounds = num_input_words.div_ceil(NUM_WORDS_TO_ABSORB);
 
         let byte_bases = (0..4)
-        .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
-        .collect_vec();
+            .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+            .collect_vec();
 
         for r in 0..num_input_rounds {
             for w in 0..(num_input_words - r * NUM_WORDS_TO_ABSORB) {
                 let i = (r * NUM_WORDS_TO_ABSORB + w) * 4;
-                let checksum = gate.inner_product(builder.main(), assigned_bytes[i..i+4].to_vec(), byte_bases.clone());
-                builder.main().constrain_equal(&checksum, &blocks[r].word_values[w]);
+                let checksum = gate.inner_product(
+                    builder.main(),
+                    assigned_bytes[i..i + 4].to_vec(),
+                    byte_bases.clone(),
+                );
+                builder
+                    .main()
+                    .constrain_equal(&checksum, &blocks[r].word_values[w]);
             }
         }
 
-        let hash_bytes = word_to_bytes_le(blocks[num_rounds-1].hash, gate, builder.main());
+        let hash_bytes = word_to_bytes_le(blocks[num_rounds - 1].hash, gate, builder.main());
 
         Ok(hash_bytes)
     }
 
     fn digest_varlen(
         &self,
-        ctx: &mut Self::CircuitBuilder,
-        input: impl IntoIterator<Item = QuantumCell<F>>,
-        max_input_len: usize,
+        _ctx: &mut Self::CircuitBuilder,
+        _input: impl IntoIterator<Item = QuantumCell<F>>,
+        _max_input_len: usize,
     ) -> Result<Self::Output, Error> {
         unimplemented!()
     }
 }
 
 impl<'a, F: Field> Sha256ChipWide<'a, F> {
-    pub fn new(range: &'a RangeChip<F>, randomness: F) -> Self {
-        Self { range, randomness }
+    pub fn new(range: &'a RangeChip<F>) -> Self {
+        Self { range }
     }
 }
 

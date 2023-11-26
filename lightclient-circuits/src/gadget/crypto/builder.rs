@@ -18,7 +18,6 @@ use halo2_base::{
         circuit::{Layouter, SimpleFloorPlanner},
         plonk::{Circuit, ConstraintSystem, Error},
     },
-    utils::BigPrimeField,
     AssignedValue, Context,
 };
 use itertools::Itertools;

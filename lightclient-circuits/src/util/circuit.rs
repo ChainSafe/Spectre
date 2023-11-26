@@ -12,7 +12,6 @@ use halo2_base::halo2_proofs::{
     poly::commitment::Params,
     poly::kzg::commitment::ParamsKZG,
 };
-use halo2_base::utils::BigPrimeField;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
     encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,

@@ -33,7 +33,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
 }
 
 pub fn rotate_input_from_args<Spec: eth_types::Spec, Fr: eth_types::Field>(
-    args: CommitteeRotationArgs<Spec, Fr>,
+    args: CommitteeRotationArgs<Spec>,
 ) -> RotateInput
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,

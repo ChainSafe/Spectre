@@ -98,10 +98,8 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         Spec::Minimal => {
             let app_pk_path = PathBuf::from("./build/committee_update_circuit_minimal.pkey");
             let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
-            let witness: lightclient_circuits::witness::CommitteeRotationArgs<
-                eth_types::Minimal,
-                Fr,
-            > = fetch_rotation_args(&client).await?;
+            let witness: lightclient_circuits::witness::CommitteeRotationArgs<eth_types::Minimal> =
+                fetch_rotation_args(&client).await?;
             gen_app_snark::<eth_types::Minimal>(app_config_path, app_pk_path, witness)?
         }
         Spec::Testnet => {

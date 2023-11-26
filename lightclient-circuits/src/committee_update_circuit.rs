@@ -1,6 +1,6 @@
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
-    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
+    poseidon::{fq_array_poseidon_native, fq_array_poseidon},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::clear_3_bits,
     util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
@@ -9,9 +9,7 @@ use crate::{
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{
-        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
-    },
+    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions},
     halo2_proofs::{halo2curves::bn256, plonk::Error},
     AssignedValue, Context, QuantumCell,
 };
@@ -36,11 +34,11 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
-        args: &witness::CommitteeRotationArgs<S, F>,
+        args: &witness::CommitteeRotationArgs<S>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let range = fp_chip.range();
 
-        let sha256_chip = Sha256ChipWide::new(range, args.randomness);
+        let sha256_chip = Sha256ChipWide::new(range);
 
         let compressed_encodings = args
             .pubkeys_compressed
@@ -58,49 +56,48 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         let committee_root_ssz =
             Self::sync_committee_root_ssz(builder, &sha256_chip, compressed_encodings.clone())?;
 
-        // let poseidon_commit = {
-        //     let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
-        //     fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
-        // };
+        let poseidon_commit = {
+            let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
+            fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
+        };
 
         // Finalized header
-        // let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
-        // let finalized_state_root = args
-        //     .finalized_header
-        //     .state_root
-        //     .as_ref()
-        //     .iter()
-        //     .map(|v| builder.main().load_witness(F::from(*v as u64)))
-        //     .collect_vec();
-        // let finalized_header_root = ssz_merkleize_chunks(
-        //     builder,
-        //     &sha256_chip,
-        //     [
-        //         finalized_slot_bytes,
-        //         args.finalized_header.proposer_index.into_witness(),
-        //         args.finalized_header.parent_root.as_ref().into_witness(),
-        //         finalized_state_root.clone().into(),
-        //         args.finalized_header.body_root.as_ref().into_witness(),
-        //     ],
-        // )?;
-        // // Verify that the sync committee root is in the finalized state root
-        // verify_merkle_proof(
-        //     builder,
-        //     &sha256_chip,
-        //     args.sync_committee_branch
-        //         .iter()
-        //         .map(|w| w.clone().into_witness()),
-        //     committee_root_ssz.clone().into(),
-        //     &finalized_state_root,
-        //     S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-        // )?;
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_state_root = args
+            .finalized_header
+            .state_root
+            .as_ref()
+            .iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+        let finalized_header_root = ssz_merkleize_chunks(
+            builder,
+            &sha256_chip,
+            [
+                finalized_slot_bytes,
+                args.finalized_header.proposer_index.into_witness(),
+                args.finalized_header.parent_root.as_ref().into_witness(),
+                finalized_state_root.clone().into(),
+                args.finalized_header.body_root.as_ref().into_witness(),
+            ],
+        )?;
 
-        // let public_inputs = iter::once(poseidon_commit)
-        //     .chain(committee_root_ssz)
-        //     .chain(finalized_header_root)
-        //     .collect();
+        // Verify that the sync committee root is in the finalized state root
+        verify_merkle_proof(
+            builder,
+            &sha256_chip,
+            args.sync_committee_branch
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            committee_root_ssz.clone().into(),
+            &finalized_state_root,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+        )?;
 
-        let public_inputs = vec![];
+        let public_inputs = iter::once(poseidon_commit)
+            .chain(committee_root_ssz)
+            .chain(finalized_header_root)
+            .collect();
 
         Ok(public_inputs)
     }
@@ -159,7 +156,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     }
 
     pub fn instance(
-        args: &witness::CommitteeRotationArgs<S, F>,
+        args: &witness::CommitteeRotationArgs<S>,
         limb_bits: usize,
     ) -> Vec<Vec<bn256::Fr>>
     where
@@ -203,12 +200,12 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
 impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     type Pinning = Eth2ConfigPinning;
-    type Witness = witness::CommitteeRotationArgs<S, bn256::Fr>;
+    type Witness = witness::CommitteeRotationArgs<S>;
 
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        witness: &witness::CommitteeRotationArgs<S, bn256::Fr>,
+        witness: &witness::CommitteeRotationArgs<S>,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
@@ -246,8 +243,8 @@ mod tests {
     use std::fs;
 
     use crate::{
-        aggregation::AggregationConfigPinning, gadget::crypto::constant_randomness,
-        util::Halo2ConfigPinning, witness::CommitteeRotationArgs,
+        aggregation::AggregationConfigPinning, util::Halo2ConfigPinning,
+        witness::CommitteeRotationArgs,
     };
 
     use super::*;
@@ -266,7 +263,7 @@ mod tests {
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
     use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
 
-    fn load_circuit_args() -> CommitteeRotationArgs<Testnet, Fr> {
+    fn load_circuit_args() -> CommitteeRotationArgs<Testnet> {
         #[derive(serde::Deserialize)]
         struct ArgsJson {
             finalized_header: BeaconBlockHeader,
@@ -282,7 +279,6 @@ mod tests {
 
         CommitteeRotationArgs {
             pubkeys_compressed,
-            randomness: constant_randomness(),
             _spec: PhantomData,
             finalized_header,
             sync_committee_branch: committee_root_branch,
@@ -292,7 +288,7 @@ mod tests {
     fn gen_application_snark(
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
-        witness: &CommitteeRotationArgs<Testnet, Fr>,
+        witness: &CommitteeRotationArgs<Testnet>,
         pinning_path: &str,
     ) -> Snark {
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
@@ -340,7 +336,7 @@ mod tests {
             PKEY_PATH,
             PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            &CommitteeRotationArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();
@@ -368,7 +364,7 @@ mod tests {
             APP_PK_PATH,
             APP_PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            &CommitteeRotationArgs::<Testnet>::default(),
         );
         let witness = load_circuit_args();
         let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
@@ -407,7 +403,7 @@ mod tests {
             APP_PK_PATH,
             APP_PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            &CommitteeRotationArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();
@@ -445,7 +441,7 @@ mod tests {
         let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
             &params,
             &pk,
-            Some("contractyul"),
+            None::<String>,
             &vec![snark],
         )
         .unwrap();

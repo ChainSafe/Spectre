@@ -8,7 +8,6 @@ use halo2_base::{
         plonk::{Advice, Column, ConstraintSystem, Error, TableColumn},
         poly::Rotation,
     },
-    utils::BigPrimeField,
 };
 use halo2_base::{
     gates::{flex_gate::threads::CommonCircuitBuilder, GateInstructions, RangeInstructions},

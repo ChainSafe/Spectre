@@ -4,7 +4,6 @@ use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
     halo2_proofs::circuit::{Region, Value},
-    utils::BigPrimeField,
     virtual_region::{
         copy_constraints::{CopyConstraintManager, SharedCopyConstraintManager},
         manager::VirtualRegionManager,

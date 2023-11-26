@@ -3,29 +3,23 @@ use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
     gates::circuit::CircuitBuilderStage,
-    halo2_proofs::circuit::Region,
+    halo2_proofs::{circuit::Region, plonk::Error},
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
-    AssignedValue, Context,
 };
 use itertools::Itertools;
-use std::any::TypeId;
 use zkevm_hashes::{
     sha256::{
         component::circuit::LoadedSha256,
         vanilla::{
             columns::Sha256CircuitConfig,
             param::{NUM_START_ROWS, NUM_WORDS_TO_ABSORB, SHA256_NUM_ROWS},
-            witness::{AssignedSha256Block, VirtualShaRow},
+            witness::VirtualShaRow,
         },
     },
     util::word::Word,
 };
-
-use super::witness::ShaRow;
-
-pub const FIRST_PHASE: usize = 0;
 
 #[derive(Clone, Debug, CopyGetters)]
 pub struct ShaBitGateManager<F: Field> {
@@ -55,9 +49,7 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
         }
     }
 
-    fn custom_context(&mut self) -> Self::CustomContext<'_> {
-        ()
-    }
+    fn custom_context(&mut self) -> Self::CustomContext<'_> {}
 
     fn from_stage(stage: CircuitBuilderStage) -> Self {
         Self::new(stage == CircuitBuilderStage::Prover)
@@ -188,4 +180,19 @@ impl<F: Field> ShaBitGateManager<F> {
         self.copy_manager = copy_manager.clone();
         // TODO: set to `self.sha_contexts`.
     }
+}
+
+impl<F: Field> GateBuilderConfig<F> for Sha256CircuitConfig<F> {
+    fn configure(meta: &mut halo2_base::halo2_proofs::plonk::ConstraintSystem<F>) -> Self {
+        Sha256CircuitConfig::new(meta)
+    }
+
+    fn load(
+        &self,
+        _: &mut impl halo2_base::halo2_proofs::circuit::Layouter<F>,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn annotate_columns_in_region(&self, _: &mut Region<F>) {}
 }

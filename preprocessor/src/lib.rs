@@ -11,7 +11,6 @@ use ethereum_consensus_types::{
     LightClientUpdateCapella, Root,
 };
 use itertools::Itertools;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Node, Vector};
@@ -32,7 +31,7 @@ pub async fn light_client_update_to_args<S: Spec>(
     >,
     pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
     domain: [u8; 32],
-) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S, Fr>)>
+) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S>)>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,

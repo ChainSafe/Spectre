@@ -9,7 +9,7 @@ use halo2curves::{
     group::UncompressedEncoding,
 };
 use itertools::Itertools;
-// use pse_poseidon::Poseidon as PoseidonNative;
+use pse_poseidon::Poseidon as PoseidonNative;
 
 const POSEIDON_SIZE: usize = 16;
 const R_F: usize = 8;
@@ -55,16 +55,16 @@ pub fn fq_array_poseidon_native<F: Field>(
                 .collect_vec()
         })
         .collect_vec();
-    // let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
+    let mut poseidon = PoseidonNative::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(R_F, R_P);
     let mut current_poseidon_hash = None;
 
-    // for (i, chunk) in limbs.chunks(POSEIDON_SIZE - 3).enumerate() {
-    //     poseidon.update(chunk);
-    //     if i != 0 {
-    //         poseidon.update(&[current_poseidon_hash.unwrap()]);
-    //     }
-    //     let _ = current_poseidon_hash.insert(poseidon.squeeze());
-    // }
+    for (i, chunk) in limbs.chunks(POSEIDON_SIZE - 3).enumerate() {
+        poseidon.update(chunk);
+        if i != 0 {
+            poseidon.update(&[current_poseidon_hash.unwrap()]);
+        }
+        let _ = current_poseidon_hash.insert(poseidon.squeeze());
+    }
     Ok(current_poseidon_hash.unwrap())
 }
 

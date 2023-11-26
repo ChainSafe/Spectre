@@ -4,8 +4,7 @@ use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
 use itertools::Itertools;
-use lightclient_circuits::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
-use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
+use lightclient_circuits::witness::CommitteeRotationArgs;
 use log::debug;
 use ssz_rs::Merkleized;
 use tokio::fs;
@@ -14,7 +13,7 @@ use crate::{get_block_header, get_light_client_update_at_period};
 
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+) -> eyre::Result<CommitteeRotationArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -46,7 +45,7 @@ pub async fn rotation_args_from_update<S: Spec>(
         { S::BYTES_PER_LOGS_BLOOM },
         { S::MAX_EXTRA_DATA_BYTES },
     >,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>>
+) -> eyre::Result<CommitteeRotationArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -88,9 +87,8 @@ where
         "Execution payload merkle proof verification failed"
     );
 
-    let args = CommitteeRotationArgs::<S, Fr> {
+    let args = CommitteeRotationArgs::<S> {
         pubkeys_compressed,
-        randomness: crypto::constant_randomness(),
         finalized_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
             .into_iter()
@@ -101,9 +99,7 @@ where
     Ok(args)
 }
 
-pub async fn read_rotation_args<S: Spec>(
-    path: String,
-) -> eyre::Result<CommitteeRotationArgs<S, Fr>> {
+pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<CommitteeRotationArgs<S>> {
     #[derive(serde::Deserialize)]
     struct ArgsJson {
         finalized_header: BeaconBlockHeader,
@@ -122,9 +118,8 @@ pub async fn read_rotation_args<S: Spec>(
     )
     .map_err(|e| eyre::eyre!("Error decoding witness {}", e))?;
 
-    Ok(CommitteeRotationArgs::<S, Fr> {
+    Ok(CommitteeRotationArgs::<S> {
         pubkeys_compressed,
-        randomness: crypto::constant_randomness(),
         finalized_header,
         sync_committee_branch: committee_root_branch,
         _spec: PhantomData,
@@ -176,7 +171,7 @@ mod tests {
             "../build/sync_step.pkey",
             CONFIG_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet, Fr>::default(),
+            &CommitteeRotationArgs::<Testnet>::default(),
         );
         let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();

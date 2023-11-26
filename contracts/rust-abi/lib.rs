@@ -1,7 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 use ethers::contract::abigen;
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
 use lightclient_circuits::{
     poseidon::poseidon_committee_commitment_from_compressed,
@@ -57,11 +56,11 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
 }
 
 // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
-impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec, Fr>> for RotateInput
+impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec>> for RotateInput
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
-    fn from(args: CommitteeRotationArgs<Spec, Fr>) -> Self {
+    fn from(args: CommitteeRotationArgs<Spec>) -> Self {
         let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
         )
