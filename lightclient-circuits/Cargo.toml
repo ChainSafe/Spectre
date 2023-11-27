@@ -22,8 +22,8 @@ pasta_curves.workspace = true
 ff.workspace = true
 sha2.workspace = true
 # ethereum
-sync-committee-primitives.workspace = true
-ssz-rs.workspace = true
+ssz_rs = { workspace = true, features = ["serde"] }
+ethereum-consensus-types ={ workspace = true, features = ["serde"] }
 
 # local
 eth-types.workspace = true

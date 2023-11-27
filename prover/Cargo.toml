@@ -3,9 +3,13 @@ name = "spectre-prover"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "spectre-prover-cli"
+path = "src/main.rs"
+
 [dependencies]
 # cli
-clap = { version = "=4.2", features = ["derive"] }
+clap = { version = "4.2", features = ["derive"] }
 strum = { version = "=0.25", features = ["derive"] }
 cli-batteries = "=0.4"
 eyre = "0.6"
@@ -42,6 +46,9 @@ ethers = { version = "2.0.7", default_features = false, features = [
 ] }
 primitive-types = "0.12.2"
 reqwest = "0.11.22"
+beacon-api-client.workspace = true
+ethereum-consensus-types.workspace = true
+futures = "0.3.29"
 
 [build-dependencies]
 cli-batteries = "=0.4"

@@ -4,31 +4,34 @@ use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, Root};
-use halo2_base::safe_types::ScalarField;
-use halo2curves::bls12_381;
-use halo2curves::bn256::{self, Fr};
-use halo2curves::group::UncompressedEncoding;
+
+use halo2curves::bn256::Fr;
+
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
-use lightclient_circuits::poseidon::fq_array_poseidon_native;
+use lightclient_circuits::poseidon::{
+    poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
+};
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
-use std::path::PathBuf;
-use sync_committee_primitives::consensus_types::BeaconBlockHeader;
+use std::ops::Deref;
+use std::path::Path;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
-
+use ethereum_consensus_types::BeaconBlockHeader;
+pub mod conversions;
 mod execution_payload_header;
 mod test_types;
-pub mod conversions;
+
+pub(crate) const U256_BYTE_COUNT: usize = 32;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
-    path: &PathBuf,
+    path: &Path,
 ) -> anyhow::Result<(usize, [u8; 32])> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -54,7 +57,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
     Ok((sync_period, committee_poseidon))
 }
 
-pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
+pub fn validators_root_from_test_path(path: &Path) -> Root {
     let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
     Root::try_from(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
@@ -67,15 +70,12 @@ pub fn validators_root_from_test_path(path: &PathBuf) -> Root {
 // Load the updates for a given test and only includes the first sequence of steps that Spectre can perform
 // e.g. the the steps are cut at the first `ForceUpdate` step
 pub fn valid_updates_from_test_path(
-    path: &PathBuf,
+    path: &Path,
 ) -> Vec<ethereum_consensus_types::LightClientUpdateCapella<32, 55, 5, 105, 6, 256, 32>> {
     let steps: Vec<TestStep> = load_yaml(path.join("steps.yaml").to_str().unwrap());
     let updates = steps
         .iter()
-        .take_while(|step| match step {
-            TestStep::ProcessUpdate { .. } => true,
-            _ => false,
-        })
+        .take_while(|step| matches!(step, TestStep::ProcessUpdate { .. }))
         .filter_map(|step| match step {
             TestStep::ProcessUpdate { update, .. } => {
                 let update: LightClientUpdateCapella = load_snappy_ssz(
@@ -93,7 +93,7 @@ pub fn valid_updates_from_test_path(
 }
 
 pub fn read_test_files_and_gen_witness(
-    path: &PathBuf,
+    path: &Path,
 ) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
@@ -111,7 +111,7 @@ pub fn read_test_files_and_gen_witness(
         .light_client_update
         .next_sync_committee_branch
         .iter()
-        .map(|n| n.as_ref().to_vec())
+        .map(|n| n.deref().to_vec())
         .collect_vec();
 
     let agg_pubkeys_compressed = zipline_witness
@@ -123,7 +123,7 @@ pub fn read_test_files_and_gen_witness(
 
     let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
-    sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().as_ref().to_vec());
+    sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
     let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
         pubkeys_compressed: zipline_witness
@@ -140,35 +140,6 @@ pub fn read_test_files_and_gen_witness(
         sync_committee_branch,
     };
     (sync_wit, rotation_wit)
-}
-
-pub fn poseidon_committee_commitment_from_uncompressed(
-    pubkeys_uncompressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkey_affines = pubkeys_uncompressed
-        .iter()
-        .cloned()
-        .map(|bytes| {
-            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
-                &bytes.as_slice().try_into().unwrap(),
-            )
-            .unwrap()
-        })
-        .collect_vec();
-    let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
-}
-
-pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &Vec<Vec<u8>>,
-) -> anyhow::Result<[u8; 32]> {
-    let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
-    });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
 }
 
 fn to_sync_ciruit_witness<
@@ -236,7 +207,7 @@ fn to_sync_ciruit_witness<
             .light_client_update
             .attested_header
             .beacon
-            .proposer_index as u64,
+            .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
@@ -275,7 +246,7 @@ fn to_sync_ciruit_witness<
             .light_client_update
             .finalized_header
             .beacon
-            .proposer_index as u64,
+            .proposer_index,
         parent_root: Node::try_from(
             zipline_witness
                 .light_client_update
@@ -331,14 +302,14 @@ fn to_sync_ciruit_witness<
         execution_payload_header
             .hash_tree_root()
             .unwrap()
-            .as_ref()
+            .deref()
             .to_vec()
     };
     args.finality_branch = zipline_witness
         .light_client_update
         .finality_branch
         .iter()
-        .map(|b| b.as_ref().to_vec())
+        .map(|b| b.deref().to_vec())
         .collect();
     args
 }

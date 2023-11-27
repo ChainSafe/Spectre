@@ -1,3 +1,6 @@
+set dotenv-load # automatically loads .env file in the current directory
+set positional-arguments
+
 test:
     cargo test --workspace
 
@@ -17,22 +20,30 @@ lint: fmt
     cargo clippy --all-targets --all-features --workspace
 
 setup-step-circuit:
-    cargo run -r -- sync-step -c ./lightclient-circuits/config/sync_step.json -o artifacts -k 22
+    cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step.json -o artifacts -k 22
 
 setup-rotation-circuit:
-    cargo run -r -- committee-update -c ./lightclient-circuits/config/committee_update.json -o artifacts -k 18
+    cargo run -r -- circuit committee-update -c ./lightclient-circuits/config/committee_update.json -o artifacts -k 18
     # TODO: generate committee-update snark
-    cargo run -r -- aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path \
+    cargo run -r -- circuit aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path \
      ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o artifacts -k 22
 
 gen-step-evm-verifier:
-    cargo run -r -- sync-step -c ./lightclient-circuits/config/sync_step.json -o evm-verifier ./contracts/snark-verifiers/sync_step.yul
+    cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step.json -o evm-verifier ./contracts/snark-verifiers/sync_step.yul
 
 gen-rotation-evm-verifier:
-    cargo run -r -- aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o evm-verifier ./contracts/snark-verifiers/committee_update_aggregated.yul 
+    cargo run -r -- circuit aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o evm-verifier ./contracts/snark-verifiers/committee_update_aggregated.yul 
 
 build-contracts:
     cd contracts && forge build
+
+deploy-contracts-local:
+    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --fork-url $LOCAL_RPC_URL --broadcast
+
+deploy-contracts network: # network one of [MAINNET, GOERLI, SEPOLIA]
+    #! /usr/bin/env bash
+    RPC_URL="$1_RPC_URL"
+    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --rpc-url ${!RPC_URL} --broadcast --verify -vvvv
 
 # downloads spec tests and copies them to the right locations.
 download-spec-tests: clean-spec-tests
