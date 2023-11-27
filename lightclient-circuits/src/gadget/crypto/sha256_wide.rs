@@ -83,8 +83,9 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
             }
         }
 
-        let hash_bytes = word_to_bytes_le(blocks[num_rounds - 1].hash, gate, builder.main());
-
+        let mut hash_bytes = word_to_bytes_le(blocks[num_rounds - 1].hash, gate, builder.main());
+        hash_bytes.reverse();
+        
         Ok(hash_bytes)
     }
 

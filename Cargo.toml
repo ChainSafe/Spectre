@@ -75,7 +75,6 @@ ff = "0.12"
 sha2 = { version = "0.10.6", features = ["compress"] }
 uint = "0.9.1"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
-# poseidon_native = { git = "https://github.com/axiom-crypto/halo2.git", branch = "axiom/dev", package = "poseidon" }
 
 # misc
 itertools = "0.11.0"
@@ -90,23 +89,24 @@ ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa0
 
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-# halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
-#     "halo2-pse",
-#     "display",
-#     "jemallocator"
-# ] }
-# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/bls12-381-hash2curve", default-features = false, features = [
-#     "halo2-pse",
-#     "jemallocator"
-# ] }
-halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
     "halo2-pse",
     "display",
+    "jemallocator"
 ] }
-halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
     "halo2-pse",
+    "jemallocator"
 ] }
-zkevm-hashes = { path = "../halo2-lib/hashes/zkevm", default-features = false }
+zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false }
+# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
+#     "halo2-pse",
+#     "display",
+# ] }
+# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
+#     "halo2-pse",
+# ] }
+# zkevm-hashes = { path = "../halo2-lib/hashes/zkevm", default-features = false }
 
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
