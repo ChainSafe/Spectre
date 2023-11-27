@@ -349,55 +349,16 @@ mod tests {
         )
         .expect("proof generation & verification should not fail");
     }
-
+    
     #[test]
-    fn test_circuit_aggregation_proofgen() {
-        const APP_PINNING_PATH: &str = "./config/committee_update_18.json";
-        const APP_PK_PATH: &str = "../build/committee_update_18.pkey";
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
+    fn test_committee_update_aggregation_evm() {
         const APP_K: u32 = 18;
+        const APP_PK_PATH: &str = "../build/committee_update_18.pkey";
+        const APP_PINNING_PATH: &str = "./config/committee_update_18.json";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggr_25.json";
         let params_app = gen_srs(APP_K);
 
-        const AGG_K: u32 = 22;
-        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
-            &params_app,
-            APP_PK_PATH,
-            APP_PINNING_PATH,
-            false,
-            &CommitteeRotationArgs::<Testnet>::default(),
-        );
-        let witness = load_circuit_args();
-        let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
-
-        let params = gen_srs(AGG_K);
-        println!("agg_params k: {:?}", params.k());
-
-        let pk = AggregationCircuit::read_or_create_pk(
-            &params,
-            "../build/committee_update_aggregation_22.pkey",
-            AGG_CONFIG_PATH,
-            false,
-            &vec![snark.clone()],
-        );
-
-        let _ = AggregationCircuit::gen_proof_shplonk(
-            &params,
-            &pk,
-            AGG_CONFIG_PATH,
-            &vec![snark.clone()],
-        )
-        .expect("proof generation & verification should not fail");
-    }
-
-    #[test]
-    fn test_circuit_aggregation_evm() {
-        const APP_K: u32 = 21;
-        const APP_PK_PATH: &str = "../build/committee_update_21.pkey";
-        const APP_PINNING_PATH: &str = "./config/committee_update_21.json";
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_a.json";
-        let params_app = gen_srs(APP_K);
-
-        const AGG_K: u32 = 23;
+        const AGG_K: u32 = 25;
         let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
             &params_app,
             APP_PK_PATH,
@@ -414,7 +375,7 @@ mod tests {
 
         let pk = AggregationCircuit::read_or_create_pk(
             &params,
-            "../build/aggregation.pkey",
+            "../build/aggregation_25.pkey",
             AGG_CONFIG_PATH,
             false,
             &vec![snark.clone()],
@@ -448,101 +409,4 @@ mod tests {
         println!("deployment_code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances, proof);
     }
-
-    // #[test]
-    // fn test_circuit_aggregation_2_evm() {
-    //     const K0: u32 = 20;
-    //     const K1: u32 = 24;
-    //     const K2: u32 = 24;
-
-    //     const APP_CONFIG_PATH: &str = "./config/committee_update_aggregation.json";
-    //     const AGG_CONFIG_PATH: &str = "./config/committee_update_aggregation_1.json";
-    //     const AGG_FINAL_CONFIG_PATH: &str = "./config/committee_update_aggregation_2.json";
-
-    //     // Layer 0 snark gen
-    //     let l0_snark = {
-    //         let p0 = gen_srs(K0);
-    //         let pk_l0 = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
-    //             &p0,
-    //             "../build/committee_update.pkey",
-    //             APP_CONFIG_PATH,
-    //             false,
-    //             &CommitteeRotationArgs::<Testnet, Fr>::default(),
-    //         );
-    //         let witness = load_circuit_args();
-    //         let snark = gen_application_snark(&p0, &pk_l0, &witness);
-    //         println!(
-    //             "L0 num instances: {:?}",
-    //             snark.instances.iter().map(|i| i.len()).collect_vec()
-    //         );
-    //         println!("L0 snark size: {}", snark.proof.len());
-    //         snark
-    //     };
-
-    //     // Layer 1 snark gen
-    //     let l1_snark = {
-    //         let p1 = gen_srs(K1);
-    //         let pk_l1 = AggregationCircuit::read_or_create_pk(
-    //             &p1,
-    //             "./build/l1_aggregation.pkey",
-    //             AGG_CONFIG_PATH,
-    //             false,
-    //             &vec![l0_snark.clone()],
-    //         );
-
-    //         let pinning = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
-    //         let lookup_bits = K1 as usize - 1;
-    //         let circuit = AggregationCircuit::create_circuit(
-    //             CircuitBuilderStage::Prover,
-    //             Some(pinning),
-    //             &vec![l0_snark.clone()],
-    //             K1,
-    //         )
-    //         .unwrap();
-
-    //         println!("L1 Prover num_instances: {:?}", circuit.num_instance());
-    //         let snark = gen_snark_shplonk(&p1, &pk_l1, circuit, None::<String>);
-    //         println!("L1 snark size: {}", snark.proof.len());
-
-    //         snark
-    //     };
-
-    //     // Layer 2 snark gen
-    //     let (proof, deployment_code, instances) = {
-    //         let p2 = gen_srs(K2);
-    //         let pk_l2 = AggregationCircuit::read_or_create_pk(
-    //             &p2,
-    //             "./build/l2_aggregation.pkey",
-    //             AGG_FINAL_CONFIG_PATH,
-    //             false,
-    //             &vec![l0_snark.clone()],
-    //         );
-    //         let pinning = AggregationConfigPinning::from_path(AGG_FINAL_CONFIG_PATH);
-
-    //         let mut circuit = AggregationCircuit::create_circuit(
-    //             CircuitBuilderStage::Prover,
-    //             Some(pinning),
-    //             &vec![l1_snark.clone()],
-    //             K2,
-    //         )
-    //         .unwrap();
-    //         let num_instances = circuit.num_instance();
-
-    //         let deployment_code = gen_evm_verifier_shplonk::<AggregationCircuit>(
-    //             &p2,
-    //             pk_l2.get_vk(),
-    //             vec![65],
-    //             Some(&PathBuf::from("contractyul")),
-    //         );
-    //         let instances = circuit.instances();
-    //         println!("L2 Prover num_instances: {:?}", num_instances);
-
-    //         let proof = gen_evm_proof_shplonk(&p2, &pk_l2, circuit, instances.clone());
-    //         println!("L2 proof size: {}", proof.len());
-    //         println!("L2 Deployment Code Size: {}", deployment_code.len());
-    //         (proof, deployment_code, instances)
-    //     };
-
-    //     evm_verify(deployment_code, instances, proof);
-    // }
 }
