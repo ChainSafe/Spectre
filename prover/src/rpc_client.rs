@@ -134,7 +134,6 @@ mod test {
 
         let p = GenProofStepParams {
             spec: args::Spec::Testnet,
-            k: Some(21),
             beacon_api: String::from("http://3.128.78.74:5052"),
         };
         let r = client.gen_evm_proof_step_circuit(p).await;

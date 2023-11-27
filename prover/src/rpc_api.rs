@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 pub struct GenProofRotationParams {
     pub spec: args::Spec,
 
-    pub k: Option<u32>,
     #[serde(default = "default_beacon_api")]
     pub beacon_api: String,
 }
@@ -15,7 +14,6 @@ pub struct GenProofRotationParams {
 pub struct GenProofStepParams {
     pub spec: args::Spec,
 
-    pub k: Option<u32>,
     #[serde(default = "default_beacon_api")]
     pub beacon_api: String,
 }
@@ -23,8 +21,6 @@ pub struct GenProofStepParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofStepWithWitnessParams {
     pub spec: args::Spec,
-
-    pub k: Option<u32>,
 
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_finality_update: Vec<u8>,
@@ -36,8 +32,6 @@ pub struct GenProofStepWithWitnessParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofRotationWithWitnessParams {
     pub spec: args::Spec,
-
-    pub k: Option<u32>,
 
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_update: Vec<u8>,
