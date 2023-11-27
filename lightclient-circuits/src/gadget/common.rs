@@ -1,6 +1,6 @@
 //! Utility traits, functions used in the crate.
 use eth_types::Field;
-use halo2_base::{Context, gates::GateInstructions, AssignedValue, QuantumCell};
+use halo2_base::{gates::GateInstructions, AssignedValue, Context, QuantumCell};
 use itertools::Itertools;
 
 pub fn to_bytes_le<F: Field, const MAX_BYTES: usize>(

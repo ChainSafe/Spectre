@@ -1,6 +1,6 @@
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
-    poseidon::{fq_array_poseidon_native, fq_array_poseidon},
+    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::clear_3_bits,
     util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
@@ -9,7 +9,9 @@ use crate::{
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions},
+    gates::{
+        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
+    },
     halo2_proofs::{halo2curves::bn256, plonk::Error},
     AssignedValue, Context, QuantumCell,
 };
@@ -349,7 +351,7 @@ mod tests {
         )
         .expect("proof generation & verification should not fail");
     }
-    
+
     #[test]
     fn test_committee_update_aggregation_evm() {
         const APP_K: u32 = 18;
