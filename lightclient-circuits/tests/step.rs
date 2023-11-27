@@ -39,7 +39,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
 
     let rotation_circuit = {
         let pinning: Eth2ConfigPinning =
-            Eth2ConfigPinning::from_path("./config/committee_update.json");
+            Eth2ConfigPinning::from_path(format!("./config/committee_update_{K_ROTATION}.json"));
 
         CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
@@ -61,7 +61,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     end_timer!(timer);
 
     let sync_circuit = {
-        let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+        let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path(format!("./config/sync_step_{K_SYNC}.json"));
 
         StepCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
@@ -94,8 +94,8 @@ fn test_eth2_spec_proofgen(
     let params = gen_srs(K);
     let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
         &params,
-        "../build/sync_step.pkey",
-        "./config/sync_step.json",
+        "../build/sync_step_20.pkey",
+        "./config/sync_step_20.json",
         false,
         &SyncStepArgs::<Minimal>::default(),
     );
@@ -103,7 +103,7 @@ fn test_eth2_spec_proofgen(
     let _ = StepCircuit::<Minimal, bn256::Fr>::gen_proof_shplonk(
         &params,
         &pk,
-        "./config/sync_step.json",
+        "./config/sync_step_20.json",
         &witness,
     )
     .expect("proof generation & verification should not fail");
@@ -120,15 +120,15 @@ fn test_eth2_spec_evm_verify(
 
     let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
         &params,
-        "../build/sync_step.pkey",
-        "./config/sync_step.json",
+        "../build/sync_step_21.pkey",
+        "./config/sync_step_21.json",
         false,
         &SyncStepArgs::<Minimal>::default(),
     );
 
     let (witness, _) = read_test_files_and_gen_witness(&path);
 
-    let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+    let pinning = Eth2ConfigPinning::from_path("./config/sync_step_21.json");
 
     let circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
         CircuitBuilderStage::Prover,

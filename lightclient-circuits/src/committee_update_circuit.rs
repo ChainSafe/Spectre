@@ -310,7 +310,7 @@ mod tests {
 
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/committee_update.json");
+        let pinning = Eth2ConfigPinning::from_path("./config/committee_update_18.json");
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
@@ -357,7 +357,7 @@ mod tests {
         const APP_K: u32 = 18;
         const APP_PK_PATH: &str = "../build/committee_update_18.pkey";
         const APP_PINNING_PATH: &str = "./config/committee_update_18.json";
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_aggr_25.json";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_verifier_25.json";
         let params_app = gen_srs(APP_K);
 
         const AGG_K: u32 = 25;
@@ -377,7 +377,7 @@ mod tests {
 
         let pk = AggregationCircuit::read_or_create_pk(
             &params,
-            "../build/aggregation_25.pkey",
+            "../build/committee_update_verifier_25.pkey",
             AGG_CONFIG_PATH,
             false,
             &vec![snark.clone()],

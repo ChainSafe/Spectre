@@ -162,13 +162,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_rotation_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_18.json";
         const K: u32 = 21;
         let params = gen_srs(K);
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
-            "../build/sync_step.pkey",
+            "../build/sync_step_21.pkey",
             CONFIG_PATH,
             false,
             &CommitteeRotationArgs::<Testnet>::default(),
