@@ -61,7 +61,8 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     end_timer!(timer);
 
     let sync_circuit = {
-        let pinning: Eth2ConfigPinning = Eth2ConfigPinning::from_path(format!("./config/sync_step_{K_SYNC}.json"));
+        let pinning: Eth2ConfigPinning =
+            Eth2ConfigPinning::from_path(format!("./config/sync_step_{K_SYNC}.json"));
 
         StepCircuit::<Minimal, bn256::Fr>::create_circuit(
             CircuitBuilderStage::Mock,
