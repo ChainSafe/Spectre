@@ -1,5 +1,13 @@
 [workspace]
-members = ["lightclient-circuits", "prover", "preprocessor", "eth-types", "contract-tests", "test-utils", "contracts"]
+members = [
+    "lightclient-circuits",
+    "prover",
+    "preprocessor",
+    "eth-types",
+    "contract-tests",
+    "test-utils",
+    "contracts",
+]
 
 resolver = "2"
 
@@ -36,7 +44,7 @@ preprocessor = { path = "preprocessor" }
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
     "halo2-pse",
     "display",
-    "jemallocator"
+    "jemallocator",
 ] }
 halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
 zkevm-hashes = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
@@ -60,10 +68,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
 
 # ethereum types
-ethereum-consensus-types = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
-zipline-test-utils = { package = "test-utils", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
-zipline-cryptography =  { package = "cryptography", git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
-light-client-verifier = { git = "ssh://git@github.com/sygmaprotocol/Zipline.git", rev = "5ecf28d24690862814a7ebc5385c7e5c2eeb6e3d" }
+ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
 beacon-api-client = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f" }
 ssz_rs = "0.9"
 
@@ -84,7 +89,7 @@ log = "0.4.14"
 hex = "0.4"
 
 [patch.crates-io]
-halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "f3bb3f5a7d3a8ca806368f185c112283a73a94cb"  }
+halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "f3bb3f5a7d3a8ca806368f185c112283a73a94cb" }
 ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 
 
@@ -92,11 +97,11 @@ ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa0
 halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
     "halo2-pse",
     "display",
-    "jemallocator"
+    "jemallocator",
 ] }
 halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
     "halo2-pse",
-    "jemallocator"
+    "jemallocator",
 ] }
 zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false }
 # halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [

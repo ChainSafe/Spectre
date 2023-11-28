@@ -1,15 +1,20 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+pub mod conversions;
+mod execution_payload_header;
+mod test_types;
+
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
 use eth_types::Minimal;
-use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
+use ethereum_consensus_types::presets::minimal::{
+    LightClientBootstrap, LightClientUpdateCapella, BYTES_PER_LOGS_BLOOM, MAX_EXTRA_DATA_BYTES,
+};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::BeaconBlockHeader;
+use ethereum_consensus_types::{BeaconBlockHeader, SyncCommittee};
 use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
-use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::poseidon::{
     poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
 };
@@ -18,10 +23,7 @@ use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use std::ops::Deref;
 use std::path::Path;
-use zipline_test_utils::{load_snappy_ssz, load_yaml};
-pub mod conversions;
-mod execution_payload_header;
-mod test_types;
+use test_utils::{load_snappy_ssz, load_yaml};
 
 pub(crate) const U256_BYTE_COUNT: usize = 32;
 
@@ -87,21 +89,19 @@ pub fn read_test_files_and_gen_witness(
     let genesis_validators_root = validators_root_from_test_path(path);
     let updates = valid_updates_from_test_path(path);
 
-    let zipline_witness = light_client_verifier::ZiplineUpdateWitnessCapella {
-        committee: bootstrap.current_sync_committee,
-        light_client_update: updates[0].clone(),
-    };
-    let sync_wit = to_sync_ciruit_witness(&zipline_witness, genesis_validators_root);
+    let sync_wit = to_sync_ciruit_witness(
+        bootstrap.current_sync_committee,
+        &updates[0],
+        genesis_validators_root,
+    );
 
-    let mut sync_committee_branch = zipline_witness
-        .light_client_update
+    let mut sync_committee_branch = updates[0]
         .next_sync_committee_branch
         .iter()
         .map(|n| n.deref().to_vec())
         .collect_vec();
 
-    let agg_pubkeys_compressed = zipline_witness
-        .light_client_update
+    let agg_pubkeys_compressed = updates[0]
         .next_sync_committee
         .aggregate_pubkey
         .to_bytes()
@@ -112,8 +112,7 @@ pub fn read_test_files_and_gen_witness(
     sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
     let rotation_wit = CommitteeRotationArgs::<Minimal> {
-        pubkeys_compressed: zipline_witness
-            .light_client_update
+        pubkeys_compressed: updates[0]
             .next_sync_committee
             .pubkeys
             .iter()
@@ -127,29 +126,13 @@ pub fn read_test_files_and_gen_witness(
     (sync_wit, rotation_wit)
 }
 
-fn to_sync_ciruit_witness<
-    const SYNC_COMMITTEE_SIZE: usize,
-    const NEXT_SYNC_COMMITTEE_GINDEX: usize,
-    const NEXT_SYNC_COMMITTEE_PROOF_SIZE: usize,
-    const FINALIZED_ROOT_GINDEX: usize,
-    const FINALIZED_ROOT_PROOF_SIZE: usize,
-    const BYTES_PER_LOGS_BLOOM: usize,
-    const MAX_EXTRA_DATA_BYTES: usize,
->(
-    zipline_witness: &ZiplineUpdateWitnessCapella<
-        SYNC_COMMITTEE_SIZE,
-        NEXT_SYNC_COMMITTEE_GINDEX,
-        NEXT_SYNC_COMMITTEE_PROOF_SIZE,
-        FINALIZED_ROOT_GINDEX,
-        FINALIZED_ROOT_PROOF_SIZE,
-        BYTES_PER_LOGS_BLOOM,
-        MAX_EXTRA_DATA_BYTES,
-    >,
+fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
+    committee: SyncCommittee<SYNC_COMMITTEE_SIZE>,
+    light_client_update: &LightClientUpdateCapella,
     genesis_validators_root: Root,
 ) -> SyncStepArgs<Minimal> {
     let mut args = SyncStepArgs::<Minimal> {
-        signature_compressed: zipline_witness
-            .light_client_update
+        signature_compressed: light_client_update
             .sync_aggregate
             .sync_committee_signature
             .to_bytes()
@@ -157,34 +140,23 @@ fn to_sync_ciruit_witness<
         ..Default::default()
     };
 
-    let pubkeys_uncompressed = zipline_witness
-        .committee
+    let pubkeys_uncompressed = committee
         .pubkeys
         .iter()
         .map(|pk| pk.decompressed_bytes())
         .collect_vec();
     args.pubkeys_uncompressed = pubkeys_uncompressed;
-    args.pariticipation_bits = zipline_witness
-        .light_client_update
+    args.pariticipation_bits = light_client_update
         .sync_aggregate
         .sync_committee_bits
         .iter()
         .map(|b| *b)
         .collect();
     args.attested_header = BeaconBlockHeader {
-        slot: zipline_witness
-            .light_client_update
-            .attested_header
-            .beacon
-            .slot,
-        proposer_index: zipline_witness
-            .light_client_update
-            .attested_header
-            .beacon
-            .proposer_index,
+        slot: light_client_update.attested_header.beacon.slot,
+        proposer_index: light_client_update.attested_header.beacon.proposer_index,
         parent_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .attested_header
                 .beacon
                 .parent_root
@@ -192,8 +164,7 @@ fn to_sync_ciruit_witness<
         )
         .unwrap(),
         state_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .attested_header
                 .beacon
                 .state_root
@@ -201,8 +172,7 @@ fn to_sync_ciruit_witness<
         )
         .unwrap(),
         body_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .attested_header
                 .beacon
                 .body_root
@@ -211,19 +181,10 @@ fn to_sync_ciruit_witness<
         .unwrap(),
     };
     args.finalized_header = BeaconBlockHeader {
-        slot: zipline_witness
-            .light_client_update
-            .finalized_header
-            .beacon
-            .slot,
-        proposer_index: zipline_witness
-            .light_client_update
-            .finalized_header
-            .beacon
-            .proposer_index,
+        slot: light_client_update.finalized_header.beacon.slot,
+        proposer_index: light_client_update.finalized_header.beacon.proposer_index,
         parent_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .finalized_header
                 .beacon
                 .parent_root
@@ -231,8 +192,7 @@ fn to_sync_ciruit_witness<
         )
         .unwrap(),
         state_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .finalized_header
                 .beacon
                 .state_root
@@ -240,8 +200,7 @@ fn to_sync_ciruit_witness<
         )
         .unwrap(),
         body_root: Node::try_from(
-            zipline_witness
-                .light_client_update
+            light_client_update
                 .finalized_header
                 .beacon
                 .body_root
@@ -255,8 +214,7 @@ fn to_sync_ciruit_witness<
     };
     let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
     args.domain = signing_domain;
-    args.execution_payload_branch = zipline_witness
-        .light_client_update
+    args.execution_payload_branch = light_client_update
         .finalized_header
         .execution_branch
         .iter()
@@ -266,8 +224,7 @@ fn to_sync_ciruit_witness<
         let mut execution_payload_header: ExecutionPayloadHeader<
             BYTES_PER_LOGS_BLOOM,
             MAX_EXTRA_DATA_BYTES,
-        > = zipline_witness
-            .light_client_update
+        > = light_client_update
             .finalized_header
             .execution
             .clone()
@@ -279,8 +236,7 @@ fn to_sync_ciruit_witness<
             .deref()
             .to_vec()
     };
-    args.finality_branch = zipline_witness
-        .light_client_update
+    args.finality_branch = light_client_update
         .finality_branch
         .iter()
         .map(|b| b.deref().to_vec())
