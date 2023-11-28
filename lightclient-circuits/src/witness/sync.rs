@@ -1,5 +1,4 @@
 use eth_types::Spec;
-use ethereum_consensus_types;
 use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
