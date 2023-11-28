@@ -1,6 +1,9 @@
 # Spectre
 Spectre is a ZK-based block header oracle protocol based on Altair fork light-client sync protocol.
 
+## Requirements
+- `build-essential clang pkg-config libssl-dev`
+
 ## Deploying contracts
 
 Just scripts are provided to deploy the contracts either to a local testnet, or public networks.
