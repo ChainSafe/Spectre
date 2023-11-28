@@ -14,13 +14,13 @@ lint: fmt
     cargo clippy --all-targets --all-features --workspace
 
 setup-step-circuit:
-    cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step.json -o artifacts -k 22
+    cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step_testnet.json -o artifacts -k 22
 
 setup-rotation-circuit:
-    cargo run -r -- circuit committee-update -c ./lightclient-circuits/config/committee_update.json -o artifacts -k 18
+    cargo run -r -- circuit committee-update -c ./lightclient-circuits/config/committee_update_testnet.json -o artifacts -k 18
     # TODO: generate committee-update snark
-    cargo run -r -- circuit aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path \
-     ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o artifacts -k 22
+    cargo run -r -- circuit aggregation -c ./lightclient-circuits/config/committee_update_verifier_testnet.json --app-pk-path \
+     ./build/committee_update_testnet.pkey --app-config-path ./lightclient-circuits/config/committee_update_testnet.json -i ./rotation -o artifacts -k 25
 
 gen-step-evm-verifier:
     cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step.json -o evm-verifier ./contracts/snark-verifiers/sync_step.yul

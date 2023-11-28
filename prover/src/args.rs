@@ -98,6 +98,8 @@ pub struct AggregationArgs {
 pub enum Out {
     #[strum(serialize = "snark")]
     Snark,
+    #[strum(serialize = "dummy-snark")]
+    DummySnark,
     #[strum(serialize = "artifacts")]
     Artifacts,
     #[strum(serialize = "evm-verifier")]

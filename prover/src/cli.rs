@@ -68,7 +68,6 @@ where
                 args,
                 client,
                 fetch_rotation_args,
-                "committee_update",
                 <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await?;
@@ -80,7 +79,6 @@ where
                 args,
                 client,
                 fetch_step_args,
-                "step_circuit_testnet",
                 <StepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await?;
@@ -106,13 +104,13 @@ where
                     .as_ref()
                     .expect("path to SNARK is required"),
             )?;
+
             let snark_clone = snark.clone();
             let get_args = move |_client: &Client<C>| async { Ok(vec![snark_clone]) };
             generic_circuit_cli::<AggregationCircuit, C, _>(
                 &args.aggregation,
                 client,
                 get_args,
-                "aggregation",
                 vec![snark],
             )
             .await?;
@@ -125,7 +123,6 @@ pub(crate) async fn generic_circuit_cli<Circuit: AppCircuit, C: ClientTypes, FnF
     args: &Args,
     client: Client<C>,
     fetch: FnFetch,
-    name: &str,
     default_witness: Circuit::Witness,
 ) -> eyre::Result<()>
 where
@@ -135,13 +132,21 @@ where
         .k
         .unwrap_or_else(|| Circuit::get_degree(&args.config_path));
     let params = gen_srs(k);
-    let pk_filename = format!("{}.pkey", name);
-    // let client = Client::new(Url::parse(&args.beacon_api_url).unwrap());
+    let circuit_configuration = args
+        .config_path
+        .file_stem()
+        .expect("config file is required")
+        .to_str()
+        .unwrap();
+    let pk_path = args
+        .build_dir
+        .join(format!("{}.pkey", circuit_configuration));
+
     match args.out {
         Out::Snark => {
             let pk = Circuit::read_or_create_pk(
                 &params,
-                args.build_dir.join(&pk_filename),
+                pk_path,
                 &args.config_path,
                 true,
                 &default_witness,
@@ -156,18 +161,30 @@ where
             )
             .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
         }
-        Out::Artifacts => {
-            Circuit::create_pk(
+        Out::DummySnark => {
+            let pk = Circuit::read_or_create_pk(
                 &params,
-                args.build_dir.join(&pk_filename),
+                pk_path,
                 &args.config_path,
+                true,
                 &default_witness,
             );
+            Circuit::gen_snark_shplonk(
+                &params,
+                &pk,
+                &args.config_path,
+                None::<String>,
+                &default_witness,
+            )
+            .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+        }
+        Out::Artifacts => {
+            Circuit::create_pk(&params, pk_path, &args.config_path, &default_witness);
         }
         Out::EvmVerifier => {
             let pk = Circuit::read_or_create_pk(
                 &params,
-                args.build_dir.join(&pk_filename),
+                pk_path,
                 &args.config_path,
                 true,
                 &default_witness,
@@ -191,7 +208,7 @@ where
         Out::Calldata => {
             let pk = Circuit::read_or_create_pk(
                 &params,
-                args.build_dir.join(&pk_filename),
+                pk_path,
                 &args.config_path,
                 true,
                 &default_witness,
@@ -220,7 +237,7 @@ where
 
             let pk = Circuit::read_or_create_pk(
                 &params,
-                args.build_dir.join(&pk_filename),
+                pk_path,
                 &args.config_path,
                 true,
                 &default_witness,
