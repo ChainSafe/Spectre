@@ -10,8 +10,6 @@ use ethereum_consensus_types::BeaconBlockHeader;
 use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
-use lightclient_circuits::gadget::crypto;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::poseidon::{
     poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
 };
@@ -82,7 +80,7 @@ pub fn valid_updates_from_test_path(
 
 pub fn read_test_files_and_gen_witness(
     path: &Path,
-) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal, Fr>) {
+) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
 
@@ -113,7 +111,7 @@ pub fn read_test_files_and_gen_witness(
 
     sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
-    let rotation_wit = CommitteeRotationArgs::<Minimal, Fr> {
+    let rotation_wit = CommitteeRotationArgs::<Minimal> {
         pubkeys_compressed: zipline_witness
             .light_client_update
             .next_sync_committee
@@ -122,7 +120,6 @@ pub fn read_test_files_and_gen_witness(
             .cloned()
             .map(|pk| pk.to_bytes().to_vec())
             .collect_vec(),
-        randomness: crypto::constant_randomness(),
         finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
         _spec: Default::default(),

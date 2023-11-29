@@ -2,6 +2,7 @@ use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
+use eth_types::Field;
 use halo2_base::gates::circuit::{BaseCircuitParams, CircuitBuilderStage};
 use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
 use halo2_base::halo2_proofs::{
@@ -11,7 +12,6 @@ use halo2_base::halo2_proofs::{
     poly::commitment::Params,
     poly::kzg::commitment::ParamsKZG,
 };
-use halo2_base::utils::BigPrimeField;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
     encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
@@ -79,7 +79,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 }
 
-pub trait PinnableCircuit<F: BigPrimeField>: CircuitExt<F> {
+pub trait PinnableCircuit<F: Field>: CircuitExt<F> {
     type Pinning: Halo2ConfigPinning;
 
     fn break_points(&self) -> <Self::Pinning as Halo2ConfigPinning>::BreakPoints;

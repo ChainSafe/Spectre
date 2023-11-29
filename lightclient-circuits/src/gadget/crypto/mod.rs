@@ -5,7 +5,6 @@ mod sha256_flex;
 mod sha256_wide;
 
 pub use builder::{SHAConfig, ShaCircuitBuilder};
-use eth_types::Field;
 use halo2_ecc::{
     bigint::ProperCrtUint,
     bls12_381::{Fp2Chip, Fp2Point, FpChip},
@@ -26,8 +25,3 @@ pub type G1Chip<'chip, F> = EccChip<'chip, F, FpChip<'chip, F>>;
 pub type G2Chip<'chip, F> = EccChip<'chip, F, Fp2Chip<'chip, F>>;
 
 pub use halo2_ecc::ecc::hash_to_curve::HashInstructions;
-
-// This is a temporary measure. TODO: use challenges API.
-pub fn constant_randomness<F: Field>() -> F {
-    F::from_u128(0xca9d6022267d3bd658bf)
-}

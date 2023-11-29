@@ -10,6 +10,7 @@ license = "MIT OR Apache-2.0"
 halo2curves.workspace = true
 halo2-base.workspace = true
 halo2-ecc.workspace = true
+zkevm-hashes.workspace = true
 
 # verifier SDK
 snark-verifier.workspace = true
@@ -37,7 +38,6 @@ serde_json.workspace = true
 itertools.workspace = true
 log.workspace = true
 hex.workspace = true
-poseidon_native.workspace = true
 rayon = "1.7.0"
 array-init = "2.0.0"
 strum = "0.25"

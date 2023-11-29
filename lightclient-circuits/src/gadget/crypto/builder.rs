@@ -18,7 +18,6 @@ use halo2_base::{
         circuit::{Layouter, SimpleFloorPlanner},
         plonk::{Circuit, ConstraintSystem, Error},
     },
-    utils::BigPrimeField,
     AssignedValue, Context,
 };
 use itertools::Itertools;
@@ -32,7 +31,7 @@ pub struct SHAConfig<F: Field, CustomConfig: GateBuilderConfig<F>> {
     pub base: BaseConfig<F>,
 }
 
-impl<F: BigPrimeField, GateConfig: GateBuilderConfig<F>> SHAConfig<F, GateConfig> {
+impl<F: Field, GateConfig: GateBuilderConfig<F>> SHAConfig<F, GateConfig> {
     pub fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
         let base = BaseConfig::configure(meta, params);
         let compression = GateConfig::configure(meta);

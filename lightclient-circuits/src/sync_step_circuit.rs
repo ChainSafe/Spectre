@@ -1,7 +1,10 @@
 use crate::{
-    gadget::crypto::{
-        calculate_ysquared, G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip,
-        ShaCircuitBuilder, ShaFlexGateManager,
+    gadget::{
+        crypto::{
+            calculate_ysquared, G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip,
+            ShaCircuitBuilder, ShaFlexGateManager,
+        },
+        to_bytes_le,
     },
     poseidon::{fq_array_poseidon, fq_array_poseidon_native},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
@@ -132,10 +135,9 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             ],
         )?;
 
-        let signing_root = sha256_chip.digest::<64>(
+        let signing_root = sha256_chip.digest(
             builder,
             HashInput::TwoToOne(attested_header.into(), args.domain.to_vec().into_witness()),
-            false,
         )?;
 
         let signature =
@@ -174,9 +176,9 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
-        let participation_sum_le = to_bytes_le::<_, 8>(builder.main(), gate, &participation_sum);
+        let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
 
-        let poseidon_commit_le = to_bytes_le::<_, 32>(builder.main(), gate, &poseidon_commit);
+        let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
 
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
         let public_inputs_concat = itertools::chain![
@@ -196,7 +198,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         .collect_vec();
 
         let pi_hash_bytes = sha256_chip
-            .digest::<{ 8 * 3 + 32 * 3 }>(builder, public_inputs_concat, false)?
+            .digest(builder, public_inputs_concat)?
             .try_into()
             .unwrap();
 
@@ -301,30 +303,6 @@ pub fn clear_3_bits<F: Field>(
 
     // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
     range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
-}
-
-pub fn to_bytes_le<F: Field, const MAX_BYTES: usize>(
-    ctx: &mut Context<F>,
-    gate: &impl GateInstructions<F>,
-    a: &AssignedValue<F>,
-) -> Vec<AssignedValue<F>> {
-    let byte_bases = (0..MAX_BYTES)
-        .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
-        .collect_vec();
-
-    let assigned_bytes = a
-        .value()
-        .to_bytes_le()
-        .into_iter()
-        .take(MAX_BYTES)
-        .map(|v| ctx.load_witness(F::from(v as u64)))
-        .collect_vec();
-
-    // Constrain poseidon bytes to be equal to the recovered checksum
-    let checksum = gate.inner_product(ctx, assigned_bytes.clone(), byte_bases);
-    ctx.constrain_equal(&checksum, &checksum);
-
-    assigned_bytes
 }
 
 impl<S: Spec, F: Field> StepCircuit<S, F> {
@@ -461,7 +439,7 @@ mod tests {
         const K: u32 = 21;
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+        let pinning = Eth2ConfigPinning::from_path("./config/sync_step_21.json");
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
@@ -486,8 +464,8 @@ mod tests {
 
         let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
-            "../build/sync_step.pkey",
-            "./config/sync_step.json",
+            "../build/sync_step_22.pkey",
+            "./config/sync_step_22.json",
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
@@ -497,7 +475,7 @@ mod tests {
         let _ = StepCircuit::<Testnet, Fr>::gen_proof_shplonk(
             &params,
             &pk,
-            "./config/sync_step.json",
+            "./config/sync_step_22.json",
             &witness,
         )
         .expect("proof generation & verification should not fail");
@@ -510,15 +488,15 @@ mod tests {
 
         let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
-            "../build/sync_step.pkey",
-            "./config/sync_step.json",
+            "../build/sync_step_22.pkey",
+            "./config/sync_step_22.json",
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step.json");
+        let pinning = Eth2ConfigPinning::from_path("./config/sync_step_22.json");
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,

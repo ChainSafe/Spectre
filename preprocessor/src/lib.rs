@@ -2,7 +2,6 @@
 #![feature(generic_const_exprs)]
 
 mod sync;
-use std::ops::Deref;
 
 use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
 use eth_types::Spec;
@@ -11,15 +10,16 @@ use ethereum_consensus_types::{
     LightClientUpdateCapella, Root,
 };
 use itertools::Itertools;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Node, Vector};
+use std::ops::Deref;
 pub use sync::*;
 mod rotation;
 pub use rotation::*;
 use zipline_cryptography::bls::BlsPublicKey;
 use zipline_cryptography::bls::BlsSignature;
+
 pub async fn light_client_update_to_args<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
@@ -32,7 +32,7 @@ pub async fn light_client_update_to_args<S: Spec>(
     >,
     pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
     domain: [u8; 32],
-) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S, Fr>)>
+) -> eyre::Result<(SyncStepArgs<S>, CommitteeRotationArgs<S>)>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
