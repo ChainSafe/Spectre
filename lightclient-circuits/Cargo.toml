@@ -7,20 +7,22 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 # halo2
-halo2_proofs.workspace = true
 halo2curves.workspace = true
 halo2-base.workspace = true
 halo2-ecc.workspace = true
-poseidon.workspace = true
+
 # verifier SDK
 snark-verifier.workspace = true
 snark-verifier-sdk.workspace = true
+
 # crypto
 group.workspace = true
 num-bigint.workspace = true
 pasta_curves.workspace = true
 ff.workspace = true
 sha2.workspace = true
+pse-poseidon = { git = "https://github.com/axiom-crypto/pse-poseidon.git" }
+
 # ethereum
 ssz_rs = { workspace = true, features = ["serde"] }
 ethereum-consensus-types ={ workspace = true, features = ["serde"] }
@@ -42,6 +44,7 @@ strum = "0.25"
 strum_macros = "0.25"
 rand = "0.8"
 lazy_static = "1.4"
+getset = "0.1.2"
 
 [dev-dependencies]
 rstest = "0.18.2"

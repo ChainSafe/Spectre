@@ -10,7 +10,6 @@ pub struct ShaRow<F> {
     pub(crate) a: [bool; NUM_BITS_PER_WORD_EXT],
     pub(crate) e: [bool; NUM_BITS_PER_WORD_EXT],
     pub(crate) is_final: bool,
-    pub(crate) is_right: bool,
     pub(crate) length: usize,
     pub(crate) data_rlc: F,
     pub(crate) hash_rlc: F,
@@ -19,10 +18,7 @@ pub struct ShaRow<F> {
     pub(crate) final_hash_bytes: [F; NUM_BYTES_FINAL_HASH],
 }
 
-pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, is_rlc: [bool; 2]) {
-    // Prepare inputs RLCs in advance
-    let mut inputs_rlc = inputs.map(|input| rlc::value(input, rnd));
-
+pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F) {
     let left_bits = into_bits(inputs[0]);
     let right_bits = into_bits(inputs[1]);
     let input_len = inputs[0].len() + inputs[1].len();
@@ -42,10 +38,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
     // Set the initial state
     let mut hs: [u64; 8] = H.to_vec().try_into().unwrap();
     let mut length = 0usize;
-    let mut data_rlc = F::zero();
-    let mut rnd_pow = F::zero();
-    let mut u8_pow = [F::one(), F::zero()];
-    let mut data_vals = [F::zero(); 2];
+    let mut data_rlc = F::ZERO;
 
     let mut in_padding = false;
 
@@ -58,7 +51,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                            a: u64,
                            e: u64,
                            is_final,
-                           is_right: bool,
                            length,
                            data_rlc,
                            hash_rlc,
@@ -77,7 +69,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 a: word_to_bits(a, NUM_BITS_PER_WORD_EXT).try_into().unwrap(),
                 e: word_to_bits(e, NUM_BITS_PER_WORD_EXT).try_into().unwrap(),
                 is_final,
-                is_right,
                 length,
                 data_rlc,
                 hash_rlc,
@@ -101,13 +92,12 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 a,
                 e,
                 is_final,
-                false,
                 length,
                 data_rlc,
-                F::zero(),
+                F::ZERO,
                 [false, false, false, in_padding],
-                [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             )
         };
         add_row_start(d, h, idx == 0);
@@ -119,8 +109,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
         for (round, round_cst) in ROUND_CST.iter().enumerate() {
             // Padding/Length/Data rlc
             let mut is_paddings = [false; ABSORB_WIDTH_PER_ROW_BYTES];
-            let mut inter_data_rlcs = [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES];
-            let mut is_right = false; // feature: [multi input lookups]
+            let mut inter_data_rlcs = [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES];
             if round < NUM_WORDS_TO_ABSORB {
                 // padding/length
                 for is_padding in is_paddings.iter_mut() {
@@ -185,7 +174,6 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 a,
                 e,
                 false,
-                is_right,
                 if round < NUM_WORDS_TO_ABSORB {
                     length
                 } else {
@@ -194,12 +182,12 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 if round < NUM_WORDS_TO_ABSORB {
                     data_rlc
                 } else {
-                    F::zero()
+                    F::ZERO
                 },
-                F::zero(),
+                F::ZERO,
                 is_paddings,
                 inter_data_rlcs,
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             );
 
             // Truncate the newly calculated values
@@ -226,11 +214,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 .collect::<Vec<_>>();
             rlc::value(&hash_bytes, rnd)
         } else {
-            F::zero()
+            F::ZERO
         };
 
         let final_hash_bytes = if is_final_block {
-            let mut bytes = [F::zero(); NUM_BYTES_FINAL_HASH];
+            let mut bytes = [F::ZERO; NUM_BYTES_FINAL_HASH];
             for (i, h) in hs.iter().enumerate() {
                 for (j, byte) in (*h as u32).to_be_bytes().into_iter().enumerate() {
                     bytes[4 * i + j] = F::from(byte as u64);
@@ -238,7 +226,7 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
             }
             bytes
         } else {
-            [F::zero(); NUM_BYTES_FINAL_HASH]
+            [F::ZERO; NUM_BYTES_FINAL_HASH]
         };
 
         // Add end rows
@@ -248,13 +236,12 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
                 a,
                 e,
                 false,
-                false,
                 0,
-                F::zero(),
-                F::zero(),
+                F::ZERO,
+                F::ZERO,
                 [false; ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
-                [F::zero(); NUM_BYTES_FINAL_HASH],
+                [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
+                [F::ZERO; NUM_BYTES_FINAL_HASH],
             )
         };
         add_row_end(hs[3], hs[7]);
@@ -266,12 +253,11 @@ pub fn sha256<F: Field>(rows: &mut Vec<ShaRow<F>>, inputs: &[&[u8]; 2], rnd: F, 
             hs[0],
             hs[4],
             is_final_block,
-            false,
             length,
             data_rlc,
             hash_rlc,
             [false, false, false, in_padding],
-            [F::zero(); ABSORB_WIDTH_PER_ROW_BYTES],
+            [F::ZERO; ABSORB_WIDTH_PER_ROW_BYTES],
             final_hash_bytes,
         );
 
@@ -294,16 +280,13 @@ pub fn multi_sha256<F: Field>(inputs: &[HashInput<u8>], rnd: F) -> Vec<ShaRow<F>
     let inputs = inputs
         .iter()
         .map(|input| match input {
-            HashInput::Single(inner) => ([inner.bytes.as_slice(), &[]], [inner.is_rlc, false]),
-            HashInput::TwoToOne(left, right) => (
-                [left.bytes.as_slice(), right.bytes.as_slice()],
-                [left.is_rlc, right.is_rlc],
-            ),
+            HashInput::Single(inner) => [inner.bytes.as_slice(), &[]],
+            HashInput::TwoToOne(left, right) => [left.bytes.as_slice(), right.bytes.as_slice()],
         })
         .collect_vec();
     let mut rows: Vec<ShaRow<F>> = Vec::new();
-    for (bytes, is_rlc) in inputs {
-        sha256(&mut rows, &bytes, rnd, is_rlc);
+    for bytes in inputs {
+        sha256(&mut rows, &bytes, rnd);
     }
     rows
 }

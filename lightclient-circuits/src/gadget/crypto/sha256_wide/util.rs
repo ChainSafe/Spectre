@@ -1,13 +1,5 @@
 use eth_types::Field;
-use halo2_base::{
-    utils::{biguint_to_fe, fe_to_biguint},
-    AssignedValue,
-};
-use halo2_proofs::circuit::AssignedCell;
-use itertools::Itertools;
-use num_bigint::BigUint;
-
-use crate::{util::AssignedValueCell, witness::HashInput};
+use halo2_base::AssignedValue;
 
 pub(crate) const NUM_BITS_PER_BYTE: usize = 8;
 pub(crate) const NUM_BYTES_PER_WORD: usize = 4;
@@ -20,7 +12,6 @@ pub(crate) const RATE_IN_BITS: usize = RATE * NUM_BITS_PER_BYTE;
 pub(crate) const NUM_WORDS_TO_ABSORB: usize = 16;
 pub(crate) const ABSORB_WIDTH_PER_ROW_BYTES: usize = 4;
 pub(crate) const NUM_BITS_PADDING_LENGTH: usize = 64;
-pub(crate) const NUM_START_ROWS: usize = 4;
 pub(crate) const NUM_END_ROWS: usize = 4;
 pub(crate) const NUM_BYTES_FINAL_HASH: usize = 32;
 pub(crate) const MAX_DEGREE: usize = 5;
@@ -51,7 +42,7 @@ pub struct Sha256AssignedRows<F: Field> {
     /// Input words at the row.
     pub input_rlc: Vec<AssignedValue<F>>,
     /// Whether the output word is enabled at the row.
-    pub is_final: Vec<AssignedValue<F>>,
+    pub is_enabled: Vec<AssignedValue<F>>,
     /// Whether the row is padding.
     pub padding_selectors: Vec<[AssignedValue<F>; 4]>,
     /// Output words at the row.
@@ -69,13 +60,13 @@ impl<F: Field> Sha256AssignedRows<F> {
 /// Decodes be bits
 pub mod decode {
     use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use halo2_base::halo2_proofs::plonk::Expression;
 
     use crate::gadget::Expr;
 
     pub(crate) fn expr<F: Field>(bits: &[Expression<F>]) -> Expression<F> {
         let mut value = 0.expr();
-        let mut multiplier = F::one();
+        let mut multiplier = F::ONE;
         for bit in bits.iter().rev() {
             value = value + bit.expr() * multiplier;
             multiplier *= F::from(2);
@@ -95,7 +86,7 @@ pub mod decode {
 /// Rotates bits to the right
 pub mod rotate {
     use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use halo2_base::halo2_proofs::plonk::Expression;
 
     pub(crate) fn expr<F: Field>(bits: &[Expression<F>], count: usize) -> Vec<Expression<F>> {
         let mut rotated = bits.to_vec();
@@ -114,7 +105,7 @@ pub mod shift {
 
     use super::NUM_BITS_PER_WORD;
     use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use halo2_base::halo2_proofs::plonk::Expression;
 
     pub(crate) fn expr<F: Field>(bits: &[Expression<F>], count: usize) -> Vec<Expression<F>> {
         let mut res = vec![0.expr(); count];
@@ -131,7 +122,7 @@ pub mod shift {
 pub mod to_le_bytes {
     use crate::util::to_bytes;
     use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use halo2_base::halo2_proofs::plonk::Expression;
 
     pub(crate) fn expr<F: Field>(bits: &[Expression<F>]) -> Vec<Expression<F>> {
         to_bytes::expr(&bits.iter().rev().cloned().collect::<Vec<_>>())

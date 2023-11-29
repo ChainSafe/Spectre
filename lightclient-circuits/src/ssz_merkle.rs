@@ -1,19 +1,18 @@
-use std::os::unix::thread;
-
-use eth_types::Field;
-use halo2_base::{AssignedValue, Context, QuantumCell};
-use halo2_proofs::{circuit::Region, plonk::Error};
-use itertools::Itertools;
-
 use crate::{
-    gadget::crypto::{HashInstructions, ShaContexts, ShaThreadBuilder},
-    util::{IntoConstant, IntoWitness, ThreadBuilderBase},
+    gadget::crypto::HashInstructions,
+    util::IntoConstant,
     witness::{HashInput, HashInputChunk},
 };
+use eth_types::Field;
+use halo2_base::{
+    gates::flex_gate::threads::CommonCircuitBuilder, halo2_proofs::plonk::Error, AssignedValue,
+    QuantumCell,
+};
+use itertools::Itertools;
 
-pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
-    thread_pool: &mut ThreadBuilder,
-    hasher: &impl HashInstructions<F, ThreadBuilder>,
+pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
+    builder: &mut CircuitBuilder,
+    hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 ) -> Result<Vec<AssignedValue<F>>, Error> {
     let mut chunks = chunks.into_iter().collect_vec();
@@ -32,8 +31,8 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
             .tuples()
             .map(|(left, right)| {
                 hasher
-                    .digest::<64>(thread_pool, HashInput::TwoToOne(left, right), false)
-                    .map(|res| res.output_bytes.into())
+                    .digest::<64>(builder, HashInput::TwoToOne(left, right), false)
+                    .map(|res| res.into())
             })
             .collect::<Result<Vec<_>, _>>()?;
     }
@@ -48,9 +47,9 @@ pub fn ssz_merkleize_chunks<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     Ok(root.bytes)
 }
 
-pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
-    thread_pool: &mut ThreadBuilder,
-    hasher: &impl HashInstructions<F, ThreadBuilder>,
+pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
+    builder: &mut CircuitBuilder,
+    hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
     proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
     leaf: HashInputChunk<QuantumCell<F>>,
     root: &[AssignedValue<F>],
@@ -61,7 +60,7 @@ pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     for witness in proof.into_iter() {
         computed_hash = hasher
             .digest::<64>(
-                thread_pool,
+                builder,
                 if gindex % 2 == 0 {
                     HashInput::TwoToOne(computed_hash, witness)
                 } else {
@@ -69,7 +68,6 @@ pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
                 },
                 false,
             )?
-            .output_bytes
             .into();
         gindex /= 2;
     }
@@ -80,7 +78,7 @@ pub fn verify_merkle_proof<F: Field, ThreadBuilder: ThreadBuilderBase<F>>(
     });
 
     computed_root.zip(root.iter()).for_each(|(a, b)| {
-        thread_pool.main().constrain_equal(&a, b);
+        builder.main().constrain_equal(&a, b);
     });
 
     Ok(())

@@ -6,9 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use contract_tests::make_client;
-use contracts::{
-    CommitteeUpdateMockVerifier, CommitteeUpdateVerifier, Spectre, StepMockVerifier, StepVerifier,
-};
+use contracts::{CommitteeUpdateMockVerifier, Spectre, StepMockVerifier};
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
 use rstest::rstest;
@@ -74,33 +72,6 @@ async fn test_contract_initialization_and_first_step(
 }
 
 //////////// deployment helpers //////////////////
-
-/// Deploy the Spectre contract using the given ethclient
-/// Also deploys the step verifier and the update verifier contracts
-/// and passes their addresses along with the other params to the constructor
-async fn deploy_spectre<M: Middleware + 'static>(
-    ethclient: Arc<M>,
-    initial_sync_period: usize,
-    initial_sync_committee_poseidon: [u8; 32],
-    slots_per_period: usize,
-) -> anyhow::Result<Spectre<M>> {
-    let step_verifier = StepVerifier::deploy(ethclient.clone(), ())?.send().await?;
-    let update_verifier = CommitteeUpdateVerifier::deploy(ethclient.clone(), ())?
-        .send()
-        .await?;
-    Ok(Spectre::deploy(
-        ethclient,
-        (
-            step_verifier.address(),
-            update_verifier.address(),
-            U256::from(initial_sync_period),
-            initial_sync_committee_poseidon,
-            U256::from(slots_per_period),
-        ),
-    )?
-    .send()
-    .await?)
-}
 
 /// Deploy the Spectre contract using the given ethclient
 /// Also deploys the step verifier and the update verifier contracts

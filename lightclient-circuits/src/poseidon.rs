@@ -1,16 +1,15 @@
-use crate::gadget::crypto::G1Point;
-use eth_types::{AppCurveExt, Field, Spec};
-use group::UncompressedEncoding;
-use halo2_base::safe_types::ScalarField;
-use halo2_base::{safe_types::GateInstructions, AssignedValue, Context};
-use halo2_ecc::bigint::{ProperCrtUint, ProperUint};
-use halo2_proofs::plonk::Error;
-use halo2curves::bls12_381::G1;
-use halo2curves::bls12_381::{self, G1Affine};
-use halo2curves::bn256;
+use eth_types::{Field, LIMB_BITS};
+use halo2_base::{
+    gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,
+    poseidon::hasher::PoseidonSponge, AssignedValue, Context,
+};
+use halo2_ecc::bigint::ProperCrtUint;
+use halo2curves::{
+    bls12_381::{self, Fq},
+    group::UncompressedEncoding,
+};
 use itertools::Itertools;
-use poseidon::PoseidonChip;
-use poseidon_native::Poseidon as PoseidonNative;
+use pse_poseidon::Poseidon as PoseidonNative;
 
 const POSEIDON_SIZE: usize = 16;
 const R_F: usize = 8;
@@ -27,8 +26,8 @@ pub fn fq_array_poseidon<'a, F: Field>(
         .copied()
         .collect_vec();
 
-    let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
-        .expect("failed to construct Poseidon circuit");
+    let mut poseidon =
+        PoseidonSponge::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new::<R_F, R_P, 0>(ctx);
 
     let mut current_poseidon_hash = None;
 
@@ -37,21 +36,21 @@ pub fn fq_array_poseidon<'a, F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
+        let _ = current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())
 }
 
 pub fn fq_array_poseidon_native<F: Field>(
-    elems: impl Iterator<Item = bls12_381::Fq>,
+    elems: impl Iterator<Item = Fq>,
+    limb_bits: usize,
 ) -> Result<F, Error> {
     let limbs = elems
         // Converts Fq elements to Fr limbs.
         .flat_map(|x| {
             x.to_bytes_le()
-                .chunks(bls12_381::G1::LIMB_BITS / 8)
+                .chunks(limb_bits / 8)
                 .map(F::from_bytes_le)
                 .collect_vec()
         })
@@ -64,7 +63,7 @@ pub fn fq_array_poseidon_native<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-        current_poseidon_hash.insert(poseidon.squeeze());
+        let _ = current_poseidon_hash.insert(poseidon.squeeze());
     }
     Ok(current_poseidon_hash.unwrap())
 }
@@ -74,8 +73,8 @@ pub fn poseidon_sponge<F: Field>(
     gate: &impl GateInstructions<F>,
     elems: Vec<AssignedValue<F>>,
 ) -> Result<AssignedValue<F>, Error> {
-    let mut poseidon = PoseidonChip::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new(ctx, R_F, R_P)
-        .expect("failed to construct Poseidon circuit");
+    let mut poseidon =
+        PoseidonSponge::<F, POSEIDON_SIZE, { POSEIDON_SIZE - 1 }>::new::<R_F, R_P, 0>(ctx);
     let mut current_poseidon_hash = None;
 
     for (i, chunk) in elems.chunks(POSEIDON_SIZE - 3).enumerate() {
@@ -83,7 +82,7 @@ pub fn poseidon_sponge<F: Field>(
         if i != 0 {
             poseidon.update(&[current_poseidon_hash.unwrap()]);
         }
-        current_poseidon_hash.insert(poseidon.squeeze(ctx, gate)?);
+        let _ = current_poseidon_hash.insert(poseidon.squeeze(ctx, gate));
     }
 
     Ok(current_poseidon_hash.unwrap())
@@ -103,17 +102,19 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         })
         .collect_vec();
     let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x)).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
+            .unwrap();
+    Ok(poseidon_commitment.to_bytes())
 }
 
 pub fn poseidon_committee_commitment_from_compressed(
     pubkeys_compressed: &[Vec<u8>],
 ) -> Result<[u8; 32], Error> {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-        bytes[47] &= 0b00011111;
-        bls12_381::Fq::from_bytes_le(&bytes)
+        bytes[0] &= 0b00011111;
+        bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+            .expect("bad bls12_381::Fq encoding")
     });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x).unwrap();
-    Ok(poseidon_commitment.to_bytes_le().try_into().unwrap())
+    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS).unwrap();
+    Ok(poseidon_commitment.to_bytes())
 }

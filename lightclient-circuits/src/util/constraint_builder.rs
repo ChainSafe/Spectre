@@ -1,11 +1,8 @@
 use crate::gadget::Expr;
 use eth_types::Field;
-use halo2_proofs::plonk::Expression;
+use halo2_base::halo2_proofs::plonk::Expression;
 
 use super::{Cell, CellType};
-
-pub type Constraint<F> = (&'static str, Expression<F>);
-pub type Lookup<F> = (&'static str, Vec<(Expression<F>, Expression<F>)>);
 
 pub(crate) trait ConstrainBuilderCommon<F: Field> {
     fn add_constraint(&mut self, name: &'static str, constraint: Expression<F>);
@@ -100,6 +97,7 @@ impl<F: Field> BaseConstraintBuilder<F> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn require_zero(&mut self, name: &'static str, constraint: Expression<F>) {
         self.add_constraint(name, constraint);
     }
@@ -117,6 +115,7 @@ impl<F: Field> BaseConstraintBuilder<F> {
         self.add_constraint(name, value.clone() * (1.expr() - value));
     }
 
+    #[allow(dead_code)]
     pub(crate) fn require_in_set(
         &mut self,
         name: &'static str,
@@ -145,6 +144,7 @@ impl<F: Field> BaseConstraintBuilder<F> {
         ret
     }
 
+    #[allow(dead_code)]
     pub(crate) fn add_constraints(&mut self, constraints: Vec<(&'static str, Expression<F>)>) {
         for (name, constraint) in constraints {
             self.add_constraint(name, constraint);

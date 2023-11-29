@@ -46,7 +46,7 @@ impl<T: Clone> HashInput<T> {
                 let mut all = left
                     .bytes
                     .into_iter()
-                    .chain(right.bytes.into_iter())
+                    .chain(right.bytes)
                     .map(f)
                     .collect_vec();
                 let remainer = all.split_off(left_size);
@@ -62,6 +62,16 @@ impl<T: Clone> HashInput<T> {
                 HashInput::TwoToOne(left, right)
             }
         }
+    }
+}
+
+impl<F: Field> IntoIterator for HashInput<QuantumCell<F>> {
+    type Item = QuantumCell<F>;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.to_vec().into_iter()
     }
 }
 

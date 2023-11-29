@@ -39,15 +39,7 @@ where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
     let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
-        &args
-            .pubkeys_compressed
-            .iter()
-            .cloned()
-            .map(|mut b| {
-                b.reverse();
-                b
-            })
-            .collect_vec(),
+        &args.pubkeys_compressed.iter().cloned().collect_vec(),
     )
     .unwrap();
 

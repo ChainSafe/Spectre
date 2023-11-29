@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
 mod sync;
@@ -9,8 +10,8 @@ use ethereum_consensus_types::{
     BeaconBlockHeader, ByteVector, LightClientBootstrap, LightClientFinalityUpdate,
     LightClientUpdateCapella, Root,
 };
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Node, Vector};

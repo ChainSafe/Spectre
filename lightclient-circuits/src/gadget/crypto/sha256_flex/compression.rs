@@ -1,33 +1,14 @@
-use std::cell::RefMut;
-
-use crate::util::ThreadBuilderBase;
-
-use super::builder::ShaContexts;
-use super::spread::{self, SpreadChip, SpreadConfig};
+use super::spread::SpreadChip;
 use super::util::{bits_le_to_fe, fe_to_bits_le};
-use super::ShaThreadBuilder;
+use super::ShaFlexGateManager;
+use crate::gadget::crypto::ShaCircuitBuilder;
 use eth_types::Field;
-use halo2_base::halo2_proofs::halo2curves::FieldExt;
-use halo2_base::halo2_proofs::{
-    circuit::{AssignedCell, Cell, Layouter, Region, SimpleFloorPlanner, Value},
-    plonk::{
-        Advice, Circuit, Column, ConstraintSystem, Error, Expression, Fixed, Selector, TableColumn,
-        VirtualCells,
-    },
-    poly::Rotation,
-};
-use halo2_base::utils::fe_to_bigint;
-use halo2_base::QuantumCell;
 use halo2_base::{
-    gates::{flex_gate::FlexGateConfig, range::RangeConfig, GateInstructions, RangeInstructions},
-    utils::{bigint_to_fe, biguint_to_fe, fe_to_biguint, modulus},
-    AssignedValue, Context,
+    gates::{flex_gate::threads::CommonCircuitBuilder, GateInstructions, RangeInstructions},
+    halo2_proofs::plonk::Error,
+    AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
-use sha2::{Digest, Sha256};
-
-// const BLOCK_BYTE: usize = 64;
-// const DIGEST_BYTE: usize = 32;
 
 pub const NUM_ROUND: usize = 64;
 pub const NUM_STATE_WORD: usize = 8;
@@ -56,7 +37,7 @@ pub const INIT_STATE: [u32; NUM_STATE_WORD] = [
 pub type SpreadU32<'a, F> = (AssignedValue<F>, AssignedValue<F>);
 
 pub fn sha256_compression<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     assigned_input_bytes: &[AssignedValue<F>],
     pre_state_words: &[AssignedValue<F>],
@@ -147,7 +128,9 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
     // let mut e_bits = gate.num_to_bits(ctx, &e, 32);
     // let mut f_bits = gate.num_to_bits(ctx, &f, 32);
     // let mut g_bits = gate.num_to_bits(ctx, &g, 32);
+    #[allow(unused_assignments)]
     let mut t1 = thread_pool.main().load_zero();
+    #[allow(unused_assignments)]
     let mut t2 = thread_pool.main().load_zero();
     for idx in 0..64 {
         t1 = {
@@ -225,7 +208,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
         };
         a_spread = state_to_spread_u32(thread_pool, spread_chip, &a)?;
     }
-    let new_states = vec![a, b, c, d, e, f, g, h];
+    let new_states = [a, b, c, d, e, f, g, h];
     let next_state_words = new_states
         .iter()
         .copied()
@@ -249,7 +232,7 @@ pub fn sha256_compression<'a, 'b: 'a, F: Field>(
 }
 
 fn state_to_spread_u32<'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &AssignedValue<F>,
 ) -> Result<SpreadU32<'a, F>, Error> {
@@ -277,7 +260,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 ) -> AssignedValue<F> {
     let gate = range.gate();
     let lo = F::from(x.value().get_lower_32() as u64);
-    let hi = F::from(((x.value().get_lower_128() >> 32) & ((1u128 << 32) - 1)) as u64);
+    let hi = F::from((x.value().get_lower_64() >> 32) & ((1u64 << 32) - 1));
     let assigned_lo = ctx.load_witness(lo);
     let assigned_hi = ctx.load_witness(hi);
     range.range_check(ctx, assigned_lo, 32);
@@ -292,7 +275,7 @@ fn mod_u32<'a, 'b: 'a, F: Field>(
 }
 
 fn ch<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -402,7 +385,7 @@ fn ch<'a, 'b: 'a, F: Field>(
 }
 
 fn maj<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x: &SpreadU32<'a, F>,
     y: &SpreadU32<'a, F>,
@@ -474,7 +457,7 @@ fn three_add<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper0<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -499,7 +482,7 @@ fn sigma_upper0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_upper1<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -524,7 +507,7 @@ fn sigma_upper1<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower0<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -549,7 +532,7 @@ fn sigma_lower0<'a, 'b: 'a, F: Field>(
 }
 
 fn sigma_lower1<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
 ) -> Result<AssignedValue<F>, Error> {
@@ -575,7 +558,7 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
 
 #[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
-    thread_pool: &mut ShaThreadBuilder<F>,
+    thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,
     x_spread: &SpreadU32<F>,
     starts: &[usize; 4],
@@ -592,7 +575,7 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
         bits.append(&mut fe_to_bits_le(hi, 32));
         bits
     };
-    let mut assign_bits = |bits: &Vec<bool>, start: usize, end: usize, padding: usize| {
+    let mut assign_bits = |bits: &Vec<bool>, start: usize, end: usize, _padding: usize| {
         let fe_val: F = {
             let mut bits = bits[(2 * start)..(2 * end)].to_vec();
             bits.extend_from_slice(&vec![false; 64 - bits.len()]);
@@ -674,7 +657,7 @@ fn sigma_generic<'a, 'b: 'a, F: Field>(
     };
     let (r_lo, r_hi) = {
         let lo = F::from(r_spread.value().get_lower_32() as u64);
-        let hi = F::from(((r_spread.value().get_lower_128() >> 32) & ((1u128 << 32) - 1)) as u64);
+        let hi = F::from(((r_spread.value().get_lower_64() >> 32) & ((1u64 << 32) - 1)) as u64);
         let assigned_lo = thread_pool.main().load_witness(lo);
         let assigned_hi = thread_pool.main().load_witness(hi);
         range.range_check(thread_pool.main(), assigned_lo, 32);

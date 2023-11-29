@@ -66,17 +66,7 @@ pub async fn step_args_from_finality_update<S: Spec>(
 ) -> eyre::Result<SyncStepArgs<S>> {
     let pubkeys_uncompressed = pubkeys_compressed
         .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
 
     let execution_payload_root = finality_update
@@ -129,10 +119,7 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .sync_aggregate
             .sync_committee_signature
             .to_bytes()
-            .iter()
-            .copied()
-            .rev()
-            .collect_vec(),
+            .to_vec(),
         pubkeys_uncompressed,
         pariticipation_bits: finality_update
             .sync_aggregate
@@ -177,11 +164,10 @@ pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
-    use halo2_base::gates::builder::CircuitBuilderStage;
-    use halo2_proofs::dev::MockProver;
-    use halo2curves::bn256::Fr;
+    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
-        sync_step_circuit::SyncStepCircuit,
+        halo2_base::gates::circuit::CircuitBuilderStage,
+        sync_step_circuit::StepCircuit,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use snark_verifier_sdk::CircuitExt;
@@ -199,7 +185,7 @@ mod tests {
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
-        let circuit = SyncStepCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
@@ -217,7 +203,7 @@ mod tests {
         const K: u32 = 21;
         let params = gen_srs(K);
 
-        let pk = SyncStepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
             &params,
             "../build/sync_step.pkey",
             CONFIG_PATH,
@@ -227,7 +213,7 @@ mod tests {
         let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
-        SyncStepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+        StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
             &pk,
             CONFIG_PATH,

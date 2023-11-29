@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
-use halo2curves::bn256::Fr;
 use itertools::Itertools;
+use lightclient_circuits::halo2_base::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::{gadget::crypto, witness::CommitteeRotationArgs};
 use log::debug;
 use ssz_rs::Merkleized;
@@ -136,11 +136,10 @@ mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
-    use halo2_base::gates::builder::CircuitBuilderStage;
-    use halo2_proofs::dev::MockProver;
-    use halo2curves::bn256::Fr;
+    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
+        halo2_base::gates::circuit::CircuitBuilderStage,
         util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use reqwest::Url;

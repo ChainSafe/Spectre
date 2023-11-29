@@ -4,11 +4,11 @@ use beacon_api_client::Client;
 use beacon_api_client::ClientTypes;
 use ethers::abi::Address;
 use ethers::providers::{Http, Provider};
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
 use itertools::Itertools;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
-    sync_step_circuit::SyncStepCircuit,
+    halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine},
+    sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
 use preprocessor::{fetch_rotation_args, fetch_step_args};
@@ -76,12 +76,12 @@ where
         Proof::SyncStep(args) => {
             let client: Client<C> = Client::new(Url::parse(&args.beacon_api_url).unwrap());
 
-            generic_circuit_cli::<SyncStepCircuit<S, Fr>, C, _>(
+            generic_circuit_cli::<StepCircuit<S, Fr>, C, _>(
                 args,
                 client,
                 fetch_step_args,
                 "step_circuit_testnet",
-                <SyncStepCircuit<S, Fr> as AppCircuit>::Witness::default(),
+                <StepCircuit<S, Fr> as AppCircuit>::Witness::default(),
             )
             .await?;
         }

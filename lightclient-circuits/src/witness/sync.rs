@@ -1,15 +1,12 @@
-use std::iter;
-use std::marker::PhantomData;
-
-use super::HashInput;
-use eth_types::{Field, Spec};
+use eth_types::Spec;
 use ethereum_consensus_types;
+use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use ssz_rs::{Merkleized, Node};
-// use sync_committee_primitives::consensus_types::{BeaconBlockHeader, BeaconState};
-use ethereum_consensus_types::BeaconBlockHeader;
+use ssz_rs::Node;
+use std::iter;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
@@ -37,7 +34,8 @@ pub struct SyncStepArgs<S: Spec> {
 
 impl<S: Spec> Default for SyncStepArgs<S> {
     fn default() -> Self {
-        let dummy_pk_bytes = hex::decode("f5f151e52f1e8a5b09e4c6f0b25fb13463d442709f21a84f98dcb76a7953aa5225c12e4dd524a95f9be8dfdfa0621c0252adea177adcce725f8b47d0b27370572ad6c5638122cab820103c9bcbb3239939de60b4814c117631d82963a7d7900a").unwrap();
+        let dummy_pk_bytes = hex::decode("021c62a0dfdfe89b5fa924d54d2ec12552aa53796ab7dc984fa8219f7042d46334b15fb2f0c6e4095b8a1e2fe551f1f50a90d7a76329d83176114c81b460de399923b3cb9b3c1020b8ca228163c5d62a577073b2d0478b5f72cedc7a17eaad52").unwrap();
+        let signature_compressed = hex::decode("aabe63f791d9d80aa5c5ff9a384be8ba8a61a66e9bc9e82b7f1774639b125de5de476b533b1b522e75d4bd93ad2a405a03f71fe3daf9cae3685a6b8dc9adf4b89403203ab0e081c694aa8665492a70464cdae666a168a5ea55237268cb5a2c46").unwrap();
 
         let state_merkle_branch = iter::repeat(vec![0u8; 32])
             .take(S::FINALIZED_HEADER_DEPTH)
@@ -58,16 +56,15 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let beacon_block_body_root =
             compute_root(execution_state_root.clone(), &state_merkle_branch);
 
-        let mut finalized_block = BeaconBlockHeader {
+        let finalized_block = BeaconBlockHeader {
             body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
             ..Default::default()
         };
-        let finalized_header = finalized_block.hash_tree_root().unwrap().as_ref().to_vec();
 
         let finality_merkle_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
         Self {
-            signature_compressed: hex::decode("462c5acb68722355eaa568a166e6da4c46702a496586aa94c681e0b03a200394b8f4adc98d6b5a68e3caf9dae31ff7035a402aad93bdd4752e521b3b536b47dee55d129b6374177f2be8c99b6ea6618abae84b389affc5a50ad8d991f763beaa").unwrap(),
+            signature_compressed,
             pubkeys_uncompressed: iter::repeat(dummy_pk_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),

@@ -1,21 +1,16 @@
+#![allow(dead_code)]
 use crate::gadget::Expr;
 use eth_types::*;
 use halo2_base::{
-    gates::{
-        builder::{
-            CircuitBuilderStage, FlexGateConfigParams, KeygenAssignments,
-            MultiPhaseThreadBreakPoints,
-        },
-        flex_gate::FlexGateConfig,
+    gates::circuit::CircuitBuilderStage,
+    halo2_proofs::{
+        circuit::{AssignedCell, Layouter, Region, Value},
+        plonk::{Advice, Column, ConstraintSystem, Error, Expression, VirtualCells},
+        poly::Rotation,
     },
-    Context,
-};
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{
-        Advice, Assigned, Column, ConstraintSystem, Error, Expression, Selector, VirtualCells,
+    virtual_region::{
+        copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
-    poly::Rotation,
 };
 
 use std::hash::Hash;
@@ -119,36 +114,30 @@ impl CellType {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct AssignedValueCell<F: Field> {
-    pub cell: halo2_proofs::circuit::Cell,
-    pub value: F,
-}
-
-impl<F: Field> AssignedValueCell<F> {
-    pub fn cell(&self) -> halo2_proofs::circuit::Cell {
-        self.cell
-    }
-
-    pub fn value(&self) -> F {
-        self.value
-    }
-}
-
-pub trait ThreadBuilderConfigBase<F: Field>: Clone + Sized {
-    fn configure(meta: &mut ConstraintSystem<F>, params: FlexGateConfigParams) -> Self;
+pub trait GateBuilderConfig<F: Field>: Clone + Sized {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self;
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error>;
 
     fn annotate_columns_in_region(&self, region: &mut Region<F>);
 }
 
-pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
-    type Config: ThreadBuilderConfigBase<F>;
+pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
+    type CustomContext<'a>
+    where
+        Self: 'a;
 
     fn new(witness_gen_only: bool) -> Self;
 
-    fn from_stage(stage: CircuitBuilderStage) -> Self;
+    fn custom_context(&mut self) -> Self::CustomContext<'_>;
+
+    /// Returns `self` with a given copy manager
+    fn use_copy_manager(self, copy_manager: SharedCopyConstraintManager<F>) -> Self;
+
+    fn from_stage(stage: CircuitBuilderStage) -> Self {
+        Self::new(stage == CircuitBuilderStage::Prover)
+            .unknown(stage == CircuitBuilderStage::Keygen)
+    }
 
     fn mock() -> Self {
         Self::new(false)
@@ -163,43 +152,4 @@ pub trait ThreadBuilderBase<F: Field>: Clone + Sized {
     }
 
     fn unknown(self, use_unknown: bool) -> Self;
-
-    fn config(&self, k: usize, minimum_rows: Option<usize>) -> FlexGateConfigParams;
-
-    /// Returns a mutable reference to the [Context] of a gate thread. Spawns a new thread for the given phase, if none exists.
-    /// * `phase`: The challenge phase (as an index) of the gate thread.
-    fn main(&mut self) -> &mut Context<F>;
-
-    fn witness_gen_only(&self) -> bool;
-
-    /// Returns the `use_unknown` flag.
-    fn use_unknown(&self) -> bool;
-
-    /// Returns the current number of threads in the [GateThreadBuilder].
-    fn thread_count(&self) -> usize;
-
-    /// Creates a new thread id by incrementing the `thread count`
-    fn get_new_thread_id(&mut self) -> usize;
-
-    /// Assigns all advice and fixed cells, turns on selectors, imposes equality constraints.
-    /// This should only be called during keygen.
-    fn assign_all(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        q_lookup: &[Option<Selector>],
-        config: &Self::Config,
-        region: &mut Region<F>,
-        assignments: KeygenAssignments<F>,
-    ) -> Result<KeygenAssignments<F>, Error>;
-
-    /// Assigns witnesses. This should only be called during proof generation.
-    fn assign_witnesses(
-        &mut self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        config: &Self::Config,
-        region: &mut Region<F>,
-        break_points: &mut MultiPhaseThreadBreakPoints,
-    ) -> Result<(), Error>;
 }

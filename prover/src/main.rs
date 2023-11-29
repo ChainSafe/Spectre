@@ -10,7 +10,6 @@ use args::Cli;
 use axum::{response::IntoResponse, routing::post, Router};
 use beacon_api_client::{mainnet::MainnetClientTypes, minimal::MinimalClientTypes};
 use cli_batteries::version;
-
 use http::StatusCode;
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 

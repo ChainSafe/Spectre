@@ -4,7 +4,7 @@ import {
     ssz,
 } from "@lodestar/types"
 import { createProof, ProofType, SingleProof, createNodeFromProof } from "@chainsafe/persistent-merkle-tree";
-import { g1PointToLeBytes as g1PointToBytesLE, g2PointToLeBytes, serialize } from "./util";
+import { g1PointToLeBytes as g1PointToBytesLE, serialize } from "./util";
 import { hexToBytes, bytesToHex } from "@noble/curves/abstract/utils";
 import { ProjPointType } from "@noble/curves/abstract/weierstrass";
 import { computeSigningRoot } from "@lodestar/state-transition";
@@ -37,7 +37,7 @@ let pubKeyPoints: ProjPointType<bigint>[] = [];
 for (let i = 0; i < N_validators; i++) {
     let privKey = i < privKeyHexes.length ? hexToBytes(privKeyHexes[i]) : bls12_381.utils.randomPrivateKey();
     let p = bls12_381.G1.ProjectivePoint.fromPrivateKey(privKey);
-    let pubkey = g1PointToBytesLE(p, true);
+    let pubkey = p.toRawBytes(true);
 
     beaconState.validators.push({
         pubkey: pubkey,
@@ -152,7 +152,7 @@ let aggSignature = bls12_381.aggregateSignatures(signatures);
 // assert signature is valid
 console.assert(bls12_381.verify(aggSignature, msgPoint, aggregatedPubKey));
 
-const syncSigBytes = g2PointToLeBytes(aggSignature, true);
+const syncSigBytes = aggSignature.toRawBytes(true);
 const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 //----------------- State tree  -----------------//

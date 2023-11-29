@@ -1,12 +1,10 @@
 //! Utility traits, functions used in the crate.
 use eth_types::Field;
-use halo2_proofs::plonk::Expression;
+use halo2_base::halo2_proofs::plonk::Expression;
 
 /// Returns the sum of the passed in cells
 pub mod sum {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression for the sum of the list of expressions.
     pub fn expr<F: Field, E: Expr<F>, I: IntoIterator<Item = E>>(inputs: I) -> Expression<F> {
@@ -19,16 +17,14 @@ pub mod sum {
     pub fn value<F: Field>(values: &[u8]) -> F {
         values
             .iter()
-            .fold(F::zero(), |acc, value| acc + F::from(*value as u64))
+            .fold(F::ZERO, |acc, value| acc + F::from(*value as u64))
     }
 }
 
 /// Returns `1` when `expr[0] && expr[1] && ... == 1`, and returns `0`
 /// otherwise. Inputs need to be boolean
 pub mod and {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that evaluates to 1 only if all the expressions in
     /// the given list are 1, else returns 0.
@@ -40,17 +36,15 @@ pub mod and {
 
     /// Returns the product of all given values.
     pub fn value<F: Field>(inputs: Vec<F>) -> F {
-        inputs.iter().fold(F::one(), |acc, input| acc * input)
+        inputs.iter().fold(F::ONE, |acc, input| acc * input)
     }
 }
 
 /// Returns `1` when `expr[0] || expr[1] || ... == 1`, and returns `0`
 /// otherwise. Inputs need to be boolean
 pub mod or {
-    use super::Expr;
     use super::{and, not};
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that evaluates to 1 if any expression in the given
     /// list is 1. Returns 0 if all the expressions were 0.
@@ -67,9 +61,7 @@ pub mod or {
 /// Returns `1` when `b == 0`, and returns `0` otherwise.
 /// `b` needs to be boolean
 pub mod not {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that represents the NOT of the given expression.
     pub fn expr<F: Field, E: Expr<F>>(b: E) -> Expression<F> {
@@ -78,16 +70,14 @@ pub mod not {
 
     /// Returns a value that represents the NOT of the given value.
     pub fn value<F: Field>(b: F) -> F {
-        F::one() - b
+        F::ONE - b
     }
 }
 
 /// Returns `a ^ b`.
 /// `a` and `b` needs to be boolean
 pub mod xor {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns an expression that represents the XOR of the given expression.
     pub fn expr<F: Field, E: Expr<F>>(a: E, b: E) -> Expression<F> {
@@ -103,9 +93,7 @@ pub mod xor {
 /// Returns `when_true` when `selector == 1`, and returns `when_false` when
 /// `selector == 0`. `selector` needs to be boolean.
 pub mod select {
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
 
     /// Returns the `when_true` expression when the selector is true, else
     /// returns the `when_false` expression.
@@ -120,7 +108,7 @@ pub mod select {
     /// Returns the `when_true` value when the selector is true, else returns
     /// the `when_false` value.
     pub fn value<F: Field>(selector: F, when_true: F, when_false: F) -> F {
-        selector * when_true + (F::one() - selector) * when_false
+        selector * when_true + (F::ONE - selector) * when_false
     }
 
     /// Returns the `when_true` word when selector is true, else returns the
@@ -130,7 +118,7 @@ pub mod select {
         when_true: [u8; 32],
         when_false: [u8; 32],
     ) -> [u8; 32] {
-        if selector == F::one() {
+        if selector == F::ONE {
             when_true
         } else {
             when_false
@@ -189,12 +177,7 @@ impl<F: Field> Expr<F> for i32 {
     #[inline]
     fn expr(&self) -> Expression<F> {
         Expression::Constant(
-            F::from(self.unsigned_abs() as u64)
-                * if self.is_negative() {
-                    -F::one()
-                } else {
-                    F::one()
-                },
+            F::from(self.unsigned_abs() as u64) * if self.is_negative() { -F::ONE } else { F::ONE },
         )
     }
 }
@@ -203,7 +186,7 @@ impl<F: Field> Expr<F> for i32 {
 /// single expression.
 pub fn expr_from_bytes<F: Field, E: Expr<F>>(bytes: &[E]) -> Expression<F> {
     let mut value = 0.expr();
-    let mut multiplier = F::one();
+    let mut multiplier = F::ONE;
     for byte in bytes.iter() {
         value = value + byte.expr() * multiplier;
         multiplier *= F::from(256);
@@ -211,20 +194,13 @@ pub fn expr_from_bytes<F: Field, E: Expr<F>>(bytes: &[E]) -> Expression<F> {
     value
 }
 
-/// Returns 2**by as Field
-pub fn pow_of_two<F: Field>(by: usize) -> F {
-    F::from(2).pow(&[by as u64, 0, 0, 0])
-}
-
 /// Returns the random linear combination of the inputs.
 /// Encoding is done as follows: v_0 * R^0 + v_1 * R^1 + ...
 pub mod rlc {
     use std::ops::{Add, Mul};
 
-    use super::Expr;
-    use eth_types::Field;
-    use halo2_base::{safe_types::GateInstructions, AssignedValue, Context, QuantumCell};
-    use halo2_proofs::plonk::Expression;
+    use super::{Expr, Expression, Field};
+    use halo2_base::{gates::GateInstructions, AssignedValue, Context, QuantumCell};
 
     /// Returns an expression that represents the random linear combination.
     pub fn expr<F: Field, E: Expr<F>>(expressions: &[E], randomness: E) -> Expression<F> {
@@ -248,7 +224,7 @@ pub mod rlc {
         if !values.is_empty() {
             generic(values, randomness)
         } else {
-            F::zero()
+            F::ZERO
         }
     }
 

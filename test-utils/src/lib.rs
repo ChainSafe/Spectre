@@ -1,15 +1,17 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+use crate::execution_payload_header::ExecutionPayloadHeader;
+use crate::test_types::{ByteVector, TestMeta, TestStep};
 use eth_types::Minimal;
 use ethereum_consensus_types::presets::minimal::{LightClientBootstrap, LightClientUpdateCapella};
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
+use ethereum_consensus_types::BeaconBlockHeader;
 use ethereum_consensus_types::{ForkData, Root};
-
-use halo2curves::bn256::Fr;
-
 use itertools::Itertools;
 use light_client_verifier::ZiplineUpdateWitnessCapella;
 use lightclient_circuits::gadget::crypto;
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::poseidon::{
     poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
 };
@@ -19,10 +21,6 @@ use ssz_rs::Merkleized;
 use std::ops::Deref;
 use std::path::Path;
 use zipline_test_utils::{load_snappy_ssz, load_yaml};
-
-use crate::execution_payload_header::ExecutionPayloadHeader;
-use crate::test_types::{ByteVector, TestMeta, TestStep};
-use ethereum_consensus_types::BeaconBlockHeader;
 pub mod conversions;
 mod execution_payload_header;
 mod test_types;
@@ -39,17 +37,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
         .current_sync_committee
         .pubkeys
         .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
     let committee_poseidon =
         poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
@@ -135,9 +123,9 @@ pub fn read_test_files_and_gen_witness(
             .map(|pk| pk.to_bytes().to_vec())
             .collect_vec(),
         randomness: crypto::constant_randomness(),
-        _spec: Default::default(),
         finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
+        _spec: Default::default(),
     };
     (sync_wit, rotation_wit)
 }
@@ -172,22 +160,11 @@ fn to_sync_ciruit_witness<
         ..Default::default()
     };
 
-    args.signature_compressed.reverse();
     let pubkeys_uncompressed = zipline_witness
         .committee
         .pubkeys
         .iter()
-        .map(|pk| {
-            let p = pk.decompressed_bytes();
-            let mut x = p[0..48].to_vec();
-            let mut y = p[48..96].to_vec();
-            x.reverse();
-            y.reverse();
-            let mut res = vec![];
-            res.append(&mut x);
-            res.append(&mut y);
-            res
-        })
+        .map(|pk| pk.decompressed_bytes())
         .collect_vec();
     args.pubkeys_uncompressed = pubkeys_uncompressed;
     args.pariticipation_bits = zipline_witness

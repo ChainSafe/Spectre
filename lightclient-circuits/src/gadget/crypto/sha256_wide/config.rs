@@ -2,36 +2,25 @@
 //! This implementation is based on:
 //! - https://github.com/SoraSuegami/zkevm-circuits/blob/main/zkevm-circuits/src/sha256_circuit/sha256_bit.rs
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::iter;
-use std::marker::PhantomData;
-
+use super::{util::*, witness::ShaRow};
 use crate::gadget::crypto::constant_randomness;
 use crate::gadget::{and, not, rlc, select, sum, xor, Expr};
-use crate::util::ThreadBuilderConfigBase;
-use crate::witness::HashInputChunk;
-use crate::{
-    util::{AssignedValueCell, BaseConstraintBuilder, Challenges},
-    witness::{self, HashInput},
+use crate::util::BaseConstraintBuilder;
+use crate::util::GateBuilderConfig;
+use eth_types::Field;
+use halo2_base::virtual_region::copy_constraints::CopyConstraintManager;
+use halo2_base::{
+    halo2_proofs::{
+        circuit::{Layouter, Region, Value},
+        plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
+        poly::Rotation,
+    },
+    AssignedValue, Context, ContextCell, QuantumCell,
 };
-use eth_types::{Field, Spec};
-use halo2_base::gates::builder::FlexGateConfigParams;
-use halo2_base::{AssignedValue, Context, ContextCell, QuantumCell};
-use halo2_proofs::circuit;
-use halo2_proofs::{
-    circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{Advice, Any, Column, ConstraintSystem, Error, Expression, Fixed, VirtualCells},
-    poly::Rotation,
-};
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-
-use super::util::*;
 use itertools::Itertools;
 use log::debug;
-
-use super::witness::{multi_sha256, ShaRow};
+use std::iter;
+use std::marker::PhantomData;
 
 /// Configuration for [`Sha256WideChip`].
 #[derive(Clone, Debug)]
@@ -72,12 +61,8 @@ pub struct Sha256BitConfig<F: Field, CF = Column<Fixed>, CA = Column<Advice>> {
     pub offset: usize,
 }
 
-impl<F: Field> ThreadBuilderConfigBase<F> for Sha256BitConfig<F> {
-    fn configure(meta: &mut ConstraintSystem<F>, _params: FlexGateConfigParams) -> Self {
-        // consts
-        let two = F::from(2);
-        let f256 = two.pow_const(8);
-
+impl<F: Field> GateBuilderConfig<F> for Sha256BitConfig<F> {
+    fn configure(meta: &mut ConstraintSystem<F>) -> Self {
         let r: F = constant_randomness(); // TODO: use challenges API
         let q_enable = meta.fixed_column();
         let q_first = meta.fixed_column();
@@ -612,7 +597,7 @@ impl<F: Field> ThreadBuilderConfigBase<F> for Sha256BitConfig<F> {
         });
     }
 
-    fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+    fn load(&self, _layouter: &mut impl Layouter<F>) -> Result<(), Error> {
         Ok(())
     }
 }
@@ -738,13 +723,13 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             .is_paddings
             .iter_mut()
             .zip(row.is_paddings)
-            .map(|(mut ctx, val)| ctx.load_witness(F::from(val)))
+            .map(|(ctx, val)| ctx.load_witness(F::from(val)))
             .collect_vec()
             .try_into()
             .unwrap();
 
         // Intermediary data rlcs
-        for ((ctx, data_rlc)) in self.data_rlcs.iter_mut().zip(row.intermediary_data_rlcs) {
+        for (ctx, data_rlc) in self.data_rlcs.iter_mut().zip(row.intermediary_data_rlcs) {
             ctx.assign_cell(QuantumCell::Witness(data_rlc));
         }
 
@@ -758,7 +743,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
             (&mut self.input_len, F::from(row.length as u64)),
             (&mut self.hash_rlc, row.hash_rlc),
         ]
-        .map(|(mut ctx, value)| ctx.load_witness(value));
+        .map(|(ctx, value)| ctx.load_witness(value));
 
         if (4..20).contains(&round) {
             assigned_rows.padding_selectors.push(padding_selectors);
@@ -770,7 +755,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         }
 
         if round == NUM_ROUNDS + 7 {
-            assigned_rows.is_final.push(is_enabled);
+            assigned_rows.is_enabled.push(is_enabled);
             assigned_rows.input_len.push(input_len);
         }
 
@@ -801,7 +786,7 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
         region: &mut Region<F>,
         config: &Sha256BitConfig<F>,
         use_unknown: bool,
-        mut assigned_advices: Option<&mut HashMap<(usize, usize), (circuit::Cell, usize)>>,
+        mut copy_manager: Option<&mut CopyConstraintManager<F>>,
     ) -> Result<(), Error> {
         // Fixed values
         for (name, column, ctx) in [
@@ -828,8 +813,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                     .assign_fixed(|| name, *column, offset, || Value::known(val))?
                     .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
         }
@@ -852,8 +839,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                     .assign_advice(|| name, *column, offset, || value)?
                     .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
         }
@@ -905,8 +894,10 @@ impl<F: Field> Sha256BitConfig<F, Context<F>, Context<F>> {
                 }
                 .cell();
 
-                if let Some(assigned_advices) = assigned_advices.as_mut() {
-                    assigned_advices.insert((ctx.context_id, offset), (cell, offset));
+                if let Some(copy_manager) = copy_manager.as_mut() {
+                    copy_manager
+                        .assigned_advices
+                        .insert(ContextCell::new(ctx.type_id(), ctx.id(), offset), cell);
                 }
             }
 

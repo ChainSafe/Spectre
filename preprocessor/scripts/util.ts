@@ -177,37 +177,10 @@ export function sortInOrderBitstrings(gindices: GindexBitstring[], bitLength: nu
 }
 
 export function g1PointToLeBytes(p: ProjPointType<bigint>, compressed: boolean): Uint8Array {
-  let bytes = p.toRawBytes(compressed);
-  bytes.reverse();
-  var bytesLe = new Uint8Array(compressed ? 48 : 96);
-  if (compressed) {
-      bytesLe = bytes;
-  } else {
-    bytesLe.set(bytes.slice(0, 48), 48);
-    bytesLe.set(bytes.slice(48, 96), 0);
-  }
-
-  return bytesLe;
+  return p.toRawBytes(compressed);
 }
 
 export type Fp2 = { c0: bigint; c1: bigint };
-export function g2PointToLeBytes(p: ProjPointType<Fp2>, compressed: boolean): Uint8Array {
-  let bytes = p.toRawBytes(compressed);
-  bytes.reverse();
-  var bytesLe = new Uint8Array(compressed ? 96 : 192);
-  if (compressed) {
-    // bytesLe.set(bytes.slice(0, 48), 48);
-    // bytesLe.set(bytes.slice(48, 96), 0);
-    bytesLe = bytes;
-  } else {
-    bytesLe.set(bytes.slice(0, 48), 144);
-    bytesLe.set(bytes.slice(48, 96), 96);
-    bytesLe.set(bytes.slice(96, 144), 48);
-    bytesLe.set(bytes.slice(144, 192), 0);
-  }
-
-  return bytesLe;
-}
 
 
 export function formatHex(str: string): string {

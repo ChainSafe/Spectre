@@ -1,19 +1,22 @@
-use std::env::{args, set_var, var};
+use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
-use halo2_base::gates::builder::{
-    CircuitBuilderStage, FlexGateConfigParams, MultiPhaseThreadBreakPoints,
+use halo2_base::gates::circuit::{BaseCircuitParams, CircuitBuilderStage};
+use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
+use halo2_base::halo2_proofs::{
+    halo2curves::bn256::{Bn256, Fr, G1Affine},
+    plonk::ProvingKey,
+    plonk::{Circuit, Error, VerifyingKey},
+    poly::commitment::Params,
+    poly::kzg::commitment::ParamsKZG,
 };
-use halo2_proofs::plonk::{Circuit, Error, VerifyingKey};
-use halo2_proofs::poly::commitment::Params;
-use halo2_proofs::{plonk::ProvingKey, poly::kzg::commitment::ParamsKZG};
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
+use halo2_base::utils::BigPrimeField;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
-    encode_calldata, evm_verify, gen_evm_proof, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
+    encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
 };
-use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
+use snark_verifier_sdk::halo2::gen_proof_shplonk;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
 
@@ -33,7 +36,7 @@ pub trait Halo2ConfigPinning: Serialize {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Eth2ConfigPinning {
-    pub params: FlexGateConfigParams,
+    pub params: BaseCircuitParams,
     pub break_points: MultiPhaseThreadBreakPoints,
 }
 
@@ -52,7 +55,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
 
     fn set_var(&self) {
         set_var(
-            "FLEX_GATE_CONFIG_PARAMS",
+            "GATE_CONFIG_PARAMS",
             serde_json::to_string(&self.params).unwrap(),
         );
         set_var("LOOKUP_BITS", (self.params.k - 1).to_string());
@@ -63,8 +66,8 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 
     fn from_var(break_points: MultiPhaseThreadBreakPoints) -> Self {
-        let params: FlexGateConfigParams =
-            serde_json::from_str(&var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        let params: BaseCircuitParams =
+            serde_json::from_str(&var("GATE_CONFIG_PARAMS").unwrap()).unwrap();
         Self {
             params,
             break_points,
@@ -76,7 +79,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 }
 
-pub trait PinnableCircuit<F: ff::Field>: CircuitExt<F> {
+pub trait PinnableCircuit<F: BigPrimeField>: CircuitExt<F> {
     type Pinning: Halo2ConfigPinning;
 
     fn break_points(&self) -> <Self::Pinning as Halo2ConfigPinning>::BreakPoints;
@@ -100,7 +103,7 @@ pub trait AppCircuit {
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        args: &Self::Witness,
+        witness_args: &Self::Witness,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error>;
 
@@ -109,10 +112,11 @@ pub trait AppCircuit {
     fn read_pk(
         params: &ParamsKZG<Bn256>,
         path: impl AsRef<Path>,
-        args: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
         let circuit =
-            Self::create_circuit(CircuitBuilderStage::Keygen, None, args, params.k()).unwrap();
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())
+                .unwrap();
         custom_read_pk(path, &circuit)
     }
 
@@ -122,10 +126,11 @@ pub trait AppCircuit {
         params: &ParamsKZG<Bn256>,
         pk_path: impl AsRef<Path>,
         pinning_path: impl AsRef<Path>,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
         let circuit =
-            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness, params.k()).unwrap();
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())
+                .unwrap();
 
         let pk_exists = pk_path.as_ref().exists();
         let pk = gen_pk(params, &circuit, Some(pk_path.as_ref()));
@@ -146,13 +151,32 @@ pub trait AppCircuit {
         pk_path: impl AsRef<Path>,
         pinning_path: impl AsRef<Path>,
         read_only: bool,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> ProvingKey<G1Affine> {
         if read_only {
-            Self::read_pk(params, pk_path, witness)
+            Self::read_pk(params, pk_path, witness_args)
         } else {
-            Self::create_pk(params, pk_path, pinning_path, witness)
+            Self::create_pk(params, pk_path, pinning_path, witness_args)
         }
+    }
+
+    fn gen_proof_shplonk(
+        params: &ParamsKZG<Bn256>,
+        pk: &ProvingKey<G1Affine>,
+        pinning_path: impl AsRef<Path>,
+        witness_args: &Self::Witness,
+    ) -> Result<Vec<u8>, Error> {
+        let pinning = Self::Pinning::from_path(pinning_path);
+        let circuit = Self::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(pinning),
+            witness_args,
+            params.k(),
+        )?;
+        let instances = circuit.instances();
+        let proof = gen_proof_shplonk(params, pk, circuit, instances, None);
+
+        Ok(proof)
     }
 
     fn gen_snark_shplonk(
@@ -160,13 +184,13 @@ pub trait AppCircuit {
         pk: &ProvingKey<G1Affine>,
         pinning_path: impl AsRef<Path>,
         path: Option<impl AsRef<Path>>,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> Result<Snark, Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
         let circuit = Self::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            witness,
+            witness_args,
             params.k(),
         )?;
         let snark = gen_snark_shplonk(params, pk, circuit, path);
@@ -178,9 +202,10 @@ pub trait AppCircuit {
         params: &ParamsKZG<Bn256>,
         pk: &ProvingKey<G1Affine>,
         yul_path: Option<impl AsRef<Path>>,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> Result<Vec<u8>, Error> {
-        let circuit = Self::create_circuit(CircuitBuilderStage::Keygen, None, witness, params.k())?;
+        let circuit =
+            Self::create_circuit(CircuitBuilderStage::Keygen, None, witness_args, params.k())?;
         let deployment_code =
             custom_gen_evm_verifier_shplonk(params, pk.get_vk(), &circuit, yul_path);
 
@@ -192,17 +217,21 @@ pub trait AppCircuit {
         pk: &ProvingKey<G1Affine>,
         pinning_path: impl AsRef<Path>,
         deployment_code: Option<Vec<u8>>,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> Result<(Vec<u8>, Vec<Vec<Fr>>), Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
         let circuit = Self::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            witness,
+            witness_args,
             params.k(),
         )?;
         let instances = circuit.instances();
         let proof = gen_evm_proof_shplonk(params, pk, circuit, instances.clone());
+
+        if let Some(deployment_code) = deployment_code {
+            evm_verify(deployment_code, instances.clone(), proof.clone());
+        }
 
         Ok((proof, instances))
     }
@@ -213,13 +242,13 @@ pub trait AppCircuit {
         pinning_path: impl AsRef<Path>,
         path: impl AsRef<Path>,
         deployment_code: Option<Vec<u8>>,
-        witness: &Self::Witness,
+        witness_args: &Self::Witness,
     ) -> Result<String, Error> {
         let pinning = Self::Pinning::from_path(pinning_path);
         let circuit = Self::create_circuit(
             CircuitBuilderStage::Prover,
             Some(pinning),
-            witness,
+            witness_args,
             params.k(),
         )?;
         let calldata = write_calldata_generic(params, pk, circuit, path, deployment_code);
@@ -260,10 +289,10 @@ pub fn write_calldata_generic<ConcreteCircuit: CircuitExt<Fr>>(
     calldata
 }
 
-fn custom_read_pk<C, P>(fname: P, _: &C) -> ProvingKey<G1Affine>
+fn custom_read_pk<C, P>(fname: P, c: &C) -> ProvingKey<G1Affine>
 where
     C: Circuit<Fr>,
     P: AsRef<Path>,
 {
-    read_pk::<C>(fname.as_ref()).expect("proving key should exist")
+    read_pk::<C>(fname.as_ref(), c.params()).expect("proving key should exist")
 }
