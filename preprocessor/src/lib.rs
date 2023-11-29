@@ -2,7 +2,6 @@
 #![feature(generic_const_exprs)]
 
 mod sync;
-use std::ops::Deref;
 
 use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
 use eth_types::Spec;
@@ -14,6 +13,7 @@ use itertools::Itertools;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Node, Vector};
+use std::ops::Deref;
 pub use sync::*;
 mod rotation;
 use ethereum_consensus_types::bls::BlsPublicKey;
