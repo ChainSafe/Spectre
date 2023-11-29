@@ -11,6 +11,7 @@ use ethereum_consensus_types::{
     LightClientUpdateCapella, Root,
 };
 use itertools::Itertools;
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Node, Vector};
