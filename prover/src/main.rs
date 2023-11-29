@@ -8,7 +8,6 @@ pub mod rpc_client;
 
 use args::Cli;
 use axum::{response::IntoResponse, routing::post, Router};
-use beacon_api_client::{mainnet::MainnetClientTypes, minimal::MinimalClientTypes};
 use cli_batteries::version;
 use http::StatusCode;
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
@@ -24,7 +23,7 @@ pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 async fn app(options: Cli) -> eyre::Result<()> {
     match options.subcommand {
-        args::Subcommands::Rpc(op) => {
+        args::BaseCmd::Rpc(op) => {
             let RpcOptions { port } = op;
 
             let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
@@ -41,14 +40,14 @@ async fn app(options: Cli) -> eyre::Result<()> {
 
             log::info!("Stopped accepting RPC connections");
         }
-        args::Subcommands::Circuit(op) => match op.spec {
-            args::Spec::Minimal => spec_app::<eth_types::Minimal, MinimalClientTypes>(&op.proof)
+        args::BaseCmd::Circuit(op) => match op.spec {
+            args::Spec::Minimal => spec_app::<eth_types::Minimal>(op.proof, &options.args)
                 .await
                 .unwrap(),
-            args::Spec::Testnet => spec_app::<eth_types::Testnet, MainnetClientTypes>(&op.proof)
+            args::Spec::Testnet => spec_app::<eth_types::Testnet>(op.proof, &options.args)
                 .await
                 .unwrap(),
-            args::Spec::Mainnet => spec_app::<eth_types::Testnet, MainnetClientTypes>(&op.proof)
+            args::Spec::Mainnet => spec_app::<eth_types::Testnet>(op.proof, &options.args)
                 .await
                 .unwrap(),
         },
