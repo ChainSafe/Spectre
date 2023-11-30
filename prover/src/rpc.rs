@@ -1,7 +1,11 @@
 use super::args::Spec;
-use eth_types::Mainnet;
+use axum::response::IntoResponse;
+use axum::routing::post;
+use axum::Router;
 use ethers::prelude::*;
+use http::StatusCode;
 use itertools::Itertools;
+use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
@@ -14,8 +18,11 @@ use preprocessor::{
     fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
 };
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use url::Url;
+pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
     EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
@@ -85,29 +92,29 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
             let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
             let witness = fetch_rotation_args(&client).await?;
             let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_minimal.json"),
+                PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
                 PathBuf::from("./build/committee_update_minimal.pkey"),
                 witness,
             )?;
 
-            (snark, "committee_update_verifier_minimal.pkey")
+            (snark, "committee_update_verifier_minimal")
         }
         Spec::Testnet => {
             let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
             let witness = fetch_rotation_args(&client).await?;
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_testnet.json"),
+            let snark = gen_committee_update_snark::<eth_types::Testnet>(
+                PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
                 PathBuf::from("./build/committee_update_testnet.pkey"),
                 witness,
             )?;
 
-            (snark, "committee_update_verifier_testnet.pkey")
+            (snark, "committee_update_verifier_testnet")
         }
         Spec::Mainnet => {
             let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
             let witness = fetch_rotation_args(&client).await?;
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_mainnet.json"),
+            let snark = gen_committee_update_snark::<eth_types::Mainnet>(
+                PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
                 PathBuf::from("./build/committee_update_mainnet.pkey"),
                 witness,
             )?;
@@ -117,10 +124,9 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     };
 
     let (proof, instances) = {
-        let pinning_path = format!("../lightclient-circuits/config/{verifier_filename}.json");
+        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
 
-        // Circuits of all specs have the same pinning type so we can just use Mainnet spec.
-        let agg_k = CommitteeUpdateCircuit::<Mainnet, Fr>::get_degree(&pinning_path);
+        let agg_k = AggregationCircuit::get_degree(&pinning_path);
         let params_agg = gen_srs(agg_k);
         let pk_agg = AggregationCircuit::read_pk(
             &params_agg,
@@ -164,29 +170,29 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             let mut update = serde_json::from_slice(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
             let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_minimal.json"),
+                PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
                 PathBuf::from("./build/committee_update_minimal.pkey"),
                 witness,
             )?;
 
-            (snark, "committee_update_verifier_minimal.pkey")
+            (snark, "committee_update_verifier_minimal")
         }
         Spec::Testnet => {
             let mut update = serde_json::from_slice(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_testnet.json"),
+            let snark = gen_committee_update_snark::<eth_types::Testnet>(
+                PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
                 PathBuf::from("./build/committee_update_testnet.pkey"),
                 witness,
             )?;
 
-            (snark, "committee_update_verifier_testnet.pkey")
+            (snark, "committee_update_verifier_testnet")
         }
         Spec::Mainnet => {
             let mut update = serde_json::from_slice(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("../lightclient-circuits/config/committee_update_mainnet.json"),
+            let snark = gen_committee_update_snark::<eth_types::Mainnet>(
+                PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
                 PathBuf::from("./build/committee_update_mainnet.pkey"),
                 witness,
             )?;
@@ -196,10 +202,10 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     };
 
     let (proof, instances) = {
-        let pinning_path = format!("../lightclient-circuits/config/{verifier_filename}.json");
+        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
 
         // Circuits of all specs have the same pinning type so we can just use Mainnet spec.
-        let agg_k = CommitteeUpdateCircuit::<Mainnet, Fr>::get_degree(&pinning_path);
+        let agg_k = AggregationCircuit::get_degree(&pinning_path);
         let params_agg = gen_srs(agg_k);
         let pk_agg = AggregationCircuit::read_pk(
             &params_agg,
@@ -239,7 +245,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
                 PathBuf::from("./build/sync_step_minimal.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_minimal.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -250,7 +256,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
                 PathBuf::from("./build/sync_step_testnet.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_testnet.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -261,7 +267,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
                 PathBuf::from("./build/sync_step_mainnet.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_mainnet.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -299,7 +305,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
                 PathBuf::from("./build/sync_step_minimal.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_minimal.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -313,7 +319,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
                 PathBuf::from("./build/sync_step_testnet.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_testnet.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -327,7 +333,7 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
 
             gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
                 PathBuf::from("./build/sync_step_mainnet.pkey"),
-                PathBuf::from("../lightclient-circuits/config/sync_step_mainnet.json"),
+                PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
                 witness,
                 None::<PathBuf>,
             )
@@ -397,4 +403,36 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
             sync_committee_poseidon_compressed_handler,
         )
         .finish_unwrapped()
+}
+
+pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
+    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
+    let rpc_server = Arc::new(jsonrpc_server());
+    let router = Router::new()
+        .route("/rpc", post(handler))
+        .with_state(rpc_server);
+
+    log::info!("Ready for RPC connections");
+    let server = axum::Server::from_tcp(tcp_listener)
+        .unwrap()
+        .serve(router.into_make_service());
+    server.await.map_err(|e| eyre::eyre!("RPC server error: {}", e))
+}
+
+async fn handler(
+    axum::extract::State(rpc_server): axum::extract::State<JsonRpcServerState>,
+    axum::Json(rpc_call): axum::Json<JsonRpcRequestObject>,
+) -> impl IntoResponse {
+    let response_headers = [("content-type", "application/json-rpc;charset=utf-8")];
+    let response = rpc_server.handle(rpc_call).await;
+
+    let response_str = serde_json::to_string(&response);
+    match response_str {
+        Ok(result) => (StatusCode::OK, response_headers, result),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            response_headers,
+            err.to_string(),
+        ),
+    }
 }

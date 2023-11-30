@@ -45,11 +45,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
 
         let committee_root = chunks.pop().unwrap();
 
-        let state_root = mock_root(
-            committee_root,
-            &sync_committee_branch,
-            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-        );
+        let state_root = mock_root(committee_root, &sync_committee_branch, S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX);
 
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
@@ -65,7 +61,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
     }
 }
 
-pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> Vec<u8> {
+pub (crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> Vec<u8> {
     let mut last_hash = leaf;
 
     for i in 0..branch.len() {
