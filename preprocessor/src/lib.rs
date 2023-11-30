@@ -16,10 +16,9 @@ use ssz_rs::{Node, Vector};
 use std::ops::Deref;
 pub use sync::*;
 mod rotation;
+use ethereum_consensus_types::bls::BlsPublicKey;
+use ethereum_consensus_types::bls::BlsSignature;
 pub use rotation::*;
-use zipline_cryptography::bls::BlsPublicKey;
-use zipline_cryptography::bls::BlsSignature;
-
 pub async fn light_client_update_to_args<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },

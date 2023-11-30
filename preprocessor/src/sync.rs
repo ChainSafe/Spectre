@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use beacon_api_client::Client;
 use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
+use ethereum_consensus_types::bls::BlsPublicKey;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
@@ -10,7 +11,6 @@ use lightclient_circuits::witness::SyncStepArgs;
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
 use tokio::fs;
-use zipline_cryptography::bls::BlsPublicKey;
 
 use crate::{get_light_client_bootstrap, get_light_client_finality_update};
 

@@ -1,12 +1,12 @@
 use eth_types::Spec;
-use ethereum_consensus_types;
 use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use ssz_rs::Node;
 use std::iter;
 use std::marker::PhantomData;
+
+use super::mock_root;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
@@ -41,20 +41,13 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             .take(S::FINALIZED_HEADER_DEPTH)
             .collect_vec();
 
-        let compute_root = |leaf: Vec<u8>, branch: &[Vec<u8>]| -> Vec<u8> {
-            let mut last_hash = Sha256::digest([leaf, branch[0].clone()].concat()).to_vec();
-
-            for i in 1..branch.len() {
-                last_hash = Sha256::digest([last_hash, branch[i].clone()].concat()).to_vec();
-            }
-
-            last_hash
-        };
-
         let execution_state_root = vec![0; 32];
         let execution_merkle_branch = vec![vec![0; 32]; S::EXECUTION_STATE_ROOT_DEPTH];
-        let beacon_block_body_root =
-            compute_root(execution_state_root.clone(), &state_merkle_branch);
+        let beacon_block_body_root = mock_root(
+            execution_state_root.clone(),
+            &state_merkle_branch,
+            S::EXECUTION_STATE_ROOT_INDEX,
+        );
 
         let finalized_block = BeaconBlockHeader {
             body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),

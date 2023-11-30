@@ -22,16 +22,7 @@ fn test_eth2_spec_mock_1(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    run_test_eth2_spec_mock::<16, 20>(path)
-}
-
-#[rstest]
-fn test_eth2_spec_mock_3(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-    #[exclude("deneb*")]
-    path: PathBuf,
-) {
-    run_test_eth2_spec_mock::<17, 20>(path)
+    run_test_eth2_spec_mock::<18, 20>(path)
 }
 
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
