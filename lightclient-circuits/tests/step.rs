@@ -25,7 +25,6 @@ fn test_eth2_spec_mock_1(
     run_test_eth2_spec_mock::<18, 20>(path)
 }
 
-
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
     let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(&path);
 

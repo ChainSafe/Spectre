@@ -136,7 +136,7 @@ mod test {
             spec: args::Spec::Testnet,
             beacon_api: String::from("http://65.109.55.120:9596"),
         };
-        
+
         let r = client.gen_evm_proof_step_circuit(p).await;
 
         match r {

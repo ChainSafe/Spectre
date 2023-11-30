@@ -416,7 +416,9 @@ pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
     let server = axum::Server::from_tcp(tcp_listener)
         .unwrap()
         .serve(router.into_make_service());
-    server.await.map_err(|e| eyre::eyre!("RPC server error: {}", e))
+    server
+        .await
+        .map_err(|e| eyre::eyre!("RPC server error: {}", e))
 }
 
 async fn handler(
