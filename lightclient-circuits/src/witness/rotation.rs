@@ -13,6 +13,7 @@ pub struct CommitteeRotationArgs<S: Spec> {
 
     pub sync_committee_branch: Vec<Vec<u8>>,
 
+    #[serde(skip)]
     pub _spec: PhantomData<S>,
 }
 

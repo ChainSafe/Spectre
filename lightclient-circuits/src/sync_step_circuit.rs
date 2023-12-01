@@ -67,7 +67,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let h2c_chip = HashToCurveChip::new(&sha256_chip, &fp2_chip);
 
         let execution_payload_root: HashInputChunk<QuantumCell<F>> =
-            args.execution_payload_root.clone().into_witness();
+            args.execution_state_root.clone().into_witness();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -167,7 +167,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         verify_merkle_proof(
             builder,
             &sha256_chip,
-            args.execution_payload_branch
+            args.execution_branch
                 .iter()
                 .map(|w| w.clone().into_witness()),
             execution_payload_root.clone(),
@@ -241,7 +241,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         input[24..56].copy_from_slice(&finalized_header_root);
 
-        let execution_payload_root = &args.execution_payload_root;
+        let execution_payload_root = &args.execution_state_root;
         input[56..88].copy_from_slice(execution_payload_root);
 
         let pubkey_affines = args
