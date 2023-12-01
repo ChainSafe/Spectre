@@ -110,3 +110,32 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{sync_step_circuit::StepCircuit, util::AppCircuit};
+    use eth_types::Testnet;
+    use halo2_base::{
+        gates::circuit::CircuitBuilderStage, halo2_proofs::dev::MockProver,
+        halo2_proofs::halo2curves::bn256::Fr,
+    };
+    use snark_verifier_sdk::CircuitExt;
+
+    #[test]
+    fn test_step_default_witness() {
+        const K: u32 = 20;
+        let witness = SyncStepArgs::<Testnet>::default();
+
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+            K,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied_par();
+    }
+}

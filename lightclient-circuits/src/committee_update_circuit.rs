@@ -306,16 +306,13 @@ mod tests {
     #[test]
     fn test_committee_update_circuit() {
         const K: u32 = 18;
-        let params = gen_srs(K);
-
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/committee_update_18.json");
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
-            params.k(),
+            K,
         )
         .unwrap();
 

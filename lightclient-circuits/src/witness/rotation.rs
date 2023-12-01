@@ -84,3 +84,32 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
 
     last_hash
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
+    use eth_types::Testnet;
+    use halo2_base::{
+        gates::circuit::CircuitBuilderStage, halo2_proofs::dev::MockProver,
+        halo2_proofs::halo2curves::bn256::Fr,
+    };
+    use snark_verifier_sdk::CircuitExt;
+
+    #[test]
+    fn test_committee_update_default_witness() {
+        const K: u32 = 18;
+        let witness = CommitteeRotationArgs::<Testnet>::default();
+
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+            K,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied_par();
+    }
+}
