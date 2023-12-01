@@ -52,11 +52,12 @@ where
             k,
             pk_path,
         } => {
-            let params = gen_srs(k);
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
 
             match operation {
                 OperationCmd::Setup => {
+                    let params = gen_srs(k);
+
                     StepCircuit::<S, Fr>::create_pk(
                         &params,
                         &pk_path,
@@ -66,8 +67,9 @@ where
 
                     Ok(())
                 }
-                OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out)
+                OperationCmd::GenVerifier{ solidity_out, estimate_gas } => {
+                    let params = gen_srs(StepCircuit::<S, Fr>::get_degree(&cfg_path));
+                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, &cfg_path, solidity_out, estimate_gas)
                 }
             }
         }
@@ -78,10 +80,11 @@ where
             verifier_pk_path,
             pk_path,
         } => {
-            let params = gen_srs(k);
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
             match operation {
                 OperationCmd::Setup => {
+                    let params = gen_srs(k);
+
                     let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
                         &params,
                         &pk_path,
@@ -111,8 +114,9 @@ where
 
                     Ok(())
                 }
-                OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out)
+                OperationCmd::GenVerifier{ solidity_out, estimate_gas } => {
+                    let params = gen_srs(AggregationCircuit::get_degree(&cfg_path));
+                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, &cfg_path, solidity_out, estimate_gas)
                 }
             }
         }
@@ -131,18 +135,20 @@ fn get_config_path(pk_path: &Path, config_dir: &Path) -> PathBuf {
 fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
     pk_path: &Path,
+    cfg_path: &Path,
     mut path_out: PathBuf,
+    estimate_gas: bool,
 ) -> eyre::Result<()>
 where
     Circuit::Witness: Default,
 {
     let pk = Circuit::read_pk(params, pk_path, &Default::default());
-
+    
+    path_out.set_extension("yul");
     let deplyment_code =
         Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &Default::default())
             .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
     println!("yul size: {}", deplyment_code.len());
-    path_out.set_extension("yul");
 
     let sol_contract = halo2_solidity_verifier::fix_verifier_sol(path_out.clone(), 1)
         .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
@@ -150,6 +156,17 @@ where
     let mut f = File::create(path_out).unwrap();
     f.write(sol_contract.as_bytes())
         .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
+
+    if estimate_gas {
+        let _ = Circuit::gen_evm_proof_shplonk(
+            params,
+            &pk,
+            cfg_path,
+            Some(deplyment_code),
+            &Circuit::Witness::default(),
+        )
+        .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+    }
 
     Ok(())
 }
