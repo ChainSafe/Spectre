@@ -49,6 +49,7 @@ reqwest = "0.11.22"
 beacon-api-client.workspace = true
 ethereum-consensus-types.workspace = true
 futures = "0.3.29"
+ssz_rs.workspace = true
 
 [build-dependencies]
 cli-batteries = "=0.4"

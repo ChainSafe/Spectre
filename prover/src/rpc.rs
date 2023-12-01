@@ -167,7 +167,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
 
     let (snark, verifier_filename) = match spec {
         Spec::Minimal => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
             let snark = gen_committee_update_snark::<eth_types::Minimal>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
@@ -178,7 +178,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             (snark, "committee_update_verifier_minimal")
         }
         Spec::Testnet => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
             let snark = gen_committee_update_snark::<eth_types::Testnet>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
@@ -189,7 +189,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             (snark, "committee_update_verifier_testnet")
         }
         Spec::Mainnet => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update).unwrap();
             let witness = rotation_args_from_update(&mut update).await.unwrap();
             let snark = gen_committee_update_snark::<eth_types::Mainnet>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
@@ -297,8 +297,8 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
 
     let (proof, instances) = match spec {
         Spec::Minimal => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update).unwrap();
+            let pubkeys = ssz_rs::deserialize(&pubkeys).unwrap();
             let witness = step_args_from_finality_update(update, pubkeys, domain)
                 .await
                 .unwrap();
@@ -311,8 +311,8 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
             )
         }
         Spec::Testnet => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update).unwrap();
+            let pubkeys = ssz_rs::deserialize(&pubkeys).unwrap();
             let witness = step_args_from_finality_update(update, pubkeys, domain)
                 .await
                 .unwrap();
@@ -325,8 +325,8 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
             )
         }
         Spec::Mainnet => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update).unwrap();
+            let pubkeys = ssz_rs::deserialize(&pubkeys).unwrap();
             let witness = step_args_from_finality_update(update, pubkeys, domain)
                 .await
                 .unwrap();
