@@ -35,7 +35,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             .try_into()
             .unwrap();
 
-        let execution_payload_root: [u8; 32] = args.execution_state_root.try_into().unwrap();
+        let execution_payload_root: [u8; 32] = args.execution_payload_root.try_into().unwrap();
 
         SyncStepInput {
             attested_slot: args.attested_header.slot,

@@ -24,7 +24,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
         let sync_committee_branch = vec![vec![0; 32]; S::SYNC_COMMITTEE_PUBKEYS_DEPTH];
 
         let hashed_pk = sha2::Sha256::digest(
-            dummy_x_bytes
+            &dummy_x_bytes
                 .iter()
                 .copied()
                 .pad_using(64, |_| 0)
@@ -40,7 +40,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
             chunks = chunks
                 .into_iter()
                 .tuples()
-                .map(|(left, right)| sha2::Sha256::digest([left, right].concat()).to_vec())
+                .map(|(left, right)| sha2::Sha256::digest(&[left, right].concat()).to_vec())
                 .collect();
         }
 
@@ -71,7 +71,7 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
 
     for i in 0..branch.len() {
         last_hash = Sha256::digest(
-            if gindex % 2 == 0 {
+            &if gindex % 2 == 0 {
                 [last_hash, branch[i].clone()]
             } else {
                 [branch[i].clone(), last_hash]

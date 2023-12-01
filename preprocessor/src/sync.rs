@@ -134,14 +134,14 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .iter()
             .map(|n| n.0.to_vec())
             .collect_vec(),
-        execution_state_root: finality_update
+        execution_payload_root: finality_update
             .finalized_header
             .execution
             .clone()
             .hash_tree_root()
             .unwrap()
             .to_vec(),
-        execution_branch: finality_update
+        execution_payload_branch: finality_update
             .finalized_header
             .execution_branch
             .iter()
