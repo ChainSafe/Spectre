@@ -12,6 +12,9 @@ use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use std::path::PathBuf;
 use std::{fs::File, future::Future, io::Write, path::Path};
 
+#[cfg(feature = "experimental")]
+use halo2_solidity_verifier_new::{SolidityGenerator, BatchOpenScheme, compile_solidity, Evm, encode_calldata};
+
 ethers::contract::abigen!(
     SnarkVerifierSol,
     r#"[
@@ -132,6 +135,57 @@ fn get_config_path(pk_path: &Path, config_dir: &Path) -> PathBuf {
     config_dir.join(format!("{}.json", circuit_configuration))
 }
 
+#[cfg(feature = "experimental")]
+fn gen_evm_verifier<Circuit: AppCircuit>(
+    params: &ParamsKZG<Bn256>,
+    pk_path: &Path,
+    cfg_path: &Path,
+    mut path_out: PathBuf,
+    estimate_gas: bool,
+) -> eyre::Result<()>
+where
+    Circuit::Witness: Default,
+{
+    let pk = Circuit::read_pk(params, pk_path, &Default::default());
+
+    let generator = SolidityGenerator::new(params, pk.get_vk(), BatchOpenScheme::Bdfg21, 1);
+
+    let verifier_sol = generator
+        .render()
+        .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
+
+    path_out.set_extension("sol");
+    let mut f = File::create(path_out).unwrap();
+    f.write(verifier_sol.as_bytes())
+        .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
+
+    if estimate_gas {
+        let mut evm = Evm::default();
+        let verifier_creation_code = compile_solidity(&verifier_sol);
+        println!(
+            "Verifier creation code size: {}",
+            verifier_creation_code.len()
+        );
+        let verifier_address = evm.create(verifier_creation_code);
+
+        let (proof, instances) = Circuit::gen_evm_proof_shplonk(
+            params,
+            &pk,
+            cfg_path,
+            None,
+            &Circuit::Witness::default(),
+        )
+        .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+        let calldata = encode_calldata(None, &proof, &instances[0]);
+        let (gas_cost, output) = evm.call(verifier_address, calldata);
+        assert_eq!(output, [vec![0; 31], vec![1]].concat());
+        println!("Gas cost of verifying proof: {gas_cost}");
+    }
+
+    Ok(())
+}
+
+#[cfg(not(feature = "experimental"))]
 fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
     pk_path: &Path,

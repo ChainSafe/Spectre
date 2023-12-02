@@ -65,7 +65,6 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
     "loader_evm",
     "halo2-pse",
 ] }
-halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
 
 # ethereum types
 ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
