@@ -245,7 +245,7 @@ mod tests {
     use std::fs;
 
     use crate::{
-        aggregation::AggregationConfigPinning, util::Halo2ConfigPinning,
+        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
         witness::CommitteeRotationArgs,
     };
 

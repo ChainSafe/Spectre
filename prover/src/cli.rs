@@ -1,6 +1,7 @@
 use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
 
+use ark_std::{end_timer, start_timer};
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     halo2_proofs::halo2curves::bn256::{Bn256, Fr},
@@ -13,7 +14,9 @@ use std::path::PathBuf;
 use std::{fs::File, future::Future, io::Write, path::Path};
 
 #[cfg(feature = "experimental")]
-use halo2_solidity_verifier_new::{SolidityGenerator, BatchOpenScheme, compile_solidity, Evm, encode_calldata};
+use halo2_solidity_verifier_new::{
+    compile_solidity, encode_calldata, BatchOpenScheme, Evm, SolidityGenerator,
+};
 
 ethers::contract::abigen!(
     SnarkVerifierSol,
@@ -70,9 +73,19 @@ where
 
                     Ok(())
                 }
-                OperationCmd::GenVerifier{ solidity_out, estimate_gas } => {
+                OperationCmd::GenVerifier {
+                    solidity_out,
+                    estimate_gas,
+                } => {
                     let params = gen_srs(StepCircuit::<S, Fr>::get_degree(&cfg_path));
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, &cfg_path, solidity_out, estimate_gas)
+                    gen_evm_verifier::<StepCircuit<S, Fr>>(
+                        &params,
+                        &pk_path,
+                        &cfg_path,
+                        solidity_out,
+                        estimate_gas,
+                        Default::default(),
+                    )
                 }
             }
         }
@@ -84,25 +97,32 @@ where
             pk_path,
         } => {
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
+
+            let gen_dummy_snark = |k: u32| {
+                let params = gen_srs(k);
+
+                let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
+                    &params,
+                    &pk_path,
+                    &cfg_path,
+                    &Default::default(),
+                );
+
+                CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+                    &params,
+                    &pk,
+                    &cfg_path,
+                    None::<String>,
+                    &Default::default(),
+                )
+                .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))
+            };
+
             match operation {
                 OperationCmd::Setup => {
-                    let params = gen_srs(k);
-
-                    let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
-                        &params,
-                        &pk_path,
-                        &cfg_path,
-                        &Default::default(),
-                    );
-
-                    let dummy_snark = CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
-                        &params,
-                        &pk,
-                        &cfg_path,
-                        None::<String>,
-                        &Default::default(),
-                    )
-                    .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+                    let timer = start_timer!(|| "gen committee update verifier witness");
+                    let dummy_snark = gen_dummy_snark(k)?;
+                    end_timer!(timer);
 
                     let verifier_params = gen_srs(verifier_k);
                     let verifier_cfg_path =
@@ -117,9 +137,28 @@ where
 
                     Ok(())
                 }
-                OperationCmd::GenVerifier{ solidity_out, estimate_gas } => {
-                    let params = gen_srs(AggregationCircuit::get_degree(&cfg_path));
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, &cfg_path, solidity_out, estimate_gas)
+                OperationCmd::GenVerifier {
+                    solidity_out,
+                    estimate_gas,
+                } => {
+                    let timer = start_timer!(|| "gen committee update verifier witness");
+                    let dummy_snark =
+                        gen_dummy_snark(CommitteeUpdateCircuit::<S, Fr>::get_degree(&cfg_path))?;
+                    end_timer!(timer);
+
+                    let verifier_cfg_path =
+                        get_config_path(&verifier_pk_path, &base_args.config_dir);
+                    let verifier_params =
+                        gen_srs(AggregationCircuit::get_degree(&verifier_cfg_path));
+
+                    gen_evm_verifier::<AggregationCircuit>(
+                        &verifier_params,
+                        &verifier_pk_path,
+                        &verifier_cfg_path,
+                        solidity_out,
+                        estimate_gas,
+                        vec![dummy_snark],
+                    )
                 }
             }
         }
@@ -142,11 +181,9 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     cfg_path: &Path,
     mut path_out: PathBuf,
     estimate_gas: bool,
-) -> eyre::Result<()>
-where
-    Circuit::Witness: Default,
-{
-    let pk = Circuit::read_pk(params, pk_path, &Default::default());
+    default_witness: Circuit::Witness,
+) -> eyre::Result<()> {
+    let pk = Circuit::read_pk(params, pk_path, &default_witness);
 
     let generator = SolidityGenerator::new(params, pk.get_vk(), BatchOpenScheme::Bdfg21, 1);
 
@@ -168,14 +205,9 @@ where
         );
         let verifier_address = evm.create(verifier_creation_code);
 
-        let (proof, instances) = Circuit::gen_evm_proof_shplonk(
-            params,
-            &pk,
-            cfg_path,
-            None,
-            &Circuit::Witness::default(),
-        )
-        .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+        let (proof, instances) =
+            Circuit::gen_evm_proof_shplonk(params, &pk, cfg_path, None, &default_witness)
+                .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
         let calldata = encode_calldata(None, &proof, &instances[0]);
         let (gas_cost, output) = evm.call(verifier_address, calldata);
         assert_eq!(output, [vec![0; 31], vec![1]].concat());
@@ -192,15 +224,13 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     cfg_path: &Path,
     mut path_out: PathBuf,
     estimate_gas: bool,
-) -> eyre::Result<()>
-where
-    Circuit::Witness: Default,
-{
-    let pk = Circuit::read_pk(params, pk_path, &Default::default());
-    
+    default_witness: Circuit::Witness,
+) -> eyre::Result<()> {
+    let pk = Circuit::read_pk(params, pk_path, &default_witness);
+
     path_out.set_extension("yul");
     let deplyment_code =
-        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &Default::default())
+        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &default_witness)
             .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
     println!("yul size: {}", deplyment_code.len());
 
@@ -217,7 +247,7 @@ where
             &pk,
             cfg_path,
             Some(deplyment_code),
-            &Circuit::Witness::default(),
+            &default_witness,
         )
         .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
     }
