@@ -1,7 +1,7 @@
 //! Witnesses for all circuits.
 
-mod sync;
-pub use sync::*;
+mod step;
+pub use step::*;
 
 mod rotation;
 pub use rotation::*;

@@ -13,18 +13,19 @@ check:
 lint: fmt
     cargo clippy --all-targets --all-features --workspace
 
-setup-step network:
-    cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey -k 22 setup
+setup-step network *k='22':
+    cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey -k $2 setup
 
-setup-committee-update network:
-    cargo run -r -- circuit committee-update  -p ./build/committee_update_$1.pkey -k 18 \
-         --verifier-k 25 --verifier-pk-path ./build/committee_update_verifier_$1.pkey setup
+setup-committee-update network *k='25':
+    cargo run -r -- circuit committee-update -p ./build/committee_update_$1.pkey -k 18 \
+         --verifier-k $2 --verifier-pk-path ./build/committee_update_verifier_$1.pkey setup
 
-gen-step-evm-verifier network:
-   cargo run -r -- circuit sync-step --pk-path ./build/sync_step_$1.pkey gen-verifier --solidity-out ./contracts/snark-verifiers/sync_step.yul 
+gen-verifier-step network:
+    cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step.sol
 
-gen-rotation-evm-verifier network:
-    cargo run -r -- circuit committee-update --pk-path ./build/committee_update_$1.pkey --verifier-pk-path ./build/committee_update_verifier_$1.pkey  gen-verifier  --solidity-out ./contracts/snark-verifiers/committee_update_aggregated.yul 
+gen-verifier-committee-update network:
+    cargo run -r -- circuit committee-update -p ./build/committee_update_$1.pkey --verifier-pk-path ./build/committee_update_verifier_$1.pkey \
+        gen-verifier -o ./contracts/snark-verifiers/committee_update_verifier.sol
 
 build-contracts:
     cd contracts && forge build
@@ -42,7 +43,7 @@ download-spec-tests: clean-spec-tests
     #!/usr/bin/env bash
     if [[ ! -d 'consensus-spec-tests' ]]; then
         echo "Downloading test data."
-        scripts/download_consensus_specs.sh
+        test-utils/scripts/download_consensus_specs.sh
     fi
 
 # deletes all the downloaded spec tests

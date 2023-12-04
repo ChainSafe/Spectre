@@ -13,6 +13,7 @@ pub struct CommitteeRotationArgs<S: Spec> {
 
     pub sync_committee_branch: Vec<Vec<u8>>,
 
+    #[serde(skip)]
     pub _spec: PhantomData<S>,
 }
 
@@ -23,7 +24,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
         let sync_committee_branch = vec![vec![0; 32]; S::SYNC_COMMITTEE_PUBKEYS_DEPTH];
 
         let hashed_pk = sha2::Sha256::digest(
-            dummy_x_bytes
+            &dummy_x_bytes
                 .iter()
                 .copied()
                 .pad_using(64, |_| 0)
@@ -39,7 +40,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
             chunks = chunks
                 .into_iter()
                 .tuples()
-                .map(|(left, right)| sha2::Sha256::digest([left, right].concat()).to_vec())
+                .map(|(left, right)| sha2::Sha256::digest(&[left, right].concat()).to_vec())
                 .collect();
         }
 
@@ -70,7 +71,7 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
 
     for i in 0..branch.len() {
         last_hash = Sha256::digest(
-            if gindex % 2 == 0 {
+            &if gindex % 2 == 0 {
                 [last_hash, branch[i].clone()]
             } else {
                 [branch[i].clone(), last_hash]
@@ -82,4 +83,33 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
     }
 
     last_hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
+    use eth_types::Testnet;
+    use halo2_base::{
+        gates::circuit::CircuitBuilderStage, halo2_proofs::dev::MockProver,
+        halo2_proofs::halo2curves::bn256::Fr,
+    };
+    use snark_verifier_sdk::CircuitExt;
+
+    #[test]
+    fn test_committee_update_default_witness() {
+        const K: u32 = 18;
+        let witness = CommitteeRotationArgs::<Testnet>::default();
+
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+            K,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied_par();
+    }
 }

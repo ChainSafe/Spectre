@@ -65,7 +65,6 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
     "loader_evm",
     "halo2-pse",
 ] }
-halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR" }
 
 # ethereum types
 ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
@@ -77,7 +76,7 @@ group = "0.13"
 num-bigint = { version = "0.4", features = ["rand"] }
 pasta_curves = "0.5.1"
 ff = "0.13"
-sha2 = { version = "0.10.6", features = ["compress"] }
+sha2 = { version = "0.9", features = ["compress"] }
 uint = "0.9.1"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
 
@@ -89,7 +88,7 @@ log = "0.4.14"
 hex = "0.4"
 
 [patch.crates-io]
-halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "f3bb3f5a7d3a8ca806368f185c112283a73a94cb" }
+halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "1bd39b8" }
 ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 
 
@@ -115,7 +114,8 @@ zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/
 
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
-snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
+snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
+snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
 # snark-verifier = { path = "../snark-verifier/snark-verifier" }
 # snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
+

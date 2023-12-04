@@ -28,18 +28,13 @@ fn test_eth2_spec_mock_1(
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
     let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(&path);
 
-    let rotation_circuit = {
-        let pinning: Eth2ConfigPinning =
-            Eth2ConfigPinning::from_path(format!("./config/committee_update_{K_ROTATION}.json"));
-
-        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            Some(pinning),
-            &rotation_witness,
-            K_ROTATION,
-        )
-        .unwrap()
-    };
+    let rotation_circuit = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
+        CircuitBuilderStage::Mock,
+        None,
+        &rotation_witness,
+        K_ROTATION,
+    )
+    .unwrap();
 
     let timer = start_timer!(|| "committee_update mock prover run");
     let prover = MockProver::<bn256::Fr>::run(
@@ -51,18 +46,13 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     prover.assert_satisfied_par();
     end_timer!(timer);
 
-    let sync_circuit = {
-        let pinning: Eth2ConfigPinning =
-            Eth2ConfigPinning::from_path(format!("./config/sync_step_{K_SYNC}.json"));
-
-        StepCircuit::<Minimal, bn256::Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            Some(pinning),
-            &sync_witness,
-            K_SYNC,
-        )
-        .unwrap()
-    };
+    let sync_circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
+        CircuitBuilderStage::Mock,
+        None,
+        &sync_witness,
+        K_SYNC,
+    )
+    .unwrap();
 
     let sync_pi_commit =
         StepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
