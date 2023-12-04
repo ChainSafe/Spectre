@@ -23,16 +23,20 @@ http = "0.2"
 
 # halo2
 halo2curves.workspace = true
+
 # verifier SDK 
 snark-verifier.workspace = true
 snark-verifier-sdk.workspace = true
-halo2_solidity_verifier.workspace = true
+halo2_solidity_verifier = { git = "https://github.com/privacy-scaling-explorations/halo2-solidity-verifier", branch = "ac/initial-verifier-PR", optional = true }
+halo2_solidity_verifier_new = {  git = "https://github.com/timoftime/halo2-solidity-verifier", branch = "bump-halo2proofs", package = "halo2_solidity_verifier", features = ["evm"], optional = true }
+
 # local
-lightclient-circuits.workspace = true
+lightclient-circuits.workspace = true 
 preprocessor.workspace = true
 eth-types.workspace = true
 
 # misc
+ark-std.workspace = true
 itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -52,3 +56,7 @@ futures = "0.3.29"
 
 [build-dependencies]
 cli-batteries = "=0.4"
+
+[features]
+default = ["halo2_solidity_verifier"]
+experimental = ["halo2_solidity_verifier_new"]

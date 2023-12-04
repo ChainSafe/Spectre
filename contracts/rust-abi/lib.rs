@@ -14,7 +14,7 @@ abigen!(
     StepVerifier,
     "./out/sync_step.sol/Verifier.json";
     CommitteeUpdateVerifier,
-    "./out/committee_update_aggregated.sol/Verifier.json";
+    "./out/committee_update_verifier.sol/Verifier.json";
     StepMockVerifier,
     "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json";
     CommitteeUpdateMockVerifier,

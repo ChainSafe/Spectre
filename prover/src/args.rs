@@ -74,13 +74,13 @@ pub enum ProofCmd {
 #[derive(Clone, clap::Subcommand)]
 pub enum OperationCmd {
     Setup,
-    GenVerifier(VerifierGenArgs),
-}
+    GenVerifier {
+        #[clap(long, short = 'o')]
+        solidity_out: PathBuf,
 
-#[derive(Clone, clap::Args)]
-pub struct VerifierGenArgs {
-    #[clap(long, short)]
-    pub solidity_out: PathBuf,
+        #[clap(long, short)]
+        estimate_gas: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, EnumString, Serialize, Deserialize)]

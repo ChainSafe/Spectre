@@ -217,10 +217,10 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
+        builder.set_instances(0, assigned_instances);
 
         match stage {
             CircuitBuilderStage::Prover => {
-                builder.set_instances(0, assigned_instances);
                 if let Some(pinning) = pinning {
                     builder.set_params(pinning.params);
                     builder.set_break_points(pinning.break_points);
@@ -245,7 +245,7 @@ mod tests {
     use std::fs;
 
     use crate::{
-        aggregation::AggregationConfigPinning, util::Halo2ConfigPinning,
+        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
         witness::CommitteeRotationArgs,
     };
 
@@ -306,16 +306,13 @@ mod tests {
     #[test]
     fn test_committee_update_circuit() {
         const K: u32 = 18;
-        let params = gen_srs(K);
-
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/committee_update_18.json");
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
-            params.k(),
+            K,
         )
         .unwrap();
 

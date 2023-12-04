@@ -32,7 +32,7 @@ use halo2_ecc::{
 };
 use halo2curves::{
     bls12_381::{G1Affine, G2Affine},
-    group::{GroupEncoding, UncompressedEncoding},
+    group::UncompressedEncoding,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -259,7 +259,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
         input[88..].copy_from_slice(&poseidon_commitment_le);
 
-        let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
+        let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // Truncate to 253 bits
         public_input_commitment[31] &= 0b00011111;
         bn256::Fr::from_bytes_le(&public_input_commitment)
@@ -311,8 +311,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         g2_chip: &G2Chip<F>,
         bytes_compressed: &[u8],
     ) -> EcPoint<F, Fp2Point<F>> {
-        let sig_affine =
-            G2Affine::from_bytes(&bytes_compressed.try_into().unwrap()).expect("correct signature");
+        let sig_affine = G2Affine::from_compressed_be(&bytes_compressed.try_into().unwrap())
+            .expect("correct signature");
 
         g2_chip.load_private_unchecked(ctx, sig_affine.into_coordinates())
     }
@@ -390,10 +390,10 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
+        builder.set_instances(0, assigned_instances);
 
         match stage {
             CircuitBuilderStage::Prover => {
-                builder.set_instances(0, assigned_instances);
                 if let Some(pinning) = pinning {
                     builder.set_params(pinning.params);
                     builder.set_break_points(pinning.break_points);
@@ -436,14 +436,12 @@ mod tests {
 
     #[test]
     fn test_sync_circuit() {
-        const K: u32 = 21;
+        const K: u32 = 20;
         let witness = load_circuit_args();
-
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step_21.json");
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
             K,
         )
