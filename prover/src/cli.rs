@@ -67,7 +67,7 @@ where
                     Ok(())
                 }
                 OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out)
+                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out, None)
                 }
             }
         }
@@ -78,10 +78,11 @@ where
             verifier_pk_path,
             pk_path,
         } => {
-            let params = gen_srs(k);
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
             match operation {
                 OperationCmd::Setup => {
+                    let params: ParamsKZG<Bn256> = gen_srs(k);
+
                     let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
                         &params,
                         &pk_path,
@@ -98,9 +99,9 @@ where
                     )
                     .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
 
-                    let verifier_params = gen_srs(verifier_k);
                     let verifier_cfg_path =
                         get_config_path(&verifier_pk_path, &base_args.config_dir);
+                    let verifier_params = gen_srs(verifier_k);
 
                     AggregationCircuit::create_pk(
                         &verifier_params,
@@ -112,7 +113,8 @@ where
                     Ok(())
                 }
                 OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<AggregationCircuit>(&params, &pk_path, args.solidity_out)
+                    let verifier_params = gen_srs(verifier_k);
+                    gen_evm_verifier::<AggregationCircuit>(&verifier_params, &verifier_pk_path, args.solidity_out, None)
                 }
             }
         }
@@ -132,14 +134,15 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
     pk_path: &Path,
     mut path_out: PathBuf,
+    witness_args: Option<&Circuit::Witness>,
 ) -> eyre::Result<()>
 where
     Circuit::Witness: Default,
 {
-    let pk = Circuit::read_pk(params, pk_path, &Default::default());
+    let pk = Circuit::read_pk(params, pk_path, witness_args.unwrap_or_default());
 
     let deplyment_code =
-        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &Default::default())
+        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), witness_args.unwrap_or_default())
             .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
     println!("yul size: {}", deplyment_code.len());
     path_out.set_extension("yul");
