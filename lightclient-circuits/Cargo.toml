@@ -45,6 +45,7 @@ strum_macros = "0.25"
 rand = "0.8"
 lazy_static = "1.4"
 getset = "0.1.2"
+memmap2.workspace = true
 
 [dev-dependencies]
 rstest = "0.18.2"

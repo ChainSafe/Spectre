@@ -2,9 +2,11 @@ use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
+use ark_std::{start_timer, end_timer};
 use eth_types::Field;
 use halo2_base::gates::circuit::{BaseCircuitParams, CircuitBuilderStage};
 use halo2_base::gates::flex_gate::MultiPhaseThreadBreakPoints;
+use halo2_base::halo2_proofs::SerdeFormat;
 use halo2_base::halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr, G1Affine},
     plonk::ProvingKey,
@@ -294,5 +296,18 @@ where
     C: Circuit<Fr>,
     P: AsRef<Path>,
 {
-    read_pk::<C>(fname.as_ref(), c.params()).expect("proving key should exist")
+    let f = File::open(fname.as_ref()).expect("proving key should exist");
+    let read_time = start_timer!(|| format!("Reading pkey using memmap2 from {:?}", fname.as_ref()));
+
+    // SAFETY: `mmap` is fundamentally unsafe since technically the file can change
+    //         underneath us while it is mapped; in practice it's unlikely to be a problem
+    let bytes = unsafe {
+        memmap2::Mmap::map(&f)
+            .map_err(|e| format!("Error mmaping spec file: {}", e)).unwrap()
+    };
+
+    let pk =
+        ProvingKey::from_bytes::<C>(&bytes, SerdeFormat::RawBytesUnchecked, c.params()).unwrap();
+    end_timer!(read_time);
+    pk
 }
