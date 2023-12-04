@@ -390,10 +390,10 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
+        builder.set_instances(0, assigned_instances);
 
         match stage {
             CircuitBuilderStage::Prover => {
-                builder.set_instances(0, assigned_instances);
                 if let Some(pinning) = pinning {
                     builder.set_params(pinning.params);
                     builder.set_break_points(pinning.break_points);

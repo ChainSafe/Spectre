@@ -191,7 +191,7 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
 
     let num_instances = {
         let circuit = Circuit::create_circuit(
-            CircuitBuilderStage::Mock,
+            CircuitBuilderStage::Keygen,
             None,
             &default_witness,
             params.k(),
