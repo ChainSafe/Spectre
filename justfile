@@ -20,11 +20,11 @@ setup-committee-update network:
     cargo run -r -- circuit committee-update  -p ./build/committee_update_$1.pkey -k 18 \
          --verifier-k 25 --verifier-pk-path ./build/committee_update_verifier_$1.pkey setup
 
-gen-step-evm-verifier:
-    cargo run -r -- circuit sync-step -c ./lightclient-circuits/config/sync_step.json -o evm-verifier ./contracts/snark-verifiers/sync_step.yul
+gen-step-evm-verifier network:
+   cargo run -r -- circuit sync-step --pk-path ./build/sync_step_$1.pkey gen-verifier --solidity-out ./contracts/snark-verifiers/sync_step.yul 
 
-gen-rotation-evm-verifier:
-    cargo run -r -- circuit aggregation -c ./lightclient-circuits/config/aggregation.json --app-pk-path ./build/committee_update.pkey --app-config-path ./lightclient-circuits/config/committee_update.json -i ./rotation -o evm-verifier ./contracts/snark-verifiers/committee_update_aggregated.yul 
+gen-rotation-evm-verifier network:
+    cargo run -r -- circuit committee-update --pk-path ./build/committee_update_$1.pkey --verifier-pk-path ./build/committee_update_verifier_$1.pkey  gen-verifier  --solidity-out ./contracts/snark-verifiers/committee_update_aggregated.yul 
 
 build-contracts:
     cd contracts && forge build
