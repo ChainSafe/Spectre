@@ -8,8 +8,12 @@ use lightclient_circuits::{
     sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
+use lightclient_circuits::{
+    halo2_base::gates::circuit::CircuitBuilderStage, halo2_proofs::poly::commitment::Params,
+};
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
+use snark_verifier_sdk::CircuitExt;
 use std::path::PathBuf;
 use std::{fs::File, future::Future, io::Write, path::Path};
 
@@ -174,7 +178,6 @@ fn get_config_path(pk_path: &Path, config_dir: &Path) -> PathBuf {
     config_dir.join(format!("{}.json", circuit_configuration))
 }
 
-
 #[cfg(not(feature = "experimental"))]
 fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
@@ -184,13 +187,16 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     estimate_gas: bool,
     default_witness: Circuit::Witness,
 ) -> eyre::Result<()> {
-    use lightclient_circuits::{halo2_base::gates::circuit::CircuitBuilderStage, halo2_proofs::poly::commitment::Params};
-    use snark_verifier_sdk::CircuitExt;
-
     let pk = Circuit::read_pk(params, pk_path, &default_witness);
 
     let num_instances = {
-        let circuit = Circuit::create_circuit(CircuitBuilderStage::Mock, None, &default_witness, params.k()).unwrap();
+        let circuit = Circuit::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &default_witness,
+            params.k(),
+        )
+        .unwrap();
         circuit.num_instance().first().map_or(0, |x| *x as u32)
     };
 
@@ -232,7 +238,19 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
 ) -> eyre::Result<()> {
     let pk = Circuit::read_pk(params, pk_path, &default_witness);
 
-    let generator = SolidityGenerator::new(params, pk.get_vk(), BatchOpenScheme::Bdfg21, 1);
+    let num_instances = {
+        let circuit = Circuit::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &default_witness,
+            params.k(),
+        )
+        .unwrap();
+        circuit.num_instance().first().map_or(0, |x| *x)
+    };
+
+    let generator =
+        SolidityGenerator::new(params, pk.get_vk(), BatchOpenScheme::Bdfg21, num_instances);
 
     let verifier_sol = generator
         .render()
