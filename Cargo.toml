@@ -114,7 +114,8 @@ zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/
 
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
-snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "halo2-pse-fix", default-features = false }
+snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
+snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
 # snark-verifier = { path = "../snark-verifier/snark-verifier" }
 # snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
+

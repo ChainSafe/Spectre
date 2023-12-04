@@ -21,11 +21,11 @@ setup-committee-update network *k='25':
          --verifier-k $2 --verifier-pk-path ./build/committee_update_verifier_$1.pkey setup
 
 gen-verifier-step network:
-    cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step_$1.sol
+    cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step.sol
 
 gen-verifier-committee-update network:
     cargo run -r -- circuit committee-update -p ./build/committee_update_$1.pkey --verifier-pk-path ./build/committee_update_verifier_$1.pkey \
-        gen-verifier -o ./contracts/snark-verifiers/committee_update_$1.sol
+        gen-verifier -o ./contracts/snark-verifiers/committee_update_verifier.sol
 
 build-contracts:
     cd contracts && forge build
