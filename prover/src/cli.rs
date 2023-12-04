@@ -174,6 +174,53 @@ fn get_config_path(pk_path: &Path, config_dir: &Path) -> PathBuf {
     config_dir.join(format!("{}.json", circuit_configuration))
 }
 
+
+#[cfg(not(feature = "experimental"))]
+fn gen_evm_verifier<Circuit: AppCircuit>(
+    params: &ParamsKZG<Bn256>,
+    pk_path: &Path,
+    cfg_path: &Path,
+    mut path_out: PathBuf,
+    estimate_gas: bool,
+    default_witness: Circuit::Witness,
+) -> eyre::Result<()> {
+    use lightclient_circuits::{halo2_base::gates::circuit::CircuitBuilderStage, halo2_proofs::poly::commitment::Params};
+    use snark_verifier_sdk::CircuitExt;
+
+    let pk = Circuit::read_pk(params, pk_path, &default_witness);
+
+    let num_instances = {
+        let circuit = Circuit::create_circuit(CircuitBuilderStage::Mock, None, &default_witness, params.k()).unwrap();
+        circuit.num_instance().first().map_or(0, |x| *x as u32)
+    };
+
+    path_out.set_extension("yul");
+    let deplyment_code =
+        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &default_witness)
+            .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
+    println!("yul size: {}", deplyment_code.len());
+
+    let sol_contract = halo2_solidity_verifier::fix_verifier_sol(path_out.clone(), num_instances)
+        .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
+    path_out.set_extension("sol");
+    let mut f = File::create(path_out).unwrap();
+    f.write(sol_contract.as_bytes())
+        .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
+
+    if estimate_gas {
+        let _ = Circuit::gen_evm_proof_shplonk(
+            params,
+            &pk,
+            cfg_path,
+            Some(deplyment_code),
+            &default_witness,
+        )
+        .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[cfg(feature = "experimental")]
 fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
@@ -212,44 +259,6 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
         let (gas_cost, output) = evm.call(verifier_address, calldata);
         assert_eq!(output, [vec![0; 31], vec![1]].concat());
         println!("Gas cost of verifying proof: {gas_cost}");
-    }
-
-    Ok(())
-}
-
-#[cfg(not(feature = "experimental"))]
-fn gen_evm_verifier<Circuit: AppCircuit>(
-    params: &ParamsKZG<Bn256>,
-    pk_path: &Path,
-    cfg_path: &Path,
-    mut path_out: PathBuf,
-    estimate_gas: bool,
-    default_witness: Circuit::Witness,
-) -> eyre::Result<()> {
-    let pk = Circuit::read_pk(params, pk_path, &default_witness);
-
-    path_out.set_extension("yul");
-    let deplyment_code =
-        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &default_witness)
-            .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
-    println!("yul size: {}", deplyment_code.len());
-
-    let sol_contract = halo2_solidity_verifier::fix_verifier_sol(path_out.clone(), 1)
-        .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
-    path_out.set_extension("sol");
-    let mut f = File::create(path_out).unwrap();
-    f.write(sol_contract.as_bytes())
-        .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
-
-    if estimate_gas {
-        let _ = Circuit::gen_evm_proof_shplonk(
-            params,
-            &pk,
-            cfg_path,
-            Some(deplyment_code),
-            &default_witness,
-        )
-        .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
     }
 
     Ok(())
