@@ -112,7 +112,7 @@ where
                     Ok(())
                 }
                 OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out)
+                    gen_evm_verifier::<AggregationCircuit>(&params, &pk_path, args.solidity_out)
                 }
             }
         }
