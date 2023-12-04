@@ -29,7 +29,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
             args::Spec::Testnet => spec_app::<eth_types::Testnet>(op.proof, &options.args)
                 .await
                 .unwrap(),
-            args::Spec::Mainnet => spec_app::<eth_types::Testnet>(op.proof, &options.args)
+            args::Spec::Mainnet => spec_app::<eth_types::Mainnet>(op.proof, &options.args)
                 .await
                 .unwrap(),
         },
