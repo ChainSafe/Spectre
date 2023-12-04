@@ -116,12 +116,30 @@ where
                     Ok(())
                 }
                 OperationCmd::GenVerifier(args) => {
+                    let params: ParamsKZG<Bn256> = gen_srs(k);
+
+                    let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
+                        &params,
+                        &pk_path,
+                        &cfg_path,
+                        &Default::default(),
+                    );
+
+                    let dummy_snark = CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+                        &params,
+                        &pk,
+                        &cfg_path,
+                        None::<String>,
+                        &Default::default(),
+                    )
+                    .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))?;
+
                     let verifier_params = gen_srs(verifier_k);
                     gen_evm_verifier::<AggregationCircuit>(
                         &verifier_params,
                         &verifier_pk_path,
                         args.solidity_out,
-                        None,
+                        Some(vec![dummy_snark]),
                     )
                 }
             }
