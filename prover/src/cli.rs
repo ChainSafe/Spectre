@@ -66,9 +66,12 @@ where
 
                     Ok(())
                 }
-                OperationCmd::GenVerifier(args) => {
-                    gen_evm_verifier::<StepCircuit<S, Fr>>(&params, &pk_path, args.solidity_out, None)
-                }
+                OperationCmd::GenVerifier(args) => gen_evm_verifier::<StepCircuit<S, Fr>>(
+                    &params,
+                    &pk_path,
+                    args.solidity_out,
+                    None,
+                ),
             }
         }
         ProofCmd::CommitteeUpdate {
@@ -114,7 +117,12 @@ where
                 }
                 OperationCmd::GenVerifier(args) => {
                     let verifier_params = gen_srs(verifier_k);
-                    gen_evm_verifier::<AggregationCircuit>(&verifier_params, &verifier_pk_path, args.solidity_out, None)
+                    gen_evm_verifier::<AggregationCircuit>(
+                        &verifier_params,
+                        &verifier_pk_path,
+                        args.solidity_out,
+                        None,
+                    )
                 }
             }
         }
@@ -134,15 +142,16 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
     pk_path: &Path,
     mut path_out: PathBuf,
-    witness_args: Option<&Circuit::Witness>,
+    witness_args: Option<Circuit::Witness>,
 ) -> eyre::Result<()>
 where
-    Circuit::Witness: Default,
+    <Circuit as AppCircuit>::Witness: Default,
 {
-    let pk = Circuit::read_pk(params, pk_path, witness_args.unwrap_or_default());
+    let witness_args = witness_args.unwrap_or_default();
+    let pk = Circuit::read_pk(params, pk_path, &witness_args);
 
     let deplyment_code =
-        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), witness_args.unwrap_or_default())
+        Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &witness_args)
             .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
     println!("yul size: {}", deplyment_code.len());
     path_out.set_extension("yul");
