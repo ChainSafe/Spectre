@@ -84,6 +84,7 @@ pub enum OperationCmd {
 }
 
 #[derive(Clone, Debug, PartialEq, EnumString, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")] 
 pub enum Spec {
     #[strum(serialize = "minimal")]
     Minimal,
