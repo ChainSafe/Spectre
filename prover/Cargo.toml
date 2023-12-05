@@ -9,9 +9,11 @@ path = "src/main.rs"
 
 [dependencies]
 # cli
+contracts = { workspace = true }
 clap = { version = "4.2", features = ["derive"] }
 strum = { version = "=0.25", features = ["derive"] }
 cli-batteries = "0.5"
+hex = "0.4"
 eyre = "0.6"
 anstyle = "1.0.0"
 axum = { version = "0.7", features = ["tracing", "tower-log"] }

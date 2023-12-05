@@ -51,7 +51,6 @@ zkevm-hashes = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "co
 
 halo2curves = { package = "halo2curves-axiom", version = "0.4.2" }
 
-
 # verifier SDK
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
     "display",

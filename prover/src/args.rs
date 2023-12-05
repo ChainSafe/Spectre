@@ -43,6 +43,10 @@ pub struct CircuitOptions {
 
 #[derive(Clone, clap::Subcommand)]
 pub enum ProofCmd {
+    InputCommittee {
+        #[clap(long, short)]
+        beacon_api: String,
+    },
     SyncStep {
         #[command(subcommand)]
         operation: OperationCmd,
