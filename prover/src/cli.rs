@@ -2,9 +2,9 @@ use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
 use itertools::Itertools;
 
-use std::sync::Arc;
 use ark_std::{end_timer, start_timer};
 use hex;
+use std::sync::Arc;
 
 use ethers::solc::report::Report;
 use lightclient_circuits::{
@@ -22,19 +22,21 @@ use snark_verifier_sdk::CircuitExt;
 use std::path::PathBuf;
 use std::{fs::File, future::Future, io::Write, path::Path};
 
+use beacon_api_client::mainnet::Client as MainnetBeaconClient;
+use beacon_api_client::{BlockId, ClientTypes, StateId, VersionedValue};
+use ethereum_consensus_types::{
+    LightClientBootstrap, LightClientFinalityUpdate, LightClientUpdateCapella,
+};
 #[cfg(feature = "experimental")]
 use halo2_solidity_verifier_new::{
     compile_solidity, encode_calldata, BatchOpenScheme, Evm, SolidityGenerator,
 };
-use beacon_api_client::{BlockId, ClientTypes, StateId, VersionedValue};
-use beacon_api_client::mainnet::Client as MainnetBeaconClient;
-use ethereum_consensus_types::{
-    LightClientBootstrap, LightClientFinalityUpdate, LightClientUpdateCapella,
-};
 
 use url::Url;
 
-use lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed;
+use lightclient_circuits::poseidon::{
+    poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
+};
 
 ethers::contract::abigen!(
     SnarkVerifierSol,
@@ -71,9 +73,7 @@ where
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
     match proof {
-        ProofCmd::InputCommittee {
-            beacon_api,
-        } => {
+        ProofCmd::InputCommittee { beacon_api } => {
             let reqwest_client = reqwest::Client::new();
             let beacon_client = Arc::new(MainnetBeaconClient::new_with_client(
                 reqwest_client.clone(),
@@ -96,16 +96,24 @@ where
 
             let sync_period = bootstrap.header.beacon.slot / (32 * 256);
             print!("{} \n", sync_period);
-            let pubkeys_compressed = bootstrap
+            let pubkeys_uncompressed = bootstrap
                 .current_sync_committee
                 .pubkeys
                 .iter()
-                .map(|public_key| public_key.to_bytes().to_vec())
+                .map(|pk| {
+                    let p = pk.decompressed_bytes();
+                    let mut x = p[0..48].to_vec();
+                    let mut y = p[48..96].to_vec();
+                    x.reverse();
+                    y.reverse();
+                    let mut res = vec![];
+                    res.append(&mut x);
+                    res.append(&mut y);
+                    res
+                })
                 .collect_vec();
             let committee_poseidon =
-                poseidon_committee_commitment_from_compressed(&pubkeys_compressed)
-                    .unwrap();
-
+                poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).unwrap();
             let hex_string = hex::encode(committee_poseidon);
             print!("{}", hex_string);
             Ok(())
