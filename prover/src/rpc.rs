@@ -1,9 +1,6 @@
 use super::args::Spec;
-use axum::response::IntoResponse;
-use axum::routing::post;
-use axum::Router;
+use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
-use http::StatusCode;
 use itertools::Itertools;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 use jsonrpc_v2::{Error as JsonRpcError, Params};
@@ -18,10 +15,11 @@ use preprocessor::{
     fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
 };
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 use url::Url;
+
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
@@ -406,17 +404,19 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
 }
 
 pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
-    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+        .await
+        .unwrap();
     let rpc_server = Arc::new(jsonrpc_server());
+
     let router = Router::new()
         .route("/rpc", post(handler))
+        .layer(TraceLayer::new_for_http())
         .with_state(rpc_server);
 
     log::info!("Ready for RPC connections");
-    let server = axum::Server::from_tcp(tcp_listener)
-        .unwrap()
-        .serve(router.into_make_service());
-    server
+
+    axum::serve(tcp_listener, router.into_make_service())
         .await
         .map_err(|e| eyre::eyre!("RPC server error: {}", e))
 }
