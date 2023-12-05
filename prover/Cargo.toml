@@ -14,7 +14,7 @@ strum = { version = "=0.25", features = ["derive"] }
 cli-batteries = "0.5"
 eyre = "0.6"
 anstyle = "=1.0.0"
-axum = { version = "0.7", features = ["tracing"] }
+axum = { version = "0.7", features = ["tracing", "tower-log"] }
 tokio = { version = "1.32", features = ["macros"] }
 
 jsonrpc-v2 = { version = "0.12", default-features = false, features = ["easy-errors", "macros", "bytes-v10"] }
