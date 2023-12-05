@@ -17,7 +17,6 @@ use preprocessor::{
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tower_http::trace::TraceLayer;
 use url::Url;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
@@ -401,7 +400,6 @@ pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
 
     let router = Router::new()
         .route("/rpc", post(handler))
-        .layer(TraceLayer::new_for_http())
         .with_state(rpc_server);
 
     log::info!("Ready for RPC connections");
