@@ -294,5 +294,6 @@ where
     C: Circuit<Fr>,
     P: AsRef<Path>,
 {
-    read_pk::<C>(fname.as_ref(), c.params()).expect("proving key should exist")
+    read_pk::<C>(fname.as_ref(), c.params())
+        .expect(format!("proving key: {:?} should exist", fname.as_ref().to_str()).as_str())
 }

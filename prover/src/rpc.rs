@@ -1,9 +1,6 @@
 use super::args::Spec;
-use axum::response::IntoResponse;
-use axum::routing::post;
-use axum::Router;
+use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
-use http::StatusCode;
 use itertools::Itertools;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 use jsonrpc_v2::{Error as JsonRpcError, Params};
@@ -18,10 +15,10 @@ use preprocessor::{
     fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
 };
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use url::Url;
+
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
@@ -59,25 +56,23 @@ fn gen_evm_proof<C: AppCircuit>(
     config_path: PathBuf,
     witness: C::Witness,
     yul_path_if_verify: Option<impl AsRef<Path>>,
-) -> (Vec<u8>, Vec<Vec<Fr>>) {
+) -> eyre::Result<(Vec<u8>, Vec<Vec<Fr>>)> {
     let k = C::get_degree(&config_path);
     let params = gen_srs(k);
 
     let pk = C::read_pk(&params, pk_path, &witness);
 
     let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
-        .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))
-        .unwrap();
+        .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
 
     println!("Proof size: {}", proof.len());
     if let Some(deployment_code_path) = yul_path_if_verify {
         let deployment_code =
-            C::gen_evm_verifier_shplonk(&params, &pk, Some(deployment_code_path), &witness)
-                .unwrap();
+            C::gen_evm_verifier_shplonk(&params, &pk, Some(deployment_code_path), &witness)?;
         println!("Deployment code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances.clone(), proof.clone());
     }
-    (proof, instances)
+    Ok((proof, instances))
 }
 
 pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
@@ -167,8 +162,8 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
 
     let (snark, verifier_filename) = match spec {
         Spec::Minimal => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
-            let witness = rotation_args_from_update(&mut update).await.unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update)?;
+            let witness = rotation_args_from_update(&mut update).await?;
             let snark = gen_committee_update_snark::<eth_types::Minimal>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
                 PathBuf::from("./build/committee_update_minimal.pkey"),
@@ -178,8 +173,8 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             (snark, "committee_update_verifier_minimal")
         }
         Spec::Testnet => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
-            let witness = rotation_args_from_update(&mut update).await.unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update)?;
+            let witness = rotation_args_from_update(&mut update).await?;
             let snark = gen_committee_update_snark::<eth_types::Testnet>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
                 PathBuf::from("./build/committee_update_testnet.pkey"),
@@ -189,8 +184,8 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
             (snark, "committee_update_verifier_testnet")
         }
         Spec::Mainnet => {
-            let mut update = serde_json::from_slice(&light_client_update).unwrap();
-            let witness = rotation_args_from_update(&mut update).await.unwrap();
+            let mut update = ssz_rs::deserialize(&light_client_update)?;
+            let witness = rotation_args_from_update(&mut update).await?;
             let snark = gen_committee_update_snark::<eth_types::Mainnet>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
                 PathBuf::from("./build/committee_update_mainnet.pkey"),
@@ -241,36 +236,36 @@ pub(crate) async fn gen_evm_proof_step_circuit_handler(
     let (proof, instances) = match spec {
         Spec::Minimal => {
             let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await.unwrap();
+            let witness = fetch_step_args(&client).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
                 PathBuf::from("./build/sync_step_minimal.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
         Spec::Testnet => {
             let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await.unwrap();
+            let witness = fetch_step_args(&client).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
                 PathBuf::from("./build/sync_step_testnet.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
         Spec::Mainnet => {
             let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await.unwrap();
+            let witness = fetch_step_args(&client).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
                 PathBuf::from("./build/sync_step_mainnet.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
     };
 
@@ -297,46 +292,40 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
 
     let (proof, instances) = match spec {
         Spec::Minimal => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
-            let witness = step_args_from_finality_update(update, pubkeys, domain)
-                .await
-                .unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update)?;
+            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
                 PathBuf::from("./build/sync_step_minimal.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
         Spec::Testnet => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
-            let witness = step_args_from_finality_update(update, pubkeys, domain)
-                .await
-                .unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update)?;
+            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
                 PathBuf::from("./build/sync_step_testnet.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
         Spec::Mainnet => {
-            let update = serde_json::from_slice(&light_client_finality_update).unwrap();
-            let pubkeys = serde_json::from_slice(&pubkeys).unwrap();
-            let witness = step_args_from_finality_update(update, pubkeys, domain)
-                .await
-                .unwrap();
+            let update = ssz_rs::deserialize(&light_client_finality_update)?;
+            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
 
             gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
                 PathBuf::from("./build/sync_step_mainnet.pkey"),
                 PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
                 witness,
                 None::<PathBuf>,
-            )
+            )?
         }
     };
 
@@ -406,17 +395,16 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
 }
 
 pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
-    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", port)).unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     let rpc_server = Arc::new(jsonrpc_server());
+
     let router = Router::new()
         .route("/rpc", post(handler))
         .with_state(rpc_server);
 
     log::info!("Ready for RPC connections");
-    let server = axum::Server::from_tcp(tcp_listener)
-        .unwrap()
-        .serve(router.into_make_service());
-    server
+
+    axum::serve(tcp_listener, router.into_make_service())
         .await
         .map_err(|e| eyre::eyre!("RPC server error: {}", e))
 }
@@ -426,9 +414,11 @@ async fn handler(
     axum::Json(rpc_call): axum::Json<JsonRpcRequestObject>,
 ) -> impl IntoResponse {
     let response_headers = [("content-type", "application/json-rpc;charset=utf-8")];
-    let response = rpc_server.handle(rpc_call).await;
+    log::debug!("RPC request with method: {}", rpc_call.method_ref());
 
+    let response = rpc_server.handle(rpc_call).await;
     let response_str = serde_json::to_string(&response);
+    log::debug!("RPC response: {:?}", response_str);
     match response_str {
         Ok(result) => (StatusCode::OK, response_headers, result),
         Err(err) => (
