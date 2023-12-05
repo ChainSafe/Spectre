@@ -101,15 +101,7 @@ where
                 .pubkeys
                 .iter()
                 .map(|pk| {
-                    let p = pk.decompressed_bytes();
-                    let mut x = p[0..48].to_vec();
-                    let mut y = p[48..96].to_vec();
-                    x.reverse();
-                    y.reverse();
-                    let mut res = vec![];
-                    res.append(&mut x);
-                    res.append(&mut y);
-                    res
+                     pk.decompressed_bytes()
                 })
                 .collect_vec();
             let committee_poseidon =
