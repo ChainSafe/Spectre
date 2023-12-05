@@ -426,9 +426,11 @@ async fn handler(
     axum::Json(rpc_call): axum::Json<JsonRpcRequestObject>,
 ) -> impl IntoResponse {
     let response_headers = [("content-type", "application/json-rpc;charset=utf-8")];
-    let response = rpc_server.handle(rpc_call).await;
+    log::debug!("RPC request with method: {}", rpc_call.method_ref());
 
+    let response = rpc_server.handle(rpc_call).await;
     let response_str = serde_json::to_string(&response);
+    log::debug!("RPC response: {:?}", response_str);
     match response_str {
         Ok(result) => (StatusCode::OK, response_headers, result),
         Err(err) => (
