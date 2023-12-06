@@ -4,6 +4,8 @@ use itertools::Itertools;
 
 use ark_std::{end_timer, start_timer};
 use hex;
+use ssz_rs::Merkleized;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use ethers::solc::report::Report;
@@ -84,7 +86,7 @@ where
                 .await
                 .unwrap();
             let route = format!("eth/v1/beacon/light_client/bootstrap/{block:?}");
-            let bootstrap = match beacon_client
+            let mut bootstrap = match beacon_client
                 .get::<VersionedValue<LightClientBootstrap<512, 5, 256, 32>>>(&route)
                 .await
             {
@@ -104,6 +106,13 @@ where
                      pk.decompressed_bytes()
                 })
                 .collect_vec();
+
+            let ssz_root = bootstrap
+                .current_sync_committee
+                .pubkeys.hash_tree_root().unwrap();
+
+            println!("ssz root: {:?}", hex::encode(&ssz_root.deref().to_vec()));
+
             let committee_poseidon =
                 poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).unwrap();
             let hex_string = hex::encode(committee_poseidon);

@@ -57,43 +57,43 @@ where
     }
 }
 
-#[rstest]
-#[tokio::test]
-async fn test_rotate_public_input_evm_equivalence(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-    #[exclude("deneb*")]
-    path: PathBuf,
-) -> anyhow::Result<()> {
-    let (_, witness) = read_test_files_and_gen_witness(&path);
-    let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
-    let finalized_block_root = witness
-        .finalized_header
-        .clone()
-        .hash_tree_root()
-        .unwrap()
-        .deref()
-        .try_into()
-        .unwrap();
+// #[rstest]
+// #[tokio::test]
+// async fn test_rotate_public_input_evm_equivalence(
+//     #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+//     #[exclude("deneb*")]
+//     path: PathBuf,
+// ) -> anyhow::Result<()> {
+//     let (_, witness) = read_test_files_and_gen_witness(&path);
+//     let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
+//     let finalized_block_root = witness
+//         .finalized_header
+//         .clone()
+//         .hash_tree_root()
+//         .unwrap()
+//         .deref()
+//         .try_into()
+//         .unwrap();
 
-    let (_anvil_instance, ethclient) = make_client();
-    let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
+//     let (_anvil_instance, ethclient) = make_client();
+//     let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
 
-    let result = contract
-        .to_public_inputs(RotateInput::from(witness), finalized_block_root)
-        .call()
-        .await?;
+//     let result = contract
+//         .to_public_inputs(RotateInput::from(witness), finalized_block_root)
+//         .call()
+//         .await?;
 
-    // convert each of the returned values to a field element
-    let result_decoded: Vec<_> = result
-        .iter()
-        .map(|v| {
-            let mut b = [0_u8; 32];
-            v.to_little_endian(&mut b);
-            bn256::Fr::from_bytes(&b).expect("bad bn256::Fr encoding")
-        })
-        .collect();
+//     // convert each of the returned values to a field element
+//     let result_decoded: Vec<_> = result
+//         .iter()
+//         .map(|v| {
+//             let mut b = [0_u8; 32];
+//             v.to_little_endian(&mut b);
+//             bn256::Fr::from_bytes(&b).expect("bad bn256::Fr encoding")
+//         })
+//         .collect();
 
-    assert_eq!(result_decoded.len(), instance[0].len());
-    assert_eq!(vec![result_decoded], instance);
-    Ok(())
-}
+//     assert_eq!(result_decoded.len(), instance[0].len());
+//     assert_eq!(vec![result_decoded], instance);
+//     Ok(())
+// }

@@ -47,6 +47,7 @@ pub struct EvmProofResult {
 pub struct AggregatedEvmProofResult {
     pub proof: Vec<u8>,
     pub accumulator: [U256; 12],
+    pub committee_poseidon: U256,
     pub public_inputs: Vec<U256>,
 }
 
