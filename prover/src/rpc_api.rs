@@ -44,6 +44,13 @@ pub struct EvmProofResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AggregatedEvmProofResult {
+    pub proof: Vec<u8>,
+    pub accumulator: [U256; 12],
+    pub public_inputs: Vec<U256>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncCommitteePoseidonParams {
     pub pubkeys: Vec<Vec<u8>>,
 }
