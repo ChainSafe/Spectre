@@ -295,5 +295,5 @@ where
     P: AsRef<Path>,
 {
     read_pk::<C>(fname.as_ref(), c.params())
-        .expect(format!("proving key: {:?} should exist", fname.as_ref().to_str()).as_str())
+        .unwrap_or_else(|_| panic!("proving key: {:?} should exist", fname.as_ref().to_str()))
 }

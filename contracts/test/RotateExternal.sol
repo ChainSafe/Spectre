@@ -11,8 +11,8 @@ import { RotateLib } from "../src/RotateLib.sol";
 contract RotateExternal {
     using RotateLib for RotateLib.RotateInput;
 
-    function toPublicInputs(RotateLib.RotateInput calldata args, bytes32 finalizedHeaderRoot, uint256[12] memory blsAccumulator) public pure returns (uint256[] memory) {
-        uint256[77] memory commitment = args.toPublicInputs(finalizedHeaderRoot, blsAccumulator);
+    function toPublicInputs(RotateLib.RotateInput calldata args, bytes32 finalizedHeaderRoot, uint256[12] memory accumulator) public pure returns (uint256[] memory) {
+        uint256[77] memory commitment = args.toPublicInputs(finalizedHeaderRoot, accumulator);
         // copy all elements into a dynamic array. We need to do this because ethers-rs has a bug that can't support uint256[65] return types
         uint256[] memory result = new uint256[](77);
         for (uint256 i = 0; i < commitment.length; i++) {

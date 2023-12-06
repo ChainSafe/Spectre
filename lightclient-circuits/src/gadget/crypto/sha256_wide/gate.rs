@@ -71,7 +71,6 @@ impl<F: Field> VirtualRegionManager<F> for ShaBitGateManager<F> {
     type Config = Sha256CircuitConfig<F>;
 
     fn assign_raw(&self, config: &Self::Config, region: &mut Region<F>) {
-        // config.annotate_columns_in_region(region);
         let mut copy_manager = self.copy_manager.lock().unwrap();
 
         config
