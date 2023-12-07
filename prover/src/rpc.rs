@@ -139,14 +139,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         )
         .map_err(JsonRpcError::internal)?
     };
-
-    let public_inputs = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
-    let mut accumulator = [U256::zero(); 12];
-    accumulator.clone_from_slice(&public_inputs[..12]);
-
+    
     let public_inputs = instances[0]
         .iter()
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
