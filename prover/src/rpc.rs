@@ -139,13 +139,14 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         )
         .map_err(JsonRpcError::internal)?
     };
-    
-    let public_inputs = instances[0]
+
+    let mut public_inputs = instances[0]
         .iter()
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
         .collect_vec();
-    let mut accumulator = [U256::zero(); 12];
-    accumulator.clone_from_slice(&public_inputs[..12]);
+
+    let accumulator: [U256; 12] = public_inputs.split_off(12).try_into().unwrap();
+
     let committee_poseidon = public_inputs[0];
 
     Ok(AggregatedEvmProofResult {
@@ -224,12 +225,15 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
         .map_err(JsonRpcError::internal)?
     };
 
-    let public_inputs = instances[0]
+    // Should be of length 77 initially then 65 after removing the first 12 elements which is the accumulator.
+    // 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
+    let mut public_inputs = instances[0]
         .iter()
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
         .collect_vec();
-    let mut accumulator = [U256::zero(); 12];
-    accumulator.clone_from_slice(&public_inputs[..12]);
+
+    let accumulator: [U256; 12] = public_inputs.split_off(12).try_into().unwrap();
+
     let committee_poseidon = public_inputs[0];
 
     Ok(AggregatedEvmProofResult {

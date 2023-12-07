@@ -102,14 +102,14 @@ where
                 .current_sync_committee
                 .pubkeys
                 .iter()
-                .map(|pk| {
-                     pk.decompressed_bytes()
-                })
+                .map(|pk| pk.decompressed_bytes())
                 .collect_vec();
 
             let ssz_root = bootstrap
                 .current_sync_committee
-                .pubkeys.hash_tree_root().unwrap();
+                .pubkeys
+                .hash_tree_root()
+                .unwrap();
 
             println!("ssz root: {:?}", hex::encode(&ssz_root.deref().to_vec()));
 
