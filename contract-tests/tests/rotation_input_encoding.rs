@@ -89,7 +89,7 @@ async fn test_rotate_public_input_evm_equivalence(
         .call()
         .await?;
 
-    let result_decoded: decode_solidity_u256_array(&result);
+    let result_decoded = decode_solidity_u256_array(&result);
     // The expected result is the concatenation of the accumulator and the instance
     let expected: Vec<_> = accumulator.iter().chain(instance[0].iter()).collect();
     assert_eq!(result_decoded.iter().collect::<Vec<_>>(), expected);
