@@ -1,14 +1,11 @@
 use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
-use itertools::Itertools;
-
 use ark_std::{end_timer, start_timer};
-use hex;
-use ssz_rs::Merkleized;
-use std::ops::Deref;
-use std::sync::Arc;
-
-use ethers::solc::report::Report;
+use beacon_api_client::mainnet::Client as MainnetBeaconClient;
+use beacon_api_client::{BlockId, VersionedValue};
+use ethereum_consensus_types::LightClientBootstrap;
+use itertools::Itertools;
+use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     halo2_proofs::halo2curves::bn256::{Bn256, Fr},
@@ -21,45 +18,17 @@ use lightclient_circuits::{
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use snark_verifier_sdk::CircuitExt;
+use ssz_rs::Merkleized;
+use std::ops::Deref;
 use std::path::PathBuf;
-use std::{fs::File, future::Future, io::Write, path::Path};
+use std::sync::Arc;
+use std::{fs::File, io::Write, path::Path};
+use url::Url;
 
-use beacon_api_client::mainnet::Client as MainnetBeaconClient;
-use beacon_api_client::{BlockId, ClientTypes, StateId, VersionedValue};
-use ethereum_consensus_types::{
-    LightClientBootstrap, LightClientFinalityUpdate, LightClientUpdateCapella,
-};
 #[cfg(feature = "experimental")]
 use halo2_solidity_verifier_new::{
     compile_solidity, encode_calldata, BatchOpenScheme, Evm, SolidityGenerator,
 };
-
-use url::Url;
-
-use lightclient_circuits::poseidon::{
-    poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
-};
-
-ethers::contract::abigen!(
-    SnarkVerifierSol,
-    r#"[
-        function verify(uint256[1] calldata pubInputs,bytes calldata proof) public view returns (bool)
-    ]"#,
-);
-
-pub trait FetchFn<Arg>: FnOnce(Arg) -> <Self as FetchFn<Arg>>::Fut {
-    type Fut: Future<Output = <Self as FetchFn<Arg>>::Output>;
-    type Output;
-}
-
-impl<Arg, F, Fut> FetchFn<Arg> for F
-where
-    F: FnOnce(Arg) -> Fut,
-    Fut: Future,
-{
-    type Fut = Fut;
-    type Output = Fut::Output;
-}
 
 pub(crate) async fn spec_app<S: eth_types::Spec>(
     proof: ProofCmd,
@@ -92,7 +61,7 @@ where
             {
                 Ok(v) => v.data,
                 Err(e) => {
-                    return Ok(());
+                    return Err(eyre::eyre!("Failed to fetch bootstrap: {}", e));
                 }
             };
 
@@ -111,7 +80,7 @@ where
                 .hash_tree_root()
                 .unwrap();
 
-            println!("ssz root: {:?}", hex::encode(&ssz_root.deref().to_vec()));
+            println!("ssz root: {:?}", hex::encode(ssz_root.deref()));
 
             let committee_poseidon =
                 poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).unwrap();
