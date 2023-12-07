@@ -15,6 +15,7 @@ use preprocessor::{
     fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
 };
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use url::Url;
@@ -140,14 +141,15 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
         .map_err(JsonRpcError::internal)?
     };
 
-    let mut public_inputs = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
+    // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
+    // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
+    let mut instances = instances[0]
+            .iter()
+            .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+            .collect_vec();
 
-    let accumulator: [U256; 12] = public_inputs.split_off(12).try_into().unwrap();
-
-    let committee_poseidon = public_inputs[0];
+    let public_inputs = instances.split_off(12);
+    let accumulator: [U256; 12] = instances.try_into().unwrap();
 
     Ok(AggregatedEvmProofResult {
         proof,
@@ -225,23 +227,33 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
         .map_err(JsonRpcError::internal)?
     };
 
-    // Should be of length 77 initially then 65 after removing the first 12 elements which is the accumulator.
-    // 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
-    let mut public_inputs = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
+    // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
+    // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
+    let mut instances = instances[0]
+            .iter()
+            .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+            .collect_vec();
 
-    let accumulator: [U256; 12] = public_inputs.split_off(12).try_into().unwrap();
+    let public_inputs = instances.split_off(12);
+    let accumulator: [U256; 12] = instances.try_into().unwrap();
+
 
     let committee_poseidon = public_inputs[0];
 
-    Ok(AggregatedEvmProofResult {
+    let res = AggregatedEvmProofResult {
         proof,
         accumulator,
         committee_poseidon,
         public_inputs,
-    })
+    };
+    
+    // Write proof to file for debugging
+    std::fs::File::create("proof.json")
+        .unwrap()
+        .write_all(serde_json::to_string(&res).unwrap().as_bytes())
+        .unwrap();
+
+    Ok(res)
 }
 
 pub(crate) async fn gen_evm_proof_step_circuit_handler(
