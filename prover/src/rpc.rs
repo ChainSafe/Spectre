@@ -144,12 +144,13 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
     // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
     let mut instances = instances[0]
-            .iter()
-            .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-            .collect_vec();
+        .iter()
+        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+        .collect_vec();
 
     let public_inputs = instances.split_off(12);
     let accumulator: [U256; 12] = instances.try_into().unwrap();
+    let committee_poseidon = public_inputs[0];
 
     Ok(AggregatedEvmProofResult {
         proof,
@@ -230,13 +231,12 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
     // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
     let mut instances = instances[0]
-            .iter()
-            .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-            .collect_vec();
+        .iter()
+        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+        .collect_vec();
 
     let public_inputs = instances.split_off(12);
     let accumulator: [U256; 12] = instances.try_into().unwrap();
-
 
     let committee_poseidon = public_inputs[0];
 
@@ -246,7 +246,7 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
         committee_poseidon,
         public_inputs,
     };
-    
+
     // Write proof to file for debugging
     std::fs::File::create("proof.json")
         .unwrap()
