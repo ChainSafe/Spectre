@@ -151,7 +151,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             signing_root.into_iter().map(|av| QuantumCell::Existing(av)),
             S::DST,
         )?;
-        
+
         bls_chip.assert_valid_signature(builder.main(), signature, msghash, agg_pubkey);
 
         // verify finalized block header against current beacon state merkle proof
@@ -419,16 +419,22 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
 mod tests {
     use std::fs;
 
-    use crate::{util::Halo2ConfigPinning, witness::SyncStepArgs};
+    use crate::{
+        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
+        witness::SyncStepArgs,
+    };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
     use halo2_base::{
-        halo2_proofs::dev::MockProver, halo2_proofs::halo2curves::bn256::Fr, utils::fs::gen_srs,
+        halo2_proofs::dev::MockProver,
+        halo2_proofs::{halo2curves::bn256::Fr, poly::commitment::Params},
+        utils::fs::gen_srs,
     };
     use snark_verifier_sdk::{
         evm::{evm_verify, gen_evm_proof_shplonk},
+        halo2::aggregation::AggregationCircuit,
         CircuitExt,
     };
 
@@ -514,6 +520,72 @@ mod tests {
             &pk,
             None::<String>,
             &witness,
+        )
+        .unwrap();
+        println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
+    }
+
+    #[test]
+    fn test_step_aggregation_evm() {
+        const APP_K: u32 = 21;
+        const APP_PK_PATH: &str = "../build/sync_step_21.pkey";
+        const APP_PINNING_PATH: &str = "./config/sync_step_21.json";
+        const AGG_CONFIG_PATH: &str = "./config/sync_step_verifier_23.json";
+        let params_app = gen_srs(APP_K);
+
+        const AGG_K: u32 = 23;
+        let pk_app = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params_app,
+            APP_PK_PATH,
+            APP_PINNING_PATH,
+            false,
+            &SyncStepArgs::<Testnet>::default(),
+        );
+
+        let witness = load_circuit_args();
+        let snark = StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+            &params_app,
+            &pk_app,
+            APP_PINNING_PATH,
+            None::<String>,
+            &witness,
+        )
+        .unwrap();
+
+        let params = gen_srs(AGG_K);
+
+        let pk = AggregationCircuit::read_or_create_pk(
+            &params,
+            "../build/sync_step_verifier_23.pkey",
+            AGG_CONFIG_PATH,
+            false,
+            &vec![snark.clone()],
+        );
+
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &vec![snark.clone()],
+            AGG_K,
+        )
+        .unwrap();
+
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
+
+        println!("num_instances: {:?}", num_instances);
+        println!("instances: {:?}", instances);
+
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        println!("proof size: {}", proof.len());
+        let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
+            &params,
+            &pk,
+            None::<String>,
+            &vec![snark],
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
