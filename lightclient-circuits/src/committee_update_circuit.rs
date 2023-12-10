@@ -9,9 +9,7 @@ use crate::{
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{
-        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
-    },
+    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder},
     halo2_proofs::{halo2curves::bn256, plonk::Error},
     AssignedValue, Context, QuantumCell,
 };
@@ -60,7 +58,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let poseidon_commit = {
             let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
-            fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
+            fq_array_poseidon(builder.main(), fp_chip, &pubkeys_x)?
         };
 
         // Finalized header

@@ -1,9 +1,9 @@
 use eth_types::{Field, LIMB_BITS};
 use halo2_base::{
     gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,
-    poseidon::hasher::PoseidonSponge, AssignedValue, Context,
+    poseidon::hasher::PoseidonSponge, AssignedValue, Context, QuantumCell,
 };
-use halo2_ecc::bigint::ProperCrtUint;
+use halo2_ecc::{bigint::ProperCrtUint, bls12_381::FpChip, fields::FieldChip};
 use halo2curves::{
     bls12_381::{self, Fq},
     group::UncompressedEncoding,
@@ -25,17 +25,27 @@ const R_F: usize = 8;
 
 pub fn fq_array_poseidon<'a, F: Field>(
     ctx: &mut Context<F>,
-    gate: &impl GateInstructions<F>,
+    fp_chip: &FpChip<F>,
     fields: impl IntoIterator<Item = &'a ProperCrtUint<F>>,
 ) -> Result<AssignedValue<F>, Error> {
-    let limbs = fields
-        .into_iter()
-        .flat_map(|f| f.limbs())
-        .copied()
+    let gate = fp_chip.gate();
+    let limbs_bases = fp_chip.limb_bases[..2]
+        .iter()
+        .map(|c| QuantumCell::Constant(*c))
         .collect_vec();
 
-    let mut poseidon =
-        PoseidonSponge::<F, T, POSEIDON_SIZE>::new::<R_F, R_P, 0>(ctx);
+    let limbs = fields
+        .into_iter()
+        .flat_map(|f| {
+            // Fold 4 limbs into 2 to reduce number of posedidon inputs in half.
+            f.limbs()
+                .chunks(2)
+                .map(|limbs| gate.inner_product(ctx, limbs.to_vec(), limbs_bases.clone()))
+                .collect_vec()
+        })
+        .collect_vec();
+
+    let mut poseidon = PoseidonSponge::<F, T, POSEIDON_SIZE>::new::<R_F, R_P, 0>(ctx);
 
     let mut current_poseidon_hash = None;
 
@@ -58,7 +68,7 @@ pub fn fq_array_poseidon_native<F: Field>(
         // Converts Fq elements to Fr limbs.
         .flat_map(|x| {
             x.to_bytes_le()
-                .chunks(limb_bits / 8)
+                .chunks((limb_bits / 8) * 2)
                 .map(F::from_bytes_le)
                 .collect_vec()
         })

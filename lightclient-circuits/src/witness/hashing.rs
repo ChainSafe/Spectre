@@ -4,7 +4,7 @@ use eth_types::Field;
 use halo2_base::{AssignedValue, Context, QuantumCell};
 use itertools::Itertools;
 
-use crate::util::{pad_to_ssz_chunk, ConstantFrom, IntoWitness, WitnessFrom};
+use crate::util::{ConstantFrom, IntoWitness, WitnessFrom};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum HashInput<T> {
@@ -214,7 +214,7 @@ impl From<Vec<u8>> for HashInputChunk<u8> {
 impl From<u64> for HashInputChunk<u8> {
     fn from(input: u64) -> Self {
         HashInputChunk {
-            bytes: pad_to_ssz_chunk(&input.to_le_bytes()),
+            bytes: pad_to_32(&input.to_le_bytes()),
             is_rlc: false,
         }
     }
@@ -223,7 +223,7 @@ impl From<u64> for HashInputChunk<u8> {
 impl From<usize> for HashInputChunk<u8> {
     fn from(input: usize) -> Self {
         HashInputChunk {
-            bytes: pad_to_ssz_chunk(&input.to_le_bytes()),
+            bytes: pad_to_32(&input.to_le_bytes()),
             is_rlc: false,
         }
     }
@@ -242,4 +242,11 @@ impl<F: Field, I: IntoIterator<Item = AssignedValue<F>>> From<I>
             bytes,
         }
     }
+}
+
+fn pad_to_32(le_bytes: &[u8]) -> Vec<u8> {
+    assert!(le_bytes.len() <= 32);
+    let mut chunk = le_bytes.to_vec();
+    chunk.resize(32, 0);
+    chunk
 }

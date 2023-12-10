@@ -89,7 +89,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         );
         let poseidon_commit = fq_array_poseidon(
             builder.main(),
-            range.gate(),
+            fp_chip,
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
@@ -151,7 +151,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             signing_root.into_iter().map(|av| QuantumCell::Existing(av)),
             S::DST,
         )?;
-
+        
         bls_chip.assert_valid_signature(builder.main(), signature, msghash, agg_pubkey);
 
         // verify finalized block header against current beacon state merkle proof
@@ -179,10 +179,9 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
+        // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
         let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
         let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
-
-        // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
         let public_inputs_concat = itertools::chain![
             attested_slot_bytes.bytes.into_iter().take(8),
             finalized_slot_bytes.bytes.into_iter().take(8),
@@ -343,7 +342,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
             let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
 
-            /* we skip checking y coordinate as it is unlikely to cause a siganture forgery
+            // *Note:* normally, we would need to take into account the sign of the y coordinate, but
+            // because we are concerned only with signature forgery, if this is the wrong
+            // sign, the signature will be invalid anyway and thus verification fails.
+            /*
             // Square y coordinate
             let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
             // Calculate y^2 using the elliptic curve equation
@@ -351,10 +353,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             // Constrain witness y^2 to be equal to calculated y^2
             fp_chip.assert_equal(ctx, ysq, ysq_calc);
             */
-
-            // *Note:* normally, we would need to take into account the sign of the y coordinate, but
-            // because we are concerned only with signature forgery, if this is the wrong
-            // sign, the signature will be invalid anyway and thus verification fails.
 
             assigned_affines.push(assigned_pk);
             participation_bits.push(participation_bit);
@@ -451,7 +449,7 @@ mod tests {
         )
         .unwrap();
 
-        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, 112);
+        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, LIMB_BITS);
 
         let timer = start_timer!(|| "sync_step mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
