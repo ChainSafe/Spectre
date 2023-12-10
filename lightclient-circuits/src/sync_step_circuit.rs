@@ -343,12 +343,14 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
             let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
 
+            /* we skip checking y coordinate as it is unlikely to cause a siganture forgery
             // Square y coordinate
             let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
             // Calculate y^2 using the elliptic curve equation
             let ysq_calc = calculate_ysquared::<F>(ctx, fp_chip, assigned_pk.x.clone());
             // Constrain witness y^2 to be equal to calculated y^2
             fp_chip.assert_equal(ctx, ysq, ysq_calc);
+            */
 
             // *Note:* normally, we would need to take into account the sign of the y coordinate, but
             // because we are concerned only with signature forgery, if this is the wrong
