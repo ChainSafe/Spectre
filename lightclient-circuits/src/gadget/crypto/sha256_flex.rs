@@ -180,8 +180,10 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 
 impl<'a, F: Field> Sha256Chip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
+        let lookup_bits = if range.lookup_bits() > 8 { 16 } else { 8 };
+
         Self {
-            spread: SpreadChip::new(range),
+            spread: SpreadChip::new(range, lookup_bits),
         }
     }
 }

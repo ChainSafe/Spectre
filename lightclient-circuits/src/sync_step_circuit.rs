@@ -1,8 +1,8 @@
 use crate::{
     gadget::{
         crypto::{
-            calculate_ysquared, G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip,
-            ShaCircuitBuilder, ShaFlexGateManager,
+            G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip, ShaCircuitBuilder,
+            ShaFlexGateManager,
         },
         to_bytes_le,
     },
@@ -102,7 +102,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let attested_header = ssz_merkleize_chunks(
+        let attested_header_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
             [
@@ -137,7 +137,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         let signing_root = sha256_chip.digest(
             builder,
-            HashInput::TwoToOne(attested_header.into(), args.domain.to_vec().into_witness()),
+            HashInput::TwoToOne(
+                attested_header_root.into(),
+                args.domain.to_vec().into_witness(),
+            ),
         )?;
 
         let signature =
@@ -177,7 +180,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         // Public Input Commitment
         let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
-
         let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
 
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
@@ -386,7 +388,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let mut builder = Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
             .use_k(k as usize)
             .use_instance_columns(1);
-        let range = builder.range_chip(8);
+        let range = builder.range_chip(k as usize - 1);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;

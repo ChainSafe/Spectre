@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use eth_types::*;
 use halo2_base::{
-    gates::circuit::CircuitBuilderStage,
+    gates::circuit::{CircuitBuilderStage, BaseCircuitParams},
     halo2_proofs::{
         circuit::{Layouter, Region},
         plonk::{ConstraintSystem, Error},
@@ -12,7 +12,7 @@ use halo2_base::{
 };
 
 pub trait GateBuilderConfig<F: Field>: Clone + Sized {
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self;
+    fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self;
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error>;
 
