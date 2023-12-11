@@ -163,18 +163,13 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     where
         [(); S::SYNC_COMMITTEE_SIZE]:,
     {
-        let pubkeys_x = args
-            .pubkeys_compressed
-            .iter()
-            .cloned()
-            .map(|mut bytes| {
-                bytes[0] &= 0b00011111;
-                bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
-                    .expect("bad bls12_381::Fq encoding")
-            });
+        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes[0] &= 0b00011111;
+            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+                .expect("bad bls12_381::Fq encoding")
+        });
 
-        let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits);
+        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits);
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -319,7 +314,7 @@ mod tests {
         )
         .unwrap();
 
-        let instance = CommitteeUpdateCircuit::<Testnet, Fr>::instance(&witness, LIMB_BITS);
+        let instance = CommitteeUpdateCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
 
         let timer = start_timer!(|| "committee_update mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();

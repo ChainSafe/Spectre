@@ -184,7 +184,6 @@ pub(crate) async fn gen_evm_proof_sync_step_handler(
     })
 }
 
-
 fn gen_committee_update_snark<S: eth_types::Spec>(
     config_path: PathBuf,
     pk_path: PathBuf,

@@ -32,7 +32,8 @@ where
         let poseidon_commitment = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
         );
-        let sync_committee_poseidon = ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
+        let sync_committee_poseidon =
+            ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
 
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -91,7 +92,8 @@ mod tests {
         let (_, witness) = read_test_files_and_gen_witness(&path);
         let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
 
-        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
+        let instance =
+            CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
         let finalized_block_root = witness
             .finalized_header
             .clone()

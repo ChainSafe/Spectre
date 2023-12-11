@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use eth_types::*;
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, BaseCircuitParams},
+    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
     halo2_proofs::{
         circuit::{Layouter, Region},
         plonk::{ConstraintSystem, Error},
