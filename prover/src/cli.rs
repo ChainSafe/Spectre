@@ -83,10 +83,11 @@ where
             let gen_dummy_snark = |k: u32| {
                 let params = gen_srs(k);
 
-                let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
+                let pk = CommitteeUpdateCircuit::<S, Fr>::read_or_create_pk(
                     &params,
                     &pk_path,
                     &cfg_path,
+                    true,
                     &Default::default(),
                 );
 
@@ -126,6 +127,79 @@ where
                     let timer = start_timer!(|| "gen committee update verifier witness");
                     let dummy_snark =
                         gen_dummy_snark(CommitteeUpdateCircuit::<S, Fr>::get_degree(&cfg_path))?;
+                    end_timer!(timer);
+
+                    let verifier_cfg_path =
+                        get_config_path(&verifier_pk_path, &base_args.config_dir);
+                    let verifier_params =
+                        gen_srs(AggregationCircuit::get_degree(&verifier_cfg_path));
+
+                    gen_evm_verifier::<AggregationCircuit>(
+                        &verifier_params,
+                        &verifier_pk_path,
+                        &verifier_cfg_path,
+                        solidity_out,
+                        estimate_gas,
+                        vec![dummy_snark],
+                    )
+                }
+            }
+        }
+        ProofCmd::SyncStepCompressed {
+            operation,
+            k,
+            pk_path,
+            verifier_k,
+            verifier_pk_path,
+        } => {
+            let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
+
+            let gen_dummy_snark = |k: u32| {
+                let params = gen_srs(k);
+
+                let pk = StepCircuit::<S, Fr>::read_or_create_pk(
+                    &params,
+                    &pk_path,
+                    &cfg_path,
+                    true,
+                    &Default::default(),
+                );
+
+                StepCircuit::<S, Fr>::gen_snark_shplonk(
+                    &params,
+                    &pk,
+                    &cfg_path,
+                    None::<String>,
+                    &Default::default(),
+                )
+                .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))
+            };
+
+            match operation {
+                OperationCmd::Setup => {
+                    let timer = start_timer!(|| "gen step verifier witness");
+                    let dummy_snark = gen_dummy_snark(k)?;
+                    end_timer!(timer);
+
+                    let verifier_params = gen_srs(verifier_k);
+                    let verifier_cfg_path =
+                        get_config_path(&verifier_pk_path, &base_args.config_dir);
+
+                    AggregationCircuit::create_pk(
+                        &verifier_params,
+                        &verifier_pk_path,
+                        verifier_cfg_path,
+                        &vec![dummy_snark],
+                    );
+
+                    Ok(())
+                }
+                OperationCmd::GenVerifier {
+                    solidity_out,
+                    estimate_gas,
+                } => {
+                    let timer = start_timer!(|| "gen step verifier witness");
+                    let dummy_snark = gen_dummy_snark(StepCircuit::<S, Fr>::get_degree(&cfg_path))?;
                     end_timer!(timer);
 
                     let verifier_cfg_path =
