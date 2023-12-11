@@ -113,7 +113,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         compressed_encodings
             .into_iter()
-            .map(|assigned_bytes| {
+            .map(|mut assigned_bytes| {
+                // following logic is for little endian decoding but input bytes are in BE, therefore we reverse them.
+                assigned_bytes.reverse();
                 // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
                 assert_eq!(assigned_bytes.len(), 48);
                 // masked byte from compressed representation
@@ -163,13 +165,19 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     where
         [(); S::SYNC_COMMITTEE_SIZE]:,
     {
-        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
-            bytes[0] &= 0b00011111;
-            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap()).unwrap()
-        });
+        let pubkeys_x = args
+            .pubkeys_compressed
+            .iter()
+            .cloned()
+            .map(|mut bytes| {
+                bytes[0] &= 0b00011111;
+                bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+                    .expect("bad bls12_381::Fq encoding")
+            })
+            .collect_vec();
 
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits).unwrap();
+            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x.into_iter(), limb_bits).unwrap();
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -314,8 +322,10 @@ mod tests {
         )
         .unwrap();
 
+        let instance = CommitteeUpdateCircuit::<Testnet, Fr>::instance(&witness, LIMB_BITS);
+
         let timer = start_timer!(|| "committee_update mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }
