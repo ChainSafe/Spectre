@@ -13,7 +13,6 @@ use lightclient_circuits::{
 };
 use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -21,57 +20,23 @@ pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
     AggregatedEvmProofResult, EvmProofResult, GenProofRotationWithWitnessParams,
-    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS,
-    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
+    GenProofStepWithWitnessParams, RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
 };
 
-fn gen_committee_update_snark<S: eth_types::Spec>(
-    config_path: PathBuf,
-    pk_path: PathBuf,
-    witness: <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness,
-) -> eyre::Result<Snark> {
-    let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(&config_path));
-
-    let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
-        &params,
-        pk_path,
-        &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
-    );
-
-    Ok(CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
-        &params,
-        &app_pk,
-        config_path,
-        None::<PathBuf>,
-        &witness,
-    )?)
+pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
+    JsonRpcServer::new()
+        .with_method(
+            RPC_EVM_PROOF_ROTATION_CIRCUIT,
+            gen_evm_proof_committee_update_handler,
+        )
+        .with_method(
+            RPC_EVM_PROOF_STEP_CIRCUIT,
+            gen_evm_proof_sync_step_handler,
+        )
+        .finish_unwrapped()
 }
 
-fn gen_evm_proof<C: AppCircuit>(
-    pk_path: impl AsRef<Path>,
-    config_path: PathBuf,
-    witness: C::Witness,
-    yul_path_if_verify: Option<impl AsRef<Path>>,
-) -> eyre::Result<(Vec<u8>, Vec<Vec<Fr>>)> {
-    let k = C::get_degree(&config_path);
-    let params = gen_srs(k);
-
-    let pk = C::read_pk(&params, pk_path, &witness);
-
-    let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
-        .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
-
-    println!("Proof size: {}", proof.len());
-    if let Some(deployment_code_path) = yul_path_if_verify {
-        let deployment_code =
-            C::gen_evm_verifier_shplonk(&params, &pk, Some(deployment_code_path), &witness)?;
-        println!("Deployment code size: {}", deployment_code.len());
-        evm_verify(deployment_code, instances.clone(), proof.clone());
-    }
-    Ok((proof, instances))
-}
-
-pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
+pub(crate) async fn gen_evm_proof_committee_update_handler(
     Params(params): Params<GenProofRotationWithWitnessParams>,
 ) -> Result<AggregatedEvmProofResult, JsonRpcError> {
     let GenProofRotationWithWitnessParams {
@@ -158,16 +123,10 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
         public_inputs,
     };
 
-    // Write proof to file for debugging
-    std::fs::File::create("proof.json")
-        .unwrap()
-        .write_all(serde_json::to_string(&res).unwrap().as_bytes())
-        .unwrap();
-
     Ok(res)
 }
 
-pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
+pub(crate) async fn gen_evm_proof_sync_step_handler(
     Params(params): Params<GenProofStepWithWitnessParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
     let GenProofStepWithWitnessParams {
@@ -227,17 +186,49 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     })
 }
 
-pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
-    JsonRpcServer::new()
-        .with_method(
-            EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS,
-            gen_evm_proof_rotation_circuit_with_witness_handler,
-        )
-        .with_method(
-            EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
-            gen_evm_proof_step_circuit_with_witness_handler,
-        )
-        .finish_unwrapped()
+
+fn gen_committee_update_snark<S: eth_types::Spec>(
+    config_path: PathBuf,
+    pk_path: PathBuf,
+    witness: <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness,
+) -> eyre::Result<Snark> {
+    let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(&config_path));
+
+    let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
+        &params,
+        pk_path,
+        &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
+    );
+
+    Ok(CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+        &params,
+        &app_pk,
+        config_path,
+        None::<PathBuf>,
+        &witness,
+    )?)
+}
+
+fn gen_evm_proof<C: AppCircuit>(
+    pk_path: impl AsRef<Path>,
+    config_path: PathBuf,
+    witness: C::Witness,
+    yul_path_if_verify: Option<impl AsRef<Path>>,
+) -> eyre::Result<(Vec<u8>, Vec<Vec<Fr>>)> {
+    let k = C::get_degree(&config_path);
+    let params = gen_srs(k);
+
+    let pk = C::read_pk(&params, pk_path, &witness);
+
+    let (proof, instances) = C::gen_evm_proof_shplonk(&params, &pk, &config_path, None, &witness)
+        .map_err(|e| eyre::eyre!("Failed to generate calldata: {}", e))?;
+
+    if let Some(deployment_code_path) = yul_path_if_verify {
+        let deployment_code =
+            C::gen_evm_verifier_shplonk(&params, &pk, Some(deployment_code_path), &witness)?;
+        evm_verify(deployment_code, instances.clone(), proof.clone());
+    }
+    Ok((proof, instances))
 }
 
 pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
