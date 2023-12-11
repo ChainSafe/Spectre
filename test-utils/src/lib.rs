@@ -30,7 +30,7 @@ pub(crate) const U256_BYTE_COUNT: usize = 32;
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
     path: &Path,
-) -> anyhow::Result<(usize, [u8; 32])> {
+) -> anyhow::Result<(usize, ethers::prelude::U256)> {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
     let pubkeys_uncompressed = bootstrap
@@ -39,8 +39,9 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
         .iter()
         .map(|pk| pk.decompressed_bytes())
         .collect_vec();
+    let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed);
     let committee_poseidon =
-        poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed)?;
+        ethers::prelude::U256::from_little_endian(&committee_poseidon.to_bytes());
     let sync_period = (bootstrap.header.beacon.slot as usize) / EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
     Ok((sync_period, committee_poseidon))
 }

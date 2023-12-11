@@ -64,6 +64,3 @@ pub const EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS: &str =
     "genEvmProofAndInstancesStepSyncCircuitWithWitness";
 pub const EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS: &str =
     "genEvmProofAndInstancesRotationCircuitWithWitness";
-
-pub const SYNC_COMMITTEE_POSEIDON_COMPRESSED: &str = "syncCommitteePoseidonCompressed";
-pub const SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED: &str = "syncCommitteePoseidonUncompressed";

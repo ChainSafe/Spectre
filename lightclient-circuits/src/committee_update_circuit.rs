@@ -155,7 +155,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         ssz_merkleize_chunks(builder, hasher, pubkeys_hashes)
     }
 
-    pub fn instance(
+    pub fn get_instances(
         args: &witness::CommitteeRotationArgs<S>,
         limb_bits: usize,
     ) -> Vec<Vec<bn256::Fr>>
@@ -169,7 +169,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         });
 
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits).unwrap();
+            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits);
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed

@@ -29,10 +29,11 @@ where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
     fn from(args: CommitteeRotationArgs<Spec>) -> Self {
-        let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
+        let poseidon_commitment = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
-        )
-        .unwrap();
+        );
+        let sync_committee_poseidon = ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
+
 
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -52,7 +53,7 @@ where
 
         RotateInput {
             sync_committee_ssz,
-            sync_committee_poseidon: poseidon_commitment_le,
+            sync_committee_poseidon,
         }
     }
 }
@@ -65,7 +66,7 @@ async fn test_rotate_public_input_evm_equivalence(
     path: PathBuf,
 ) -> anyhow::Result<()> {
     let (_, witness) = read_test_files_and_gen_witness(&path);
-    let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
+    let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
     let finalized_block_root = witness
         .finalized_header
         .clone()

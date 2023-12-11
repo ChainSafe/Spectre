@@ -6,10 +6,9 @@ use url::Url;
 
 use crate::rpc_api::{
     EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
-    GenProofStepWithWitnessParams, SyncCommitteePoseidonParams, SyncCommitteePoseidonResult,
-    EVM_PROOF_ROTATION_CIRCUIT, EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, SYNC_COMMITTEE_POSEIDON_COMPRESSED,
-    SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED,
+    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT,
+    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
+    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
 };
 
 /// Error object in a response
@@ -78,21 +77,6 @@ impl Client {
         params: GenProofStepWithWitnessParams,
     ) -> Result<EvmProofResult, Error> {
         self.call(EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, params).await
-    }
-
-    pub async fn sync_committee_poseidon_compressed(
-        &self,
-        params: SyncCommitteePoseidonParams,
-    ) -> Result<SyncCommitteePoseidonResult, Error> {
-        self.call(SYNC_COMMITTEE_POSEIDON_COMPRESSED, params).await
-    }
-
-    pub async fn sync_committee_poseidon_uncompressed(
-        &self,
-        params: SyncCommitteePoseidonParams,
-    ) -> Result<SyncCommitteePoseidonResult, Error> {
-        self.call(SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED, params)
-            .await
     }
 
     /// Utility method for sending RPC requests over HTTP

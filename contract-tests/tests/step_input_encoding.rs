@@ -55,20 +55,25 @@ async fn test_step_instance_commitment_evm_equivalence(
     path: PathBuf,
 ) -> anyhow::Result<()> {
     let (witness, _) = read_test_files_and_gen_witness(&path);
-    let instance = StepCircuit::<Minimal, bn256::Fr>::instance_commitment(&witness, LIMB_BITS);
-    let poseidon_commitment_le =
-        poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed)?;
+    let instance = StepCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
+    let poseidon_commitment =
+        poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed);
 
     let (_anvil_instance, ethclient) = make_client();
     let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
 
     let result = contract
-        .to_input_commitment(SyncStepInput::from(witness), poseidon_commitment_le)
+        .to_input_commitment(SyncStepInput::from(witness))
         .call()
         .await?;
-    let mut result_bytes = [0_u8; 32];
+    let mut result_bytes = [0u8; 32];
     result.to_little_endian(&mut result_bytes);
 
-    assert_eq!(bn256::Fr::from_bytes(&result_bytes).unwrap(), instance);
+    assert_eq!(
+        bn256::Fr::from_bytes(&result_bytes).unwrap(),
+        instance[0][0]
+    );
+    assert_eq!(poseidon_commitment, instance[0][1]);
+
     Ok(())
 }
