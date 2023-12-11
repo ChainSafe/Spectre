@@ -23,22 +23,21 @@ pub struct BaseArgs {
 #[derive(Clone, clap::Parser)]
 #[allow(clippy::large_enum_variant)]
 pub enum BaseCmd {
-    Rpc(RpcOptions),
-    Circuit(CircuitOptions),
-}
-#[derive(Clone, clap::Parser)]
-pub struct RpcOptions {
-    #[clap(long, short, default_value = "3000")]
-    pub port: String,
-}
+    Rpc {
+        #[clap(long, short, default_value = "3000")]
+        port: String,
+    },
+    Circuit {
+        #[command(subcommand)]
+        proof: ProofCmd,
 
-#[derive(Clone, clap::Parser)]
-pub struct CircuitOptions {
-    #[command(subcommand)]
-    pub proof: ProofCmd,
-
-    #[clap(long, short, default_value = "mainnet")]
-    pub spec: Spec,
+        #[clap(long, short, default_value = "mainnet")]
+        spec: Spec,
+    },
+    Utils {
+        #[command(subcommand)]
+        method: UtilsCmd,
+    },
 }
 
 #[derive(Clone, clap::Subcommand)]
@@ -92,4 +91,12 @@ pub enum Spec {
     Testnet,
     #[strum(serialize = "mainnet")]
     Mainnet,
+}
+
+#[derive(Clone, clap::Subcommand)]
+pub enum UtilsCmd {
+    CommitteePoseidon {
+        #[clap(long, short)]
+        beacon_api: String,
+    },
 }

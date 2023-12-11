@@ -2,6 +2,9 @@ use crate::args;
 use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 
+pub const RPC_EVM_PROOF_STEP_CIRCUIT: &str = "genEvmProof_SyncStep";
+pub const RPC_EVM_PROOF_ROTATION_CIRCUIT: &str = "genEvmProof_CommitteeUpdate";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofRotationParams {
     pub spec: args::Spec,
@@ -38,8 +41,16 @@ pub struct GenProofRotationWithWitnessParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvmProofResult {
+pub struct SyncStepEvmProofResult {
     pub proof: Vec<u8>,
+    pub public_inputs: Vec<U256>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitteeUpdateEvmProofResult {
+    pub proof: Vec<u8>,
+    pub accumulator: [U256; 12],
+    pub committee_poseidon: U256,
     pub public_inputs: Vec<U256>,
 }
 
@@ -56,14 +67,3 @@ pub struct SyncCommitteePoseidonResult {
 fn default_beacon_api() -> String {
     String::from("http://127.0.0.1:5052")
 }
-
-pub const EVM_PROOF_STEP_CIRCUIT: &str = "genEvmProofAndInstancesStepSyncCircuit";
-pub const EVM_PROOF_ROTATION_CIRCUIT: &str = "genEvmProofAndInstancesRotationCircuit";
-
-pub const EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS: &str =
-    "genEvmProofAndInstancesStepSyncCircuitWithWitness";
-pub const EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS: &str =
-    "genEvmProofAndInstancesRotationCircuitWithWitness";
-
-pub const SYNC_COMMITTEE_POSEIDON_COMPRESSED: &str = "syncCommitteePoseidonCompressed";
-pub const SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED: &str = "syncCommitteePoseidonUncompressed";

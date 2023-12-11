@@ -1,6 +1,5 @@
 use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
-
 use ark_std::{end_timer, start_timer};
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
@@ -15,33 +14,12 @@ use snark_verifier::loader::halo2::halo2_ecc::halo2_base::halo2_proofs::poly::kz
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use snark_verifier_sdk::CircuitExt;
 use std::path::PathBuf;
-use std::{fs::File, future::Future, io::Write, path::Path};
+use std::{fs::File, io::Write, path::Path};
 
 #[cfg(feature = "experimental")]
 use halo2_solidity_verifier_new::{
     compile_solidity, encode_calldata, BatchOpenScheme, Evm, SolidityGenerator,
 };
-
-ethers::contract::abigen!(
-    SnarkVerifierSol,
-    r#"[
-        function verify(uint256[1] calldata pubInputs,bytes calldata proof) public view returns (bool)
-    ]"#,
-);
-
-pub trait FetchFn<Arg>: FnOnce(Arg) -> <Self as FetchFn<Arg>>::Fut {
-    type Fut: Future<Output = <Self as FetchFn<Arg>>::Output>;
-    type Output;
-}
-
-impl<Arg, F, Fut> FetchFn<Arg> for F
-where
-    F: FnOnce(Arg) -> Fut,
-    Fut: Future,
-{
-    type Fut = Fut;
-    type Output = Fut::Output;
-}
 
 pub(crate) async fn spec_app<S: eth_types::Spec>(
     proof: ProofCmd,
