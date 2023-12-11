@@ -9,7 +9,6 @@ path = "src/main.rs"
 
 [dependencies]
 # cli
-contracts = { workspace = true }
 clap = { version = "4.2", features = ["derive"] }
 strum = { version = "=0.25", features = ["derive"] }
 cli-batteries = "0.5"
