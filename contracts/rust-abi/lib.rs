@@ -1,6 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
-use ethers::contract::abigen;
+use ethers::{contract::abigen, types::U256};
 use itertools::Itertools;
 use lightclient_circuits::{
     poseidon::poseidon_committee_commitment_from_compressed,
@@ -17,6 +17,8 @@ abigen!(
     "./out/committee_update_verifier.sol/Verifier.json";
     StepMockVerifier,
     "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json";
+    SyncStepCompressedMockVerifier,
+    "./out/SyncStepMockVerifier.sol/SyncStepCompressedMockVerifier.json";
     CommitteeUpdateMockVerifier,
     "./out/CommitteeUpdateMockVerifier.sol/CommitteeUpdateMockVerifier.json";
     RotateExternal,
@@ -51,7 +53,14 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             participation,
             finalized_header_root,
             execution_payload_root,
+            ..Default::default()
         }
+    }
+}
+
+impl SyncStepInput {
+    pub fn set_accumulator(&mut self, accumulator: [U256; 12]) {
+        self.accumulator = accumulator;
     }
 }
 
@@ -61,10 +70,10 @@ where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
     fn from(args: CommitteeRotationArgs<Spec>) -> Self {
-        let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
+        let sync_committee_poseidon = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
-        )
-        .unwrap();
+        );
+        let sync_committee_poseidon = U256::from_little_endian(&sync_committee_poseidon.to_bytes());
 
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -84,17 +93,14 @@ where
 
         RotateInput {
             sync_committee_ssz,
-            sync_committee_poseidon: poseidon_commitment_le,
+            sync_committee_poseidon,
+            ..Default::default()
         }
     }
 }
 
-// pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> [u8; 32] {
-//     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
-//         bytes[0] &= 0b00011111;
-//         bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
-//             .expect("bad bls12_381::Fq encoding")
-//     });
-//     let poseidon_commitment = fq_array_poseidon_native::<Fr>(pubkeys_x, LIMB_BITS).unwrap();
-//     poseidon_commitment.to_bytes()
-// }
+impl RotateInput {
+    pub fn set_accumulator(&mut self, accumulator: [U256; 12]) {
+        self.accumulator = accumulator;
+    }
+}

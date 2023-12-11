@@ -40,7 +40,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     let prover = MockProver::<bn256::Fr>::run(
         K_ROTATION,
         &rotation_circuit,
-        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&rotation_witness, LIMB_BITS),
+        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&rotation_witness, LIMB_BITS),
     )
     .unwrap();
     prover.assert_satisfied_par();
@@ -54,12 +54,10 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     )
     .unwrap();
 
-    let sync_pi_commit =
-        StepCircuit::<Minimal, bn256::Fr>::instance_commitment(&sync_witness, LIMB_BITS);
+    let instance = StepCircuit::<Minimal, bn256::Fr>::get_instances(&sync_witness, LIMB_BITS);
 
     let timer = start_timer!(|| "sync_step mock prover run");
-    let prover =
-        MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, vec![vec![sync_pi_commit]]).unwrap();
+    let prover = MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, instance).unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
 }

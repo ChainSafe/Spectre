@@ -60,10 +60,7 @@ pub fn fq_array_poseidon<'a, F: Field>(
     Ok(current_poseidon_hash.unwrap())
 }
 
-pub fn fq_array_poseidon_native<F: Field>(
-    elems: impl Iterator<Item = Fq>,
-    limb_bits: usize,
-) -> Result<F, Error> {
+pub fn fq_array_poseidon_native<F: Field>(elems: impl Iterator<Item = Fq>, limb_bits: usize) -> F {
     let limbs = elems
         // Converts Fq elements to Fr limbs.
         .flat_map(|x| {
@@ -83,12 +80,12 @@ pub fn fq_array_poseidon_native<F: Field>(
         }
         let _ = current_poseidon_hash.insert(poseidon.squeeze());
     }
-    Ok(current_poseidon_hash.unwrap())
+    current_poseidon_hash.unwrap()
 }
 
 pub fn poseidon_committee_commitment_from_uncompressed(
     pubkeys_uncompressed: &[Vec<u8>],
-) -> Result<[u8; 32], Error> {
+) -> bn256::Fr {
     let pubkey_affines = pubkeys_uncompressed
         .iter()
         .cloned()
@@ -99,20 +96,15 @@ pub fn poseidon_committee_commitment_from_uncompressed(
             .unwrap()
         })
         .collect_vec();
-    let poseidon_commitment =
-        fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
-            .unwrap();
-    Ok(poseidon_commitment.to_bytes())
+
+    fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
 }
 
-pub fn poseidon_committee_commitment_from_compressed(
-    pubkeys_compressed: &[Vec<u8>],
-) -> Result<[u8; 32], Error> {
+pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> bn256::Fr {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
         bytes[0] &= 0b00011111;
         bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
             .expect("bad bls12_381::Fq encoding")
     });
-    let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS).unwrap();
-    Ok(poseidon_commitment.to_bytes())
+    fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS)
 }
