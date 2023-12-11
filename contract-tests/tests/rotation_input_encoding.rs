@@ -35,6 +35,7 @@ where
         let sync_committee_poseidon =
             ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
 
+
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
             .iter()
