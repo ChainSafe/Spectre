@@ -68,7 +68,7 @@ contract Spectre {
     /// @param rotateProof The proof for the rotation
     /// @param stepInput The input to the sync step.
     /// @param stepProof The proof for the sync step
-    function rotate(RotateLib.RotateInput calldata rotateInput, bytes calldata rotateProof, SyncStepLib.SyncStepInput calldata stepInput, bytes calldata stepProof) external {
+    function rotate(RotateLib.RotateInput calldata rotateInput, bytes calldata rotateProof, SyncStepLib.SyncStepInput calldata stepInput, bytes calldata stepProof, uint256[12] memory accumulator) external {
         // *step phase*
         // This allows trusting that the current sync committee has signed off on the finalizedHeaderRoot which is used as the base of the SSZ proof
         // that checks the new committee is in the beacon state 'next_sync_committee' field. It also allows trusting the finalizedSlot which is
@@ -85,7 +85,7 @@ contract Spectre {
         // that there exists an SSZ proof that can verify this SSZ commitment to the committee is in the state
         uint256 currentPeriod = getSyncCommitteePeriod(stepInput.finalizedSlot);
         uint256 nextPeriod = currentPeriod + 1;
-        uint256[65] memory verifierInput = rotateInput.toPublicInputs(stepInput.finalizedHeaderRoot);
+        uint256[77] memory verifierInput = rotateInput.toPublicInputs(stepInput.finalizedHeaderRoot, accumulator);
         bool rotateSuccess = committeeUpdateVerifier.verify(verifierInput, rotateProof);
         if (!rotateSuccess) {
             revert("Rotation proof verification failed");

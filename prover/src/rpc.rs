@@ -75,7 +75,7 @@ fn gen_evm_proof<C: AppCircuit>(
 
 pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     Params(params): Params<GenProofRotationParams>,
-) -> Result<EvmProofResult, JsonRpcError> {
+) -> Result<AggregatedEvmProofResult, JsonRpcError> {
     let GenProofRotationParams { spec, beacon_api } = params;
 
     // TODO: use config/build paths from CLI flags
@@ -140,17 +140,20 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
     let public_inputs = instances[0]
         .iter()
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect();
+        .collect_vec();
+    let mut accumulator = [U256::zero(); 12];
+    accumulator.clone_from_slice(&public_inputs[..12]);
 
-    Ok(EvmProofResult {
+    Ok(AggregatedEvmProofResult {
         proof,
+        accumulator,
         public_inputs,
     })
 }
 
 pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     Params(params): Params<GenProofRotationWithWitnessParams>,
-) -> Result<EvmProofResult, JsonRpcError> {
+) -> Result<AggregatedEvmProofResult, JsonRpcError> {
     let GenProofRotationWithWitnessParams {
         spec,
         light_client_update,
@@ -219,9 +222,13 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     let public_inputs = instances[0]
         .iter()
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect();
-    Ok(EvmProofResult {
+        .collect_vec();
+    let mut accumulator = [U256::zero(); 12];
+    accumulator.clone_from_slice(&public_inputs[..12]);
+
+    Ok(AggregatedEvmProofResult {
         proof,
+        accumulator,
         public_inputs,
     })
 }
