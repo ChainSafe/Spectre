@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import {SyncStepLib} from "./SyncStepLib.sol";
 import {RotateLib} from "./RotateLib.sol";
-
 import {SyncStepCompressedVerifier} from "./interfaces/SyncStepVerifier.sol";
 import {CommitteeUpdateVerifier} from "./interfaces/CommitteeUpdateVerifier.sol";
 
