@@ -91,7 +91,7 @@ mod tests {
         let (_, witness) = read_test_files_and_gen_witness(&path);
         let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
 
-        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
+        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
         let finalized_block_root = witness
             .finalized_header
             .clone()
