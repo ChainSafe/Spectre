@@ -5,8 +5,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
 
 use crate::rpc_api::{
-    EvmProofResult, GenProofRotationParams, GenProofStepParams, RPC_EVM_PROOF_ROTATION_CIRCUIT,
-    RPC_EVM_PROOF_STEP_CIRCUIT,
+    CommitteeUpdateEvmProofResult, GenProofRotationParams, GenProofStepParams,
+    SyncStepEvmProofResult, RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
 };
 
 /// Error object in a response
@@ -48,7 +48,7 @@ impl Client {
     pub async fn gen_evm_proof_committee_update(
         &self,
         params: GenProofRotationParams,
-    ) -> Result<EvmProofResult, Error> {
+    ) -> Result<CommitteeUpdateEvmProofResult, Error> {
         self.call(RPC_EVM_PROOF_ROTATION_CIRCUIT, params).await
     }
 
@@ -56,7 +56,7 @@ impl Client {
     pub async fn gen_evm_proof_step(
         &self,
         params: GenProofStepParams,
-    ) -> Result<EvmProofResult, Error> {
+    ) -> Result<SyncStepEvmProofResult, Error> {
         self.call(RPC_EVM_PROOF_STEP_CIRCUIT, params).await
     }
 

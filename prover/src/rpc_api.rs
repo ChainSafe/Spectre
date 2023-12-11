@@ -41,13 +41,13 @@ pub struct GenProofRotationWithWitnessParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvmProofResult {
+pub struct SyncStepEvmProofResult {
     pub proof: Vec<u8>,
     pub public_inputs: Vec<U256>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AggregatedEvmProofResult {
+pub struct CommitteeUpdateEvmProofResult {
     pub proof: Vec<u8>,
     pub accumulator: [U256; 12],
     pub committee_poseidon: U256,

@@ -19,8 +19,9 @@ use std::sync::Arc;
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
-    AggregatedEvmProofResult, EvmProofResult, GenProofRotationWithWitnessParams,
-    GenProofStepWithWitnessParams, RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
+    CommitteeUpdateEvmProofResult, GenProofRotationWithWitnessParams,
+    GenProofStepWithWitnessParams, SyncStepEvmProofResult, RPC_EVM_PROOF_ROTATION_CIRCUIT,
+    RPC_EVM_PROOF_STEP_CIRCUIT,
 };
 
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
@@ -29,16 +30,13 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
             RPC_EVM_PROOF_ROTATION_CIRCUIT,
             gen_evm_proof_committee_update_handler,
         )
-        .with_method(
-            RPC_EVM_PROOF_STEP_CIRCUIT,
-            gen_evm_proof_sync_step_handler,
-        )
+        .with_method(RPC_EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_sync_step_handler)
         .finish_unwrapped()
 }
 
 pub(crate) async fn gen_evm_proof_committee_update_handler(
     Params(params): Params<GenProofRotationWithWitnessParams>,
-) -> Result<AggregatedEvmProofResult, JsonRpcError> {
+) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError> {
     let GenProofRotationWithWitnessParams {
         spec,
         light_client_update,
@@ -116,7 +114,7 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
 
     let committee_poseidon = public_inputs[0];
 
-    let res = AggregatedEvmProofResult {
+    let res = CommitteeUpdateEvmProofResult {
         proof,
         accumulator,
         committee_poseidon,
@@ -128,7 +126,7 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
 
 pub(crate) async fn gen_evm_proof_sync_step_handler(
     Params(params): Params<GenProofStepWithWitnessParams>,
-) -> Result<EvmProofResult, JsonRpcError> {
+) -> Result<SyncStepEvmProofResult, JsonRpcError> {
     let GenProofStepWithWitnessParams {
         spec,
         light_client_finality_update,
@@ -180,12 +178,11 @@ pub(crate) async fn gen_evm_proof_sync_step_handler(
         .map(|pi| U256::from_little_endian(&pi.to_bytes()))
         .collect();
 
-    Ok(EvmProofResult {
+    Ok(SyncStepEvmProofResult {
         proof,
         public_inputs,
     })
 }
-
 
 fn gen_committee_update_snark<S: eth_types::Spec>(
     config_path: PathBuf,
