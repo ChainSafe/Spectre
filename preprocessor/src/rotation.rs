@@ -4,7 +4,7 @@ use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
 use itertools::Itertools;
-use lightclient_circuits::witness::CommitteeRotationArgs;
+use lightclient_circuits::witness::CommitteeUpdateArgs;
 use log::debug;
 use ssz_rs::Merkleized;
 use tokio::fs;
@@ -13,7 +13,7 @@ use crate::{get_block_header, get_light_client_update_at_period};
 
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
-) -> eyre::Result<CommitteeRotationArgs<S>>
+) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -45,7 +45,7 @@ pub async fn rotation_args_from_update<S: Spec>(
         { S::BYTES_PER_LOGS_BLOOM },
         { S::MAX_EXTRA_DATA_BYTES },
     >,
-) -> eyre::Result<CommitteeRotationArgs<S>>
+) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -87,7 +87,7 @@ where
         "Execution payload merkle proof verification failed"
     );
 
-    let args = CommitteeRotationArgs::<S> {
+    let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         attested_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
@@ -99,7 +99,7 @@ where
     Ok(args)
 }
 
-pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<CommitteeRotationArgs<S>> {
+pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<CommitteeUpdateArgs<S>> {
     #[derive(serde::Deserialize)]
     struct ArgsJson {
         finalized_header: BeaconBlockHeader,
@@ -118,7 +118,7 @@ pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<Committee
     )
     .map_err(|e| eyre::eyre!("Error decoding witness {}", e))?;
 
-    Ok(CommitteeRotationArgs::<S> {
+    Ok(CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         attested_header: finalized_header,
         sync_committee_branch: committee_root_branch,
@@ -171,7 +171,7 @@ mod tests {
             "../build/sync_step_21.pkey",
             CONFIG_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
         let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();

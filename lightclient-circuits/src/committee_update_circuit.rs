@@ -36,7 +36,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
-        args: &witness::CommitteeRotationArgs<S>,
+        args: &witness::CommitteeUpdateArgs<S>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let range = fp_chip.range();
 
@@ -157,7 +157,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     }
 
     pub fn instance(
-        args: &witness::CommitteeRotationArgs<S>,
+        args: &witness::CommitteeUpdateArgs<S>,
         limb_bits: usize,
     ) -> Vec<Vec<bn256::Fr>>
     where
@@ -200,12 +200,12 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
 impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     type Pinning = Eth2ConfigPinning;
-    type Witness = witness::CommitteeRotationArgs<S>;
+    type Witness = witness::CommitteeUpdateArgs<S>;
 
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        witness: &witness::CommitteeRotationArgs<S>,
+        witness: &witness::CommitteeUpdateArgs<S>,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
@@ -244,7 +244,7 @@ mod tests {
 
     use crate::{
         aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
-        witness::CommitteeRotationArgs,
+        witness::CommitteeUpdateArgs,
     };
 
     use super::*;
@@ -263,7 +263,7 @@ mod tests {
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
     use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
 
-    fn load_circuit_args() -> CommitteeRotationArgs<Testnet> {
+    fn load_circuit_args() -> CommitteeUpdateArgs<Testnet> {
         #[derive(serde::Deserialize)]
         struct ArgsJson {
             finalized_header: BeaconBlockHeader,
@@ -277,7 +277,7 @@ mod tests {
             finalized_header,
         } = serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap();
 
-        CommitteeRotationArgs {
+        CommitteeUpdateArgs {
             pubkeys_compressed,
             _spec: PhantomData,
             attested_header: finalized_header,
@@ -288,7 +288,7 @@ mod tests {
     fn gen_application_snark(
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
-        witness: &CommitteeRotationArgs<Testnet>,
+        witness: &CommitteeUpdateArgs<Testnet>,
         pinning_path: &str,
     ) -> Snark {
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
@@ -333,7 +333,7 @@ mod tests {
             PKEY_PATH,
             PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();
@@ -361,7 +361,7 @@ mod tests {
             APP_PK_PATH,
             APP_PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();

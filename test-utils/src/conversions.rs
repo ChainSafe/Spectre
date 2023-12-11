@@ -1,7 +1,7 @@
 use crate::poseidon_committee_commitment_from_compressed;
 use contracts::{RotateInput, SyncStepInput};
 use itertools::Itertools;
-use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use std::ops::Deref;
 
@@ -33,7 +33,7 @@ pub fn sync_input_from_args<Spec: eth_types::Spec>(args: SyncStepArgs<Spec>) -> 
 }
 
 pub fn rotate_input_from_args<Spec: eth_types::Spec, Fr: eth_types::Field>(
-    args: CommitteeRotationArgs<Spec>,
+    args: CommitteeUpdateArgs<Spec>,
 ) -> RotateInput
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
