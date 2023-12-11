@@ -2,8 +2,11 @@ use crate::util::{CommonGateManager, GateBuilderConfig};
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
-    gates::circuit::{CircuitBuilderStage, BaseCircuitParams},
-    halo2_proofs::{circuit::Region, plonk::{Error, ConstraintSystem}},
+    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
+    halo2_proofs::{
+        circuit::Region,
+        plonk::{ConstraintSystem, Error},
+    },
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
