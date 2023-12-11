@@ -14,7 +14,7 @@ contract Spectre {
     uint256 internal immutable SLOTS_PER_PERIOD;
 
     /// Maps from a sync period to the poseidon commitment for the sync committee.
-    mapping(uint256 => bytes32) public syncCommitteePoseidons;
+    mapping(uint256 => uint256) public syncCommitteePoseidons;
 
     /// Maps from a slot to a beacon block header root.
     mapping(uint256 => bytes32) public blockHeaderRoots;
@@ -32,7 +32,7 @@ contract Spectre {
         address _stepVerifierAddress,
         address _committeeUpdateVerifierAddress,
         uint256 _initialSyncPeriod,
-        bytes32 _initialSyncCommitteePoseidon,
+        uint256 _initialSyncCommitteePoseidon,
         uint256 _slotsPerPeriod
     ) {
         stepVerifier = SyncStepVerifier(_stepVerifierAddress);
@@ -50,9 +50,9 @@ contract Spectre {
         if (syncCommitteePoseidons[currentPeriod] == 0) {
             revert("Sync committee not yet set for this period");
         }
-        uint256 instanceCommitment = input.toInputCommitment(syncCommitteePoseidons[currentPeriod]);
+        uint256 instanceCommitment = input.toInputCommitment();
 
-        bool success = stepVerifier.verify([instanceCommitment], proof);
+        bool success = stepVerifier.verify([instanceCommitment, syncCommitteePoseidons[currentPeriod]], proof);
         if (!success) {
             revert("Proof verification failed");
         }
@@ -74,8 +74,8 @@ contract Spectre {
         // that checks the new committee is in the beacon state 'next_sync_committee' field. It also allows trusting the finalizedSlot which is
         // used to calculate the sync period that the new committee belongs to.
         uint256 attestingPeriod = getSyncCommitteePeriod(stepInput.attestedSlot);
-        uint256 instanceCommitment = stepInput.toInputCommitment(syncCommitteePoseidons[attestingPeriod]);
-        bool stepSuccess = stepVerifier.verify([instanceCommitment], stepProof);
+        uint256 instanceCommitment = stepInput.toInputCommitment();
+        bool stepSuccess = stepVerifier.verify([instanceCommitment, syncCommitteePoseidons[attestingPeriod]], stepProof);
         if (!stepSuccess) {
             revert("Step proof verification failed");
         }

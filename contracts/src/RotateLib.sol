@@ -7,7 +7,7 @@ library RotateLib {
 
     struct RotateInput {
         bytes32 syncCommitteeSSZ;
-        bytes32 syncCommitteePoseidon;
+        uint256 syncCommitteePoseidon;
     }
 
     /**
@@ -19,7 +19,7 @@ library RotateLib {
     function toPublicInputs(RotateInput memory args, bytes32 finalizedHeaderRoot) internal pure returns (uint256[65] memory) {
         uint256[65] memory inputs;
 
-        inputs[0] = uint256(EndianConversions.toLittleEndian(uint256(args.syncCommitteePoseidon)));
+        inputs[0] = args.syncCommitteePoseidon;
 
         uint256 syncCommitteeSSZNumeric = uint256(args.syncCommitteeSSZ);
         for (uint256 i = 0; i < 32; i++) {
