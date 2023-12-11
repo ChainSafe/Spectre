@@ -11,24 +11,18 @@ use lightclient_circuits::{
     sync_step_circuit::StepCircuit,
     util::{gen_srs, AppCircuit},
 };
-use preprocessor::{
-    fetch_rotation_args, fetch_step_args, rotation_args_from_update, step_args_from_finality_update,
-};
+use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::{evm::evm_verify, halo2::aggregation::AggregationCircuit, Snark};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use url::Url;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
-    AggregatedEvmProofResult, EvmProofResult, GenProofRotationParams,
-    GenProofRotationWithWitnessParams, GenProofStepParams, GenProofStepWithWitnessParams,
-    SyncCommitteePoseidonParams, SyncCommitteePoseidonResult, EVM_PROOF_ROTATION_CIRCUIT,
-    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, SYNC_COMMITTEE_POSEIDON_COMPRESSED,
-    SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED,
+    AggregatedEvmProofResult, EvmProofResult, GenProofRotationWithWitnessParams,
+    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS,
+    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
 };
 
 fn gen_committee_update_snark<S: eth_types::Spec>(
@@ -75,89 +69,6 @@ fn gen_evm_proof<C: AppCircuit>(
         evm_verify(deployment_code, instances.clone(), proof.clone());
     }
     Ok((proof, instances))
-}
-
-pub(crate) async fn gen_evm_proof_rotation_circuit_handler(
-    Params(params): Params<GenProofRotationParams>,
-) -> Result<AggregatedEvmProofResult, JsonRpcError> {
-    let GenProofRotationParams { spec, beacon_api } = params;
-
-    // TODO: use config/build paths from CLI flags
-
-    let (snark, verifier_filename) = match spec {
-        Spec::Minimal => {
-            let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_rotation_args(&client).await?;
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
-                PathBuf::from("./build/committee_update_minimal.pkey"),
-                witness,
-            )?;
-
-            (snark, "committee_update_verifier_minimal")
-        }
-        Spec::Testnet => {
-            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_rotation_args(&client).await?;
-            let snark = gen_committee_update_snark::<eth_types::Testnet>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
-                PathBuf::from("./build/committee_update_testnet.pkey"),
-                witness,
-            )?;
-
-            (snark, "committee_update_verifier_testnet")
-        }
-        Spec::Mainnet => {
-            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_rotation_args(&client).await?;
-            let snark = gen_committee_update_snark::<eth_types::Mainnet>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
-                PathBuf::from("./build/committee_update_mainnet.pkey"),
-                witness,
-            )?;
-
-            (snark, "committee_update_verifier_mainnet")
-        }
-    };
-
-    let (proof, instances) = {
-        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
-
-        let agg_k = AggregationCircuit::get_degree(&pinning_path);
-        let params_agg = gen_srs(agg_k);
-        let pk_agg = AggregationCircuit::read_pk(
-            &params_agg,
-            format!("./build/{verifier_filename}.pkey"),
-            &vec![snark.clone()],
-        );
-
-        AggregationCircuit::gen_evm_proof_shplonk(
-            &params_agg,
-            &pk_agg,
-            pinning_path,
-            None,
-            &vec![snark.clone()],
-        )
-        .map_err(JsonRpcError::internal)?
-    };
-
-    // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
-    // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
-    let mut instances = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
-
-    let public_inputs = instances.split_off(12);
-    let accumulator: [U256; 12] = instances.try_into().unwrap();
-    let committee_poseidon = public_inputs[0];
-
-    Ok(AggregatedEvmProofResult {
-        proof,
-        accumulator,
-        committee_poseidon,
-        public_inputs,
-    })
 }
 
 pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
@@ -256,58 +167,6 @@ pub(crate) async fn gen_evm_proof_rotation_circuit_with_witness_handler(
     Ok(res)
 }
 
-pub(crate) async fn gen_evm_proof_step_circuit_handler(
-    Params(params): Params<GenProofStepParams>,
-) -> Result<EvmProofResult, JsonRpcError> {
-    let GenProofStepParams { spec, beacon_api } = params.clone();
-
-    let (proof, instances) = match spec {
-        Spec::Minimal => {
-            let client = beacon_api_client::minimal::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await?;
-
-            gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
-                PathBuf::from("./build/sync_step_minimal.pkey"),
-                PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
-                witness,
-                None::<PathBuf>,
-            )?
-        }
-        Spec::Testnet => {
-            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await?;
-
-            gen_evm_proof::<StepCircuit<eth_types::Testnet, Fr>>(
-                PathBuf::from("./build/sync_step_testnet.pkey"),
-                PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
-                witness,
-                None::<PathBuf>,
-            )?
-        }
-        Spec::Mainnet => {
-            let client = beacon_api_client::mainnet::Client::new(Url::parse(&beacon_api)?);
-            let witness = fetch_step_args(&client).await?;
-
-            gen_evm_proof::<StepCircuit<eth_types::Mainnet, Fr>>(
-                PathBuf::from("./build/sync_step_mainnet.pkey"),
-                PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
-                witness,
-                None::<PathBuf>,
-            )?
-        }
-    };
-
-    let public_inputs = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect();
-
-    Ok(EvmProofResult {
-        proof,
-        public_inputs,
-    })
-}
-
 pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     Params(params): Params<GenProofStepWithWitnessParams>,
 ) -> Result<EvmProofResult, JsonRpcError> {
@@ -368,41 +227,8 @@ pub(crate) async fn gen_evm_proof_step_circuit_with_witness_handler(
     })
 }
 
-pub(crate) async fn sync_committee_poseidon_compressed_handler(
-    Params(params): Params<SyncCommitteePoseidonParams>,
-) -> Result<SyncCommitteePoseidonResult, JsonRpcError> {
-    let SyncCommitteePoseidonParams { pubkeys } = params;
-
-    let pubkeys = pubkeys.into_iter().collect_vec();
-
-    let commitment = lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed(
-        pubkeys.as_slice(),
-    )?;
-
-    Ok(SyncCommitteePoseidonResult { commitment })
-}
-pub(crate) async fn sync_committee_poseidon_uncompressed_handler(
-    Params(params): Params<SyncCommitteePoseidonParams>,
-) -> Result<SyncCommitteePoseidonResult, JsonRpcError> {
-    let SyncCommitteePoseidonParams { pubkeys } = params;
-
-    let pubkeys = pubkeys.into_iter().collect_vec();
-
-    let commitment =
-        lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed(
-            pubkeys.as_slice(),
-        )?;
-
-    Ok(SyncCommitteePoseidonResult { commitment })
-}
-
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
     JsonRpcServer::new()
-        .with_method(EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_step_circuit_handler)
-        .with_method(
-            EVM_PROOF_ROTATION_CIRCUIT,
-            gen_evm_proof_rotation_circuit_handler,
-        )
         .with_method(
             EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS,
             gen_evm_proof_rotation_circuit_with_witness_handler,
@@ -410,14 +236,6 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
         .with_method(
             EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
             gen_evm_proof_step_circuit_with_witness_handler,
-        )
-        .with_method(
-            SYNC_COMMITTEE_POSEIDON_UNCOMPRESSED,
-            sync_committee_poseidon_uncompressed_handler,
-        )
-        .with_method(
-            SYNC_COMMITTEE_POSEIDON_COMPRESSED,
-            sync_committee_poseidon_compressed_handler,
         )
         .finish_unwrapped()
 }
