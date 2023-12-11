@@ -119,7 +119,7 @@ pub fn read_test_files_and_gen_witness(
             .cloned()
             .map(|pk| pk.to_bytes().to_vec())
             .collect_vec(),
-        finalized_header: sync_wit.attested_header.clone(),
+        attested_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
         _spec: Default::default(),
     };

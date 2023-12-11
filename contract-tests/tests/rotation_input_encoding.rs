@@ -101,8 +101,8 @@ mod tests {
         let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
 
         let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
-        let finalized_block_root = witness
-            .finalized_header
+        let justified_block_root = witness
+            .attested_header
             .clone()
             .hash_tree_root()
             .unwrap()
@@ -116,7 +116,7 @@ mod tests {
         let result = contract
             .to_public_inputs(
                 RotateInput::from(witness),
-                finalized_block_root,
+                justified_block_root,
                 solidity_encode_fr_array(&accumulator),
             )
             .call()

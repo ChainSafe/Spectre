@@ -14,9 +14,11 @@ library RotateLib {
     * @notice Compute the public input commitment for the rotation
     *           This must always match the method used in  lightclient-circuits/src/committee_udate_circuit.rs - CommitteeUpdateCircuit::instance()
     * @param args The arguments for the sync step
+    * @param justifiedHeaderRoot The root of the header that justifies the new sync committee which going to become finalized in the adjacent step.
+    * @param accumulator The accumulator to correctly verify aggregated (compressed) proof.
     * @return The public input commitment that can be sent to the verifier contract.
      */
-    function toPublicInputs(RotateInput memory args, bytes32 finalizedHeaderRoot, uint256[12] memory accumulator) internal pure returns (uint256[77] memory) {
+    function toPublicInputs(RotateInput memory args, bytes32 justifiedHeaderRoot, uint256[12] memory accumulator) internal pure returns (uint256[77] memory) {
         uint256[77] memory inputs;
 
         for (uint256 i = 0; i < accumulator.length; i++) {
@@ -31,10 +33,10 @@ library RotateLib {
             syncCommitteeSSZNumeric = syncCommitteeSSZNumeric / 2 ** 8;
         }
 
-        uint256 finalizedHeaderRootNumeric = uint256(finalizedHeaderRoot);
+        uint256 justifiedHeaderRootNumeric = uint256(justifiedHeaderRoot);
         for (uint256 j = 0; j < 32; j++) {
-            inputs[accumulator.length + 64 - j] = finalizedHeaderRootNumeric % 2 ** 8;
-            finalizedHeaderRootNumeric = finalizedHeaderRootNumeric / 2 ** 8;
+            inputs[accumulator.length + 64 - j] = justifiedHeaderRootNumeric % 2 ** 8;
+            justifiedHeaderRootNumeric = justifiedHeaderRootNumeric / 2 ** 8;
         }
 
         return inputs;

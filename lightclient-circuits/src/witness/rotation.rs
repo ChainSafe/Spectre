@@ -9,7 +9,9 @@ use std::{iter, marker::PhantomData};
 pub struct CommitteeRotationArgs<S: Spec> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 
-    pub finalized_header: BeaconBlockHeader,
+    // Attested header that containts the state root with new sync committee.
+    // This header going to become finalized in the adjacent step proof (that is submited along with this one in Spectre.sol::rotate).
+    pub attested_header: BeaconBlockHeader,
 
     pub sync_committee_branch: Vec<Vec<u8>>,
 
@@ -57,7 +59,7 @@ impl<S: Spec> Default for CommitteeRotationArgs<S> {
                 .take(S::SYNC_COMMITTEE_SIZE)
                 .collect_vec(),
             sync_committee_branch,
-            finalized_header: BeaconBlockHeader {
+            attested_header: BeaconBlockHeader {
                 state_root: state_root.as_slice().try_into().unwrap(),
                 ..Default::default()
             },

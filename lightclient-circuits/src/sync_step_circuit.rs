@@ -163,7 +163,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             S::FINALIZED_HEADER_INDEX,
         )?;
 
-        // verify execution state root against finilized block body merkle proof
+        // verify execution state root against finalized block body merkle proof
         verify_merkle_proof(
             builder,
             &sha256_chip,

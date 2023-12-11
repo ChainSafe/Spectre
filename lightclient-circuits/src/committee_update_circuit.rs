@@ -63,23 +63,23 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
         };
 
-        // Finalized header
-        let finalized_state_root = args
-            .finalized_header
+        // Justified header
+        let justified_state_root = args
+            .attested_header
             .state_root
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let finalized_header_root = ssz_merkleize_chunks(
+        let justified_header_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
             [
-                args.finalized_header.slot.into_witness(),
-                args.finalized_header.proposer_index.into_witness(),
-                args.finalized_header.parent_root.as_ref().into_witness(),
-                finalized_state_root.clone().into(),
-                args.finalized_header.body_root.as_ref().into_witness(),
+                args.attested_header.slot.into_witness(),
+                args.attested_header.proposer_index.into_witness(),
+                args.attested_header.parent_root.as_ref().into_witness(),
+                justified_state_root.clone().into(),
+                args.attested_header.body_root.as_ref().into_witness(),
             ],
         )?;
 
@@ -91,13 +91,13 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .iter()
                 .map(|w| w.clone().into_witness()),
             committee_root_ssz.clone().into(),
-            &finalized_state_root,
+            &justified_state_root,
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         )?;
 
         let public_inputs = iter::once(poseidon_commit)
             .chain(committee_root_ssz)
-            .chain(finalized_header_root)
+            .chain(justified_header_root)
             .collect();
 
         Ok(public_inputs)
@@ -182,12 +182,12 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let ssz_root = pk_vector.hash_tree_root().unwrap();
 
-        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
+        let justified_header_root = args.attested_header.clone().hash_tree_root().unwrap();
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
             .chain(
-                finalized_header_root
+                justified_header_root
                     .as_ref()
                     .iter()
                     .map(|b| bn256::Fr::from(*b as u64)),
@@ -280,7 +280,7 @@ mod tests {
         CommitteeRotationArgs {
             pubkeys_compressed,
             _spec: PhantomData,
-            finalized_header,
+            attested_header: finalized_header,
             sync_committee_branch: committee_root_branch,
         }
     }

@@ -89,7 +89,7 @@ where
 
     let args = CommitteeRotationArgs::<S> {
         pubkeys_compressed,
-        finalized_header: update.attested_header.beacon.clone(),
+        attested_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
             .into_iter()
             .map(|n| n.to_vec())
@@ -120,7 +120,7 @@ pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<Committee
 
     Ok(CommitteeRotationArgs::<S> {
         pubkeys_compressed,
-        finalized_header,
+        attested_header: finalized_header,
         sync_committee_branch: committee_root_branch,
         _spec: PhantomData,
     })
