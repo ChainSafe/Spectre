@@ -5,10 +5,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
 
 use crate::rpc_api::{
-    EvmProofResult, GenProofRotationParams, GenProofRotationWithWitnessParams, GenProofStepParams,
-    GenProofStepWithWitnessParams, EVM_PROOF_ROTATION_CIRCUIT,
-    EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, EVM_PROOF_STEP_CIRCUIT,
-    EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS,
+    CommitteeUpdateEvmProofResult, GenProofRotationParams, GenProofStepParams,
+    SyncStepEvmProofResult, RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
 };
 
 /// Error object in a response
@@ -47,36 +45,19 @@ impl Client {
         }
     }
     /// Generates a proof along with instance values for committee Rotation circuit
-    pub async fn gen_evm_proof_rotation_circuit(
+    pub async fn gen_evm_proof_committee_update(
         &self,
         params: GenProofRotationParams,
-    ) -> Result<EvmProofResult, Error> {
-        self.call(EVM_PROOF_ROTATION_CIRCUIT, params).await
+    ) -> Result<CommitteeUpdateEvmProofResult, Error> {
+        self.call(RPC_EVM_PROOF_ROTATION_CIRCUIT, params).await
     }
 
     /// Generates a proof along with instance values for Step circuit
-    pub async fn gen_evm_proof_step_circuit(
+    pub async fn gen_evm_proof_step(
         &self,
         params: GenProofStepParams,
-    ) -> Result<EvmProofResult, Error> {
-        self.call(EVM_PROOF_STEP_CIRCUIT, params).await
-    }
-
-    /// Generates a proof along with instance values for committee Rotation circuit
-    pub async fn gen_evm_proof_rotation_circuit_with_witness(
-        &self,
-        params: GenProofRotationWithWitnessParams,
-    ) -> Result<EvmProofResult, Error> {
-        self.call(EVM_PROOF_ROTATION_CIRCUIT_WITH_WITNESS, params)
-            .await
-    }
-
-    /// Generates a proof along with instance values for Step circuit
-    pub async fn gen_evm_proof_step_circuit_with_witness(
-        &self,
-        params: GenProofStepWithWitnessParams,
-    ) -> Result<EvmProofResult, Error> {
-        self.call(EVM_PROOF_STEP_CIRCUIT_WITH_WITNESS, params).await
+    ) -> Result<SyncStepEvmProofResult, Error> {
+        self.call(RPC_EVM_PROOF_STEP_CIRCUIT, params).await
     }
 
     /// Utility method for sending RPC requests over HTTP
@@ -121,7 +102,7 @@ mod test {
             beacon_api: String::from("http://65.109.55.120:9596"),
         };
 
-        let r = client.gen_evm_proof_step_circuit(p).await;
+        let r = client.gen_evm_proof_step(p).await;
 
         match r {
             Ok(r) => {

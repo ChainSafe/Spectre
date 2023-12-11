@@ -34,7 +34,6 @@ where
         );
         let sync_committee_poseidon = ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
 
-
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
             .iter()
@@ -58,61 +57,66 @@ where
     }
 }
 
-#[rstest]
-#[tokio::test]
-async fn test_rotate_public_input_evm_equivalence(
-    #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
-    #[exclude("deneb*")]
-    path: PathBuf,
-) -> anyhow::Result<()> {
-    let (_, witness) = read_test_files_and_gen_witness(&path);
-    let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
-    let finalized_block_root = witness
-        .finalized_header
-        .clone()
-        .hash_tree_root()
-        .unwrap()
-        .deref()
-        .try_into()
-        .unwrap();
+    /// Convert a slice of field elements into an array of U256 ready to pass to a soliditiy call via ethers
+    fn solidity_encode_fr_array<const N: usize>(frs: &[bn256::Fr]) -> [ethers::types::U256; N] {
+        frs.iter()
+            .map(|v| ethers::types::U256::from_little_endian(&v.to_bytes()))
+            .collect_vec()
+            .try_into()
+            .expect("incompatible input slice length with return type")
+    }
 
-    let (_anvil_instance, ethclient) = make_client();
-    let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
+    fn decode_solidity_u256_array(uints: &[ethers::types::U256]) -> Vec<bn256::Fr> {
+        uints
+            .iter()
+            .map(|v| {
+                let mut b = [0_u8; 32];
+                v.to_little_endian(&mut b);
+                bn256::Fr::from_bytes(&b).expect("bad bn256::Fr encoding")
+            })
+            .collect()
+    }
 
-    let result = contract
-        .to_public_inputs(
-            RotateInput::from(witness),
-            finalized_block_root,
-            solidity_encode_fr_array(&accumulator),
-        )
-        .call()
-        .await?;
+    #[rstest]
+    #[tokio::test]
+    async fn test_rotate_public_input_evm_equivalence(
+        #[files("../consensus-spec-tests/tests/minimal/capella/light_client/sync/pyspec_tests/**")]
+        #[exclude("deneb*")]
+        path: PathBuf,
+    ) -> anyhow::Result<()> {
+        let (_, witness) = read_test_files_and_gen_witness(&path);
+        let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
 
-    let result_decoded = decode_solidity_u256_array(&result);
-    // The expected result is the concatenation of the accumulator and the instance
-    let expected: Vec<_> = accumulator.iter().chain(instance[0].iter()).collect();
-    assert_eq!(result_decoded.iter().collect::<Vec<_>>(), expected);
-    Ok(())
-}
+        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
+        let finalized_block_root = witness
+            .finalized_header
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .deref()
+            .try_into()
+            .unwrap();
 
-/// Convert a slice of field elements into an array of U256 ready to pass to a soliditiy call via ethers
-fn solidity_encode_fr_array<const N: usize>(frs: &[bn256::Fr]) -> [ethers::types::U256; N] {
-    frs.iter()
-        .map(|v| ethers::types::U256::from_little_endian(&v.to_bytes()))
-        .collect_vec()
-        .try_into()
-        .expect("incompatible input slice length with return type")
-}
+        let (_anvil_instance, ethclient) = make_client();
+        let contract = RotateExternal::deploy(ethclient, ())?.send().await?;
 
-fn decode_solidity_u256_array(uints: &[ethers::types::U256]) -> Vec<bn256::Fr> {
-    uints
-        .iter()
-        .map(|v| {
-            let mut b = [0_u8; 32];
-            v.to_little_endian(&mut b);
-            bn256::Fr::from_bytes(&b).expect("bad bn256::Fr encoding")
-        })
-        .collect()
+        let result = contract
+            .to_public_inputs(
+                RotateInput::from(witness),
+                finalized_block_root,
+                solidity_encode_fr_array(&accumulator),
+            )
+            .call()
+            .await?;
+
+        let result_decoded = decode_solidity_u256_array(&result);
+        // The expected result is the concatenation of the accumulator and the instance
+        let expected: Vec<_> = accumulator.iter().chain(instance[0].iter()).collect();
+        assert_eq!(result_decoded.iter().collect::<Vec<_>>(), expected);
+        Ok(())
+    }
 }
