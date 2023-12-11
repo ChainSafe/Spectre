@@ -64,7 +64,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         };
 
         // Finalized header
-        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
         let finalized_state_root = args
             .finalized_header
             .state_root
@@ -76,7 +75,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             builder,
             &sha256_chip,
             [
-                finalized_slot_bytes,
+                args.finalized_header.slot.into_witness(),
                 args.finalized_header.proposer_index.into_witness(),
                 args.finalized_header.parent_root.as_ref().into_witness(),
                 finalized_state_root.clone().into(),
@@ -165,9 +164,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         [(); S::SYNC_COMMITTEE_SIZE]:,
     {
         let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
-            bytes.reverse();
-            bytes[47] &= 0b00011111;
-            bls12_381::Fq::from_bytes_le(&bytes)
+            bytes[0] &= 0b00011111;
+            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap()).unwrap()
         });
 
         let poseidon_commitment =
