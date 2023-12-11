@@ -111,7 +111,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         compressed_encodings
             .into_iter()
-            .map(|assigned_bytes| {
+            .map(|mut assigned_bytes| {
+                // following logic is for little endian decoding but input bytes are in BE, therefore we reverse them.
+                assigned_bytes.reverse();
                 // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
                 assert_eq!(assigned_bytes.len(), 48);
                 // masked byte from compressed representation
@@ -163,7 +165,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     {
         let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
             bytes[0] &= 0b00011111;
-            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap()).unwrap()
+            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+                .expect("bad bls12_381::Fq encoding")
         });
 
         let poseidon_commitment =
@@ -312,8 +315,10 @@ mod tests {
         )
         .unwrap();
 
+        let instance = CommitteeUpdateCircuit::<Testnet, Fr>::instance(&witness, LIMB_BITS);
+
         let timer = start_timer!(|| "committee_update mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }
