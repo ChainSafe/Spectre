@@ -3,6 +3,7 @@ use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 
 pub const RPC_EVM_PROOF_STEP_CIRCUIT: &str = "genEvmProof_SyncStep";
+pub const RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED: &str = "genEvmProof_SyncStepCompressed";
 pub const RPC_EVM_PROOF_ROTATION_CIRCUIT: &str = "genEvmProof_CommitteeUpdate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +44,13 @@ pub struct GenProofRotationWithWitnessParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepEvmProofResult {
     pub proof: Vec<u8>,
+    pub public_inputs: Vec<U256>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncStepCompressedEvmProofResult {
+    pub proof: Vec<u8>,
+    pub accumulator: [U256; 12],
     pub public_inputs: Vec<U256>,
 }
 

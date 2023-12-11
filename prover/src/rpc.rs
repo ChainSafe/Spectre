@@ -20,8 +20,9 @@ pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
     CommitteeUpdateEvmProofResult, GenProofRotationWithWitnessParams,
-    GenProofStepWithWitnessParams, SyncStepEvmProofResult, RPC_EVM_PROOF_ROTATION_CIRCUIT,
-    RPC_EVM_PROOF_STEP_CIRCUIT,
+    GenProofStepWithWitnessParams, SyncStepCompressedEvmProofResult, SyncStepEvmProofResult,
+    RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
+    RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
@@ -31,6 +32,10 @@ pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
             gen_evm_proof_committee_update_handler,
         )
         .with_method(RPC_EVM_PROOF_STEP_CIRCUIT, gen_evm_proof_sync_step_handler)
+        .with_method(
+            RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
+            gen_evm_proof_sync_step_compressed_handler,
+        )
         .finish_unwrapped()
 }
 
@@ -45,21 +50,10 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
     // TODO: use config/build paths from CLI flags
 
     let (snark, verifier_filename) = match spec {
-        Spec::Minimal => {
-            let mut update = ssz_rs::deserialize(&light_client_update)?;
-            let witness = rotation_args_from_update(&mut update).await?;
-            let snark = gen_committee_update_snark::<eth_types::Minimal>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_minimal.json"),
-                PathBuf::from("./build/committee_update_minimal.pkey"),
-                witness,
-            )?;
-
-            (snark, "committee_update_verifier_minimal")
-        }
         Spec::Testnet => {
             let mut update = ssz_rs::deserialize(&light_client_update)?;
             let witness = rotation_args_from_update(&mut update).await?;
-            let snark = gen_committee_update_snark::<eth_types::Testnet>(
+            let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<eth_types::Testnet, Fr>>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
                 PathBuf::from("./build/committee_update_testnet.pkey"),
                 witness,
@@ -70,7 +64,7 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
         Spec::Mainnet => {
             let mut update = ssz_rs::deserialize(&light_client_update)?;
             let witness = rotation_args_from_update(&mut update).await?;
-            let snark = gen_committee_update_snark::<eth_types::Mainnet>(
+            let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<eth_types::Mainnet, Fr>>(
                 PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
                 PathBuf::from("./build/committee_update_mainnet.pkey"),
                 witness,
@@ -78,6 +72,7 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
 
             (snark, "committee_update_verifier_mainnet")
         }
+        Spec::Minimal => return Err(JsonRpcError::internal("Minimal spec not supported in RPC")),
     };
 
     let (proof, instances) = {
@@ -114,14 +109,12 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
 
     let committee_poseidon = public_inputs[0];
 
-    let res = CommitteeUpdateEvmProofResult {
+    Ok(CommitteeUpdateEvmProofResult {
         proof,
         accumulator,
         committee_poseidon,
         public_inputs,
-    };
-
-    Ok(res)
+    })
 }
 
 pub(crate) async fn gen_evm_proof_sync_step_handler(
@@ -135,18 +128,6 @@ pub(crate) async fn gen_evm_proof_sync_step_handler(
     } = params;
 
     let (proof, instances) = match spec {
-        Spec::Minimal => {
-            let update = ssz_rs::deserialize(&light_client_finality_update)?;
-            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
-            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
-
-            gen_evm_proof::<StepCircuit<eth_types::Minimal, Fr>>(
-                PathBuf::from("./build/sync_step_minimal.pkey"),
-                PathBuf::from("./lightclient-circuits/config/sync_step_minimal.json"),
-                witness,
-                None::<PathBuf>,
-            )?
-        }
         Spec::Testnet => {
             let update = ssz_rs::deserialize(&light_client_finality_update)?;
             let pubkeys = ssz_rs::deserialize(&pubkeys)?;
@@ -171,6 +152,7 @@ pub(crate) async fn gen_evm_proof_sync_step_handler(
                 None::<PathBuf>,
             )?
         }
+        Spec::Minimal => return Err(JsonRpcError::internal("Minimal spec not supported in RPC")),
     };
 
     let public_inputs = instances[0]
@@ -184,20 +166,94 @@ pub(crate) async fn gen_evm_proof_sync_step_handler(
     })
 }
 
-fn gen_committee_update_snark<S: eth_types::Spec>(
+pub(crate) async fn gen_evm_proof_sync_step_compressed_handler(
+    Params(params): Params<GenProofStepWithWitnessParams>,
+) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError> {
+    let GenProofStepWithWitnessParams {
+        spec,
+        light_client_finality_update,
+        domain,
+        pubkeys,
+    } = params;
+
+    let (snark, verifier_filename) = match spec {
+        Spec::Testnet => {
+            let update = ssz_rs::deserialize(&light_client_finality_update)?;
+            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+            let snark = gen_uncompressed_snark::<StepCircuit<eth_types::Mainnet, Fr>>(
+                PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
+                PathBuf::from("./build/sync_step_testnet.pkey"),
+                witness,
+            )?;
+
+            (snark, "sync_step_verifier_testnet")
+        }
+        Spec::Mainnet => {
+            let update = ssz_rs::deserialize(&light_client_finality_update)?;
+            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+            let snark = gen_uncompressed_snark::<StepCircuit<eth_types::Mainnet, Fr>>(
+                PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
+                PathBuf::from("./build/sync_step_mainnet.pkey"),
+                witness,
+            )?;
+
+            (snark, "sync_step_verifier_mainnet")
+        }
+        Spec::Minimal => return Err(JsonRpcError::internal("Minimal spec not supported in RPC")),
+    };
+
+    let (proof, instances) = {
+        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
+
+        // Circuits of all specs have the same pinning type so we can just use Mainnet spec.
+        let agg_k = AggregationCircuit::get_degree(&pinning_path);
+        let params_agg = gen_srs(agg_k);
+        let pk_agg = AggregationCircuit::read_pk(
+            &params_agg,
+            format!("./build/{verifier_filename}.pkey"),
+            &vec![snark.clone()],
+        );
+
+        AggregationCircuit::gen_evm_proof_shplonk(
+            &params_agg,
+            &pk_agg,
+            pinning_path,
+            None,
+            &vec![snark.clone()],
+        )
+        .map_err(JsonRpcError::internal)?
+    };
+
+    let mut instances = instances[0]
+        .iter()
+        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
+        .collect_vec();
+
+    let public_inputs = instances.split_off(12);
+    let accumulator: [U256; 12] = instances.try_into().unwrap();
+
+    Ok(SyncStepCompressedEvmProofResult {
+        proof,
+        accumulator,
+        public_inputs,
+    })
+}
+
+fn gen_uncompressed_snark<Circuit: AppCircuit>(
     config_path: PathBuf,
     pk_path: PathBuf,
-    witness: <CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness,
-) -> eyre::Result<Snark> {
-    let params = gen_srs(CommitteeUpdateCircuit::<S, Fr>::get_degree(&config_path));
+    witness: Circuit::Witness,
+) -> eyre::Result<Snark>
+where
+    Circuit::Witness: Default,
+{
+    let params = gen_srs(Circuit::get_degree(&config_path));
 
-    let app_pk = CommitteeUpdateCircuit::<S, Fr>::read_pk(
-        &params,
-        pk_path,
-        &<CommitteeUpdateCircuit<S, Fr> as AppCircuit>::Witness::default(),
-    );
+    let app_pk = Circuit::read_pk(&params, pk_path, &Circuit::Witness::default());
 
-    Ok(CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+    Ok(Circuit::gen_snark_shplonk(
         &params,
         &app_pk,
         config_path,
