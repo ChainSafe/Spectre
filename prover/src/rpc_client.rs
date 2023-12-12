@@ -99,7 +99,7 @@ mod test {
 
         let p = GenProofStepParams {
             spec: args::Spec::Testnet,
-            beacon_api: String::from("http://65.109.55.120:9596"),
+            beacon_api: String::from("https://lodestar-sepolia.chainsafe.io"),
         };
 
         let r = client.gen_evm_proof_step(p).await;

@@ -144,7 +144,7 @@ mod tests {
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
@@ -173,7 +173,7 @@ mod tests {
             false,
             &CommitteeRotationArgs::<Testnet>::default(),
         );
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
