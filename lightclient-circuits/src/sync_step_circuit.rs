@@ -1,8 +1,8 @@
 use crate::{
     gadget::{
         crypto::{
-            calculate_ysquared, G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip,
-            ShaCircuitBuilder, ShaFlexGateManager,
+            G1Chip, G1Point, G2Chip, HashInstructions, Sha256Chip, ShaCircuitBuilder,
+            ShaFlexGateManager,
         },
         to_bytes_le,
     },
@@ -89,7 +89,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         );
         let poseidon_commit = fq_array_poseidon(
             builder.main(),
-            range.gate(),
+            fp_chip,
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
@@ -102,7 +102,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let attested_header = ssz_merkleize_chunks(
+        let attested_header_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
             [
@@ -137,7 +137,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         let signing_root = sha256_chip.digest(
             builder,
-            HashInput::TwoToOne(attested_header.into(), args.domain.to_vec().into_witness()),
+            HashInput::TwoToOne(
+                attested_header_root.into(),
+                args.domain.to_vec().into_witness(),
+            ),
         )?;
 
         let signature =
@@ -176,11 +179,9 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         )?;
 
         // Public Input Commitment
-        let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
-
-        let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
-
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
+        let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
+        let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
         let public_inputs_concat = itertools::chain![
             attested_slot_bytes.bytes.into_iter().take(8),
             finalized_slot_bytes.bytes.into_iter().take(8),
@@ -341,16 +342,17 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
             let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
 
+            // *Note:* normally, we would need to take into account the sign of the y coordinate, but
+            // because we are concerned only with signature forgery, if this is the wrong
+            // sign, the signature will be invalid anyway and thus verification fails.
+            /*
             // Square y coordinate
             let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
             // Calculate y^2 using the elliptic curve equation
             let ysq_calc = calculate_ysquared::<F>(ctx, fp_chip, assigned_pk.x.clone());
             // Constrain witness y^2 to be equal to calculated y^2
             fp_chip.assert_equal(ctx, ysq, ysq_calc);
-
-            // *Note:* normally, we would need to take into account the sign of the y coordinate, but
-            // because we are concerned only with signature forgery, if this is the wrong
-            // sign, the signature will be invalid anyway and thus verification fails.
+            */
 
             assigned_affines.push(assigned_pk);
             participation_bits.push(participation_bit);
@@ -386,7 +388,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let mut builder = Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
             .use_k(k as usize)
             .use_instance_columns(1);
-        let range = builder.range_chip(8);
+        let range = builder.range_chip(k as usize - 1);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
@@ -417,7 +419,10 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
 mod tests {
     use std::fs;
 
-    use crate::{util::Halo2ConfigPinning, witness::SyncStepArgs};
+    use crate::{
+        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
+        witness::SyncStepArgs,
+    };
 
     use super::*;
     use ark_std::{end_timer, start_timer};
@@ -427,6 +432,7 @@ mod tests {
     };
     use snark_verifier_sdk::{
         evm::{evm_verify, gen_evm_proof_shplonk},
+        halo2::aggregation::AggregationCircuit,
         CircuitExt,
     };
 
@@ -447,7 +453,7 @@ mod tests {
         )
         .unwrap();
 
-        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, 112);
+        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, LIMB_BITS);
 
         let timer = start_timer!(|| "sync_step mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
@@ -512,6 +518,72 @@ mod tests {
             &pk,
             None::<String>,
             &witness,
+        )
+        .unwrap();
+        println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
+    }
+
+    #[test]
+    fn test_step_aggregation_evm() {
+        const APP_K: u32 = 21;
+        const APP_PK_PATH: &str = "../build/sync_step_21.pkey";
+        const APP_PINNING_PATH: &str = "./config/sync_step_21.json";
+        const AGG_CONFIG_PATH: &str = "./config/sync_step_verifier_23.json";
+        let params_app = gen_srs(APP_K);
+
+        const AGG_K: u32 = 23;
+        let pk_app = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+            &params_app,
+            APP_PK_PATH,
+            APP_PINNING_PATH,
+            false,
+            &SyncStepArgs::<Testnet>::default(),
+        );
+
+        let witness = load_circuit_args();
+        let snark = StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+            &params_app,
+            &pk_app,
+            APP_PINNING_PATH,
+            None::<String>,
+            &witness,
+        )
+        .unwrap();
+
+        let params = gen_srs(AGG_K);
+
+        let pk = AggregationCircuit::read_or_create_pk(
+            &params,
+            "../build/sync_step_verifier_23.pkey",
+            AGG_CONFIG_PATH,
+            false,
+            &vec![snark.clone()],
+        );
+
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &vec![snark.clone()],
+            AGG_K,
+        )
+        .unwrap();
+
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
+
+        println!("num_instances: {:?}", num_instances);
+        println!("instances: {:?}", instances);
+
+        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        println!("proof size: {}", proof.len());
+        let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
+            &params,
+            &pk,
+            None::<String>,
+            &vec![snark],
         )
         .unwrap();
         println!("deployment_code size: {}", deployment_code.len());

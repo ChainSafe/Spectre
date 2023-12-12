@@ -9,6 +9,6 @@ use halo2curves::ff::PrimeField;
 pub use spec::{Mainnet, Minimal, Spec, Testnet};
 
 pub const NUM_LIMBS: usize = 4;
-pub const LIMB_BITS: usize = 112;
+pub const LIMB_BITS: usize = 104;
 
 pub trait Field = BigPrimeField + PrimeField<Repr = [u8; 32]>;

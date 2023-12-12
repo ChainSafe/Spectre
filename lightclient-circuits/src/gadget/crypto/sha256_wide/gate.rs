@@ -2,8 +2,11 @@ use crate::util::{CommonGateManager, GateBuilderConfig};
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
-    gates::circuit::CircuitBuilderStage,
-    halo2_proofs::{circuit::Region, plonk::Error},
+    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
+    halo2_proofs::{
+        circuit::Region,
+        plonk::{ConstraintSystem, Error},
+    },
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
@@ -182,7 +185,7 @@ impl<F: Field> ShaBitGateManager<F> {
 }
 
 impl<F: Field> GateBuilderConfig<F> for Sha256CircuitConfig<F> {
-    fn configure(meta: &mut halo2_base::halo2_proofs::plonk::ConstraintSystem<F>) -> Self {
+    fn configure(meta: &mut ConstraintSystem<F>, _: BaseCircuitParams) -> Self {
         Sha256CircuitConfig::new(meta)
     }
 

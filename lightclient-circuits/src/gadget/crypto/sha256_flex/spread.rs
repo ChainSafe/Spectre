@@ -1,4 +1,5 @@
 use eth_types::Field;
+use halo2_base::gates::circuit::BaseCircuitParams;
 use halo2_base::utils::{decompose, ScalarField};
 use halo2_base::QuantumCell;
 use halo2_base::{
@@ -78,8 +79,12 @@ impl<F: Field> SpreadConfig<F> {
 }
 
 impl<F: Field> GateBuilderConfig<F> for SpreadConfig<F> {
-    fn configure(meta: &mut ConstraintSystem<F>) -> Self {
-        Self::configure(meta, 8, 1) // todo: configure
+    fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
+        let lookup_bits = params
+            .lookup_bits
+            .map_or(8, |lookup_bits| if lookup_bits > 8 { 16 } else { 8 });
+
+        Self::configure(meta, lookup_bits, 1) // todo: configure num_advice_columns
     }
 
     fn load(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
@@ -126,14 +131,15 @@ impl<F: Field> GateBuilderConfig<F> for SpreadConfig<F> {
 
 #[derive(Debug, Clone)]
 pub struct SpreadChip<'a, F: ScalarField> {
+    lookup_bits: usize,
     range: &'a RangeChip<F>,
 }
 
 impl<'a, F: Field> SpreadChip<'a, F> {
-    pub fn new(range: &'a RangeChip<F>) -> Self {
-        debug_assert_eq!(16 % range.lookup_bits(), 0);
+    pub fn new(range: &'a RangeChip<F>, lookup_bits: usize) -> Self {
+        debug_assert_eq!(16 % lookup_bits, 0);
 
-        Self { range }
+        Self { range, lookup_bits }
     }
     pub fn spread(
         &self,
@@ -141,7 +147,7 @@ impl<'a, F: Field> SpreadChip<'a, F> {
         dense: &AssignedValue<F>,
     ) -> Result<AssignedValue<F>, Error> {
         let gate = self.range.gate();
-        let limb_bits = self.range.lookup_bits();
+        let limb_bits = self.lookup_bits;
         let num_limbs = 16 / limb_bits;
         let limbs = decompose(dense.value(), num_limbs, limb_bits);
         let assigned_limbs = thread_pool.main().assign_witnesses(limbs);

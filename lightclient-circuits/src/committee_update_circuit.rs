@@ -9,9 +9,7 @@ use crate::{
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{
-        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, RangeInstructions,
-    },
+    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder},
     halo2_proofs::{halo2curves::bn256, plonk::Error},
     AssignedValue, Context, QuantumCell,
 };
@@ -60,7 +58,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let poseidon_commit = {
             let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
-            fq_array_poseidon(builder.main(), range.gate(), &pubkeys_x)?
+            fq_array_poseidon(builder.main(), fp_chip, &pubkeys_x)?
         };
 
         // Finalized header
@@ -165,19 +163,14 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     where
         [(); S::SYNC_COMMITTEE_SIZE]:,
     {
-        let pubkeys_x = args
-            .pubkeys_compressed
-            .iter()
-            .cloned()
-            .map(|mut bytes| {
-                bytes[0] &= 0b00011111;
-                bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
-                    .expect("bad bls12_381::Fq encoding")
-            })
-            .collect_vec();
+        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
+            bytes[0] &= 0b00011111;
+            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
+                .expect("bad bls12_381::Fq encoding")
+        });
 
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x.into_iter(), limb_bits).unwrap();
+            fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits).unwrap();
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -219,7 +212,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
             .use_k(k as usize)
             .use_instance_columns(1);
-        let range = builder.range_chip(8);
+        let range = builder.range_chip(k as usize - 1);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
