@@ -64,7 +64,7 @@ async fn test_contract_initialization_and_first_step(
         step_input.finalized_header_root
     );
     assert_eq!(
-        contract.execution_state_roots(head).call().await?,
+        contract.execution_payload_roots(head).call().await?,
         step_input.execution_payload_root
     );
 

@@ -20,7 +20,7 @@ contract Spectre {
     mapping(uint256 => bytes32) public blockHeaderRoots;
 
     /// Maps from a slot to the current finalized ethereum1 execution state root.
-    mapping(uint256 => bytes32) public executionStateRoots;
+    mapping(uint256 => bytes32) public executionPayloadRoots;
 
     /// The highest slot that has been verified
     uint256 public head = 0;
@@ -58,7 +58,7 @@ contract Spectre {
         }
 
         // update the contract state
-        executionStateRoots[input.finalizedSlot] = input.executionPayloadRoot;
+        executionPayloadRoots[input.finalizedSlot] = input.executionPayloadRoot;
         blockHeaderRoots[input.finalizedSlot] = input.finalizedHeaderRoot;
         head = input.finalizedSlot;
     }
