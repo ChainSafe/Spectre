@@ -12,11 +12,9 @@ abigen!(
     Spectre,
     "./out/Spectre.sol/Spectre.json";
     StepVerifier,
-    "./out/sync_step.sol/Verifier.json";
+    "./out/sync_step_verifier.sol/Verifier.json";
     CommitteeUpdateVerifier,
     "./out/committee_update_verifier.sol/Verifier.json";
-    StepMockVerifier,
-    "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json";
     SyncStepCompressedMockVerifier,
     "./out/SyncStepMockVerifier.sol/SyncStepCompressedMockVerifier.json";
     CommitteeUpdateMockVerifier,
