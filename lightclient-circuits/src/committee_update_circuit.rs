@@ -1,6 +1,6 @@
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
-    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
+    poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::clear_3_bits,
     util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
@@ -23,7 +23,9 @@ use itertools::Itertools;
 use ssz_rs::{Merkleized, Vector};
 use std::{env::var, iter, marker::PhantomData, vec};
 
-#[allow(type_alias_bounds)]
+/// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
+/// 
+/// 
 #[derive(Clone, Debug, Default)]
 pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     _f: PhantomData<F>,
@@ -34,7 +36,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
-        args: &witness::CommitteeRotationArgs<S>,
+        args: &witness::CommitteeUpdateArgs<S>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let range = fp_chip.range();
 
@@ -156,8 +158,10 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         ssz_merkleize_chunks(builder, hasher, pubkeys_hashes)
     }
 
+    // Computes public inputs to `CommitteeUpdateCircuit` matching the in-circuit logic from `synthesise` method.
+    // Note, this function outputes only instances of the `CommitteeUpdateCircuit` proof, not the aggregated proof which will also include 12 accumulator limbs.
     pub fn get_instances(
-        args: &witness::CommitteeRotationArgs<S>,
+        args: &witness::CommitteeUpdateArgs<S>,
         limb_bits: usize,
     ) -> Vec<Vec<bn256::Fr>>
     where
@@ -169,7 +173,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .expect("bad bls12_381::Fq encoding")
         });
 
-        let poseidon_commitment = fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, limb_bits);
+        let poseidon_commitment = poseidon_hash_fq_array::<bn256::Fr>(pubkeys_x, limb_bits);
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -200,12 +204,12 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
 impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
     type Pinning = Eth2ConfigPinning;
-    type Witness = witness::CommitteeRotationArgs<S>;
+    type Witness = witness::CommitteeUpdateArgs<S>;
 
     fn create_circuit(
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
-        witness: &witness::CommitteeRotationArgs<S>,
+        witness: &witness::CommitteeUpdateArgs<S>,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
@@ -244,7 +248,7 @@ mod tests {
 
     use crate::{
         aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
-        witness::CommitteeRotationArgs,
+        witness::CommitteeUpdateArgs,
     };
 
     use super::*;
@@ -263,7 +267,7 @@ mod tests {
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
     use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
 
-    fn load_circuit_args() -> CommitteeRotationArgs<Testnet> {
+    fn load_circuit_args() -> CommitteeUpdateArgs<Testnet> {
         #[derive(serde::Deserialize)]
         struct ArgsJson {
             finalized_header: BeaconBlockHeader,
@@ -277,7 +281,7 @@ mod tests {
             finalized_header,
         } = serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap();
 
-        CommitteeRotationArgs {
+        CommitteeUpdateArgs {
             pubkeys_compressed,
             _spec: PhantomData,
             finalized_header,
@@ -288,7 +292,7 @@ mod tests {
     fn gen_application_snark(
         params: &ParamsKZG<bn256::Bn256>,
         pk: &ProvingKey<bn256::G1Affine>,
-        witness: &CommitteeRotationArgs<Testnet>,
+        witness: &CommitteeUpdateArgs<Testnet>,
         pinning_path: &str,
     ) -> Snark {
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
@@ -335,7 +339,7 @@ mod tests {
             PKEY_PATH,
             PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();
@@ -363,7 +367,7 @@ mod tests {
             APP_PK_PATH,
             APP_PINNING_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
 
         let witness = load_circuit_args();

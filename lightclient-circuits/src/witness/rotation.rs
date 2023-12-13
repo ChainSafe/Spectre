@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::{iter, marker::PhantomData};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommitteeRotationArgs<S: Spec> {
+pub struct CommitteeUpdateArgs<S: Spec> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 
     pub finalized_header: BeaconBlockHeader,
@@ -17,7 +17,7 @@ pub struct CommitteeRotationArgs<S: Spec> {
     pub _spec: PhantomData<S>,
 }
 
-impl<S: Spec> Default for CommitteeRotationArgs<S> {
+impl<S: Spec> Default for CommitteeUpdateArgs<S> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect_vec();
 
@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn test_committee_update_default_witness() {
         const K: u32 = 18;
-        let witness = CommitteeRotationArgs::<Testnet>::default();
+        let witness = CommitteeUpdateArgs::<Testnet>::default();
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,

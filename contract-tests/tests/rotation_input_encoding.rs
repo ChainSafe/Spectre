@@ -11,7 +11,7 @@ use itertools::Itertools;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_compressed;
-use lightclient_circuits::witness::CommitteeRotationArgs;
+use lightclient_circuits::witness::CommitteeUpdateArgs;
 use rstest::rstest;
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
@@ -24,11 +24,11 @@ abigen!(
 );
 
 // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
-impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec>> for RotateInput
+impl<Spec: eth_types::Spec> From<CommitteeUpdateArgs<Spec>> for RotateInput
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
-    fn from(args: CommitteeRotationArgs<Spec>) -> Self {
+    fn from(args: CommitteeUpdateArgs<Spec>) -> Self {
         let poseidon_commitment = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
         );

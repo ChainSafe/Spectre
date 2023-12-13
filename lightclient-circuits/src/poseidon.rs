@@ -18,11 +18,20 @@ const N_ROUNDS_PC: [usize; 16] = [
     56, 57, 56, 60, 60, 63, 64, 63, 60, 66, 60, 65, 70, 60, 64, 68,
 ];
 
+// Empirically chosen to take the least space in circuit.
 const POSEIDON_SIZE: usize = 11;
 const T: usize = POSEIDON_SIZE + 1;
 const R_P: usize = N_ROUNDS_PC[T - 2];
 const R_F: usize = 8;
 
+/// Generates Poseidon hash commitment to a list of BLS12-381 Fq elements.
+/// 
+/// Fields elements are initially represented as `NUM_LIMBS` limbs of `LIMB_BITS` bits each.
+/// By composing element two limbs in one, we reduce the number of inputs to Poseidon in half.
+/// 
+/// Each Poseidon sponge absorbs `POSEIDON_SIZE`-2 elements and previos sponge output if it's not the first batch, ie. onion commitment.
+/// 
+/// Assumes that LIMB_BITS * 2 < 254 (BN254).
 pub fn fq_array_poseidon<'a, F: Field>(
     ctx: &mut Context<F>,
     fp_chip: &FpChip<F>,
@@ -60,7 +69,10 @@ pub fn fq_array_poseidon<'a, F: Field>(
     Ok(current_poseidon_hash.unwrap())
 }
 
-pub fn fq_array_poseidon_native<F: Field>(elems: impl Iterator<Item = Fq>, limb_bits: usize) -> F {
+/// Generates Poseidon hash commitment to a list of BLS12-381 Fq elements.
+/// 
+/// This is the off-circuit analog of `fq_array_poseidon`.
+pub fn poseidon_hash_fq_array<F: Field>(elems: impl Iterator<Item = Fq>, limb_bits: usize) -> F {
     let limbs = elems
         // Converts Fq elements to Fr limbs.
         .flat_map(|x| {
@@ -83,6 +95,7 @@ pub fn fq_array_poseidon_native<F: Field>(elems: impl Iterator<Item = Fq>, limb_
     current_poseidon_hash.unwrap()
 }
 
+/// Wrapper on `poseidon_hash_fq_array` taking pubkeys encoded as uncompressed bytes.
 pub fn poseidon_committee_commitment_from_uncompressed(
     pubkeys_uncompressed: &[Vec<u8>],
 ) -> bn256::Fr {
@@ -97,14 +110,15 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         })
         .collect_vec();
 
-    fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
+    poseidon_hash_fq_array::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), LIMB_BITS)
 }
 
+/// Wrapper on `poseidon_hash_fq_array` taking pubkeys encoded as compressed bytes.
 pub fn poseidon_committee_commitment_from_compressed(pubkeys_compressed: &[Vec<u8>]) -> bn256::Fr {
     let pubkeys_x = pubkeys_compressed.iter().cloned().map(|mut bytes| {
         bytes[0] &= 0b00011111;
         bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
             .expect("bad bls12_381::Fq encoding")
     });
-    fq_array_poseidon_native::<bn256::Fr>(pubkeys_x, LIMB_BITS)
+    poseidon_hash_fq_array::<bn256::Fr>(pubkeys_x, LIMB_BITS)
 }

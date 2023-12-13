@@ -6,7 +6,7 @@ use crate::{
         },
         to_bytes_le,
     },
-    poseidon::{fq_array_poseidon, fq_array_poseidon_native},
+    poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
@@ -39,7 +39,15 @@ use num_bigint::BigUint;
 use ssz_rs::Merkleized;
 use std::{env::var, marker::PhantomData, vec};
 
-#[allow(type_alias_bounds)]
+/// `StepCircuit` verifies that Beacon chain block header is attested by a lightclient sync committee via aggregated signature,
+/// and the execution (Eth1) payload via Merkle proof against the finalized block header.
+///
+/// Assumes that signature is a BLS12-381 point on G2, and public keys are BLS12-381 points on G1; `finality_branch` is exactly `S::FINALIZED_HEADER_DEPTH` hashes in lenght;
+/// and `execution_payload_branch` is `S::EXECUTION_PAYLOAD_DEPTH` hashes in lenght.
+///
+/// The circuit exposes two public inputs:
+/// - `pub_inputs_commit` is SHA256(attested_slot || inalized_slot || participation_sum || finalized_header_root || execution_payload_root) truncated to 253 bits. All committed valeus are in little endian.
+/// - `poseidon_commit` is a Poseidon "onion" commitment to the X coordinates of sync committee public keys. Coordinates are expressed as big-integer with two limbs of LIMB_BITS * 2 bits.
 #[derive(Clone, Debug, Default)]
 pub struct StepCircuit<S: Spec + ?Sized, F: Field> {
     _f: PhantomData<F>,
@@ -52,10 +60,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         fp_chip: &FpChip<F>,
         args: &witness::SyncStepArgs<S>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        assert!(
-            !args.signature_compressed.is_empty(),
-            "no attestations supplied"
-        );
+        assert!(!args.signature_compressed.is_empty(), "signature expected");
 
         let range = fp_chip.range();
         let gate = range.gate();
@@ -87,13 +92,16 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             &args.pariticipation_bits,
             &mut assigned_affines,
         );
+
+        // Commit to the pubkeys using Poseidon hash. This constraints prover to use the pubkeys of the current sync committee,
+        // because the same commitment is computed in `CommitteeUpdateCircuit` and stored in the contract at the begining of the period.
         let poseidon_commit = fq_array_poseidon(
             builder.main(),
             fp_chip,
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
-        // Verify attestted header
+        // Compute attested header root
         let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
         let attested_header_state_root = args
             .attested_header
@@ -114,6 +122,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             ],
         )?;
 
+        // Compute finalized header root
         let finalized_block_body_root = args
             .finalized_header
             .body_root
@@ -121,7 +130,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|&b| builder.main().load_witness(F::from(b as u64)))
             .collect_vec();
-
         let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
         let finalized_header_root = ssz_merkleize_chunks(
             builder,
@@ -139,7 +147,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             builder,
             HashInput::TwoToOne(
                 attested_header_root.into(),
-                args.domain.to_vec().into_witness(),
+                args.domain.to_vec().into_witness(), // `domain` can't be a constant because will change in next fork.
             ),
         )?;
 
@@ -154,7 +162,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         bls_chip.assert_valid_signature(builder.main(), signature, msghash, agg_pubkey);
 
-        // verify finalized block header against current beacon state merkle proof
+        // Verify finalized block header against current state root via the Merkle "finality" proof
         verify_merkle_proof(
             builder,
             &sha256_chip,
@@ -166,7 +174,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             S::FINALIZED_HEADER_INDEX,
         )?;
 
-        // verify execution state root against finilized block body merkle proof
+        // Verify execution payload root against finalized block body via the Merkle "execution" proof
         verify_merkle_proof(
             builder,
             &sha256_chip,
@@ -180,31 +188,35 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         // Public Input Commitment
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
-        let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
-        let pub_inputs_concat = itertools::chain![
-            attested_slot_bytes.bytes.into_iter().take(8),
-            finalized_slot_bytes.bytes.into_iter().take(8),
-            participation_sum_le
-                .into_iter()
-                .map(|b| QuantumCell::Existing(b)),
-            finalized_header_root
-                .into_iter()
-                .map(|b| QuantumCell::Existing(b)),
-            execution_payload_root.bytes.into_iter(),
-        ]
-        .collect_vec();
+        let pub_inputs_commit = {
+            let participation_sum_le =
+                to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
+            let pub_inputs_concat = itertools::chain![
+                attested_slot_bytes.bytes.into_iter().take(8),
+                finalized_slot_bytes.bytes.into_iter().take(8),
+                participation_sum_le
+                    .into_iter()
+                    .map(|b| QuantumCell::Existing(b)),
+                finalized_header_root
+                    .into_iter()
+                    .map(|b| QuantumCell::Existing(b)),
+                execution_payload_root.bytes.into_iter(),
+            ]
+            .collect_vec();
 
-        let pub_inputs_bytes = sha256_chip
-            .digest(builder, pub_inputs_concat)?
-            .try_into()
-            .unwrap();
+            let pub_inputs_bytes = sha256_chip
+                .digest(builder, pub_inputs_concat)?
+                .try_into()
+                .unwrap();
 
-        let pub_inputs_commit =
-            truncate_sha256_into_single_elem(builder.main(), range, pub_inputs_bytes);
+            truncate_sha256_into_single_elem(builder.main(), range, pub_inputs_bytes)
+        };
 
         Ok(vec![pub_inputs_commit, poseidon_commit])
     }
 
+    // Computes public inputs to `StepCircuit` matching the in-circuit logic from `synthesise` method.
+    // Note, this function outputes only instances of the `StepCircuit` proof, not the aggregated proof which will also include 12 accumulator limbs.
     pub fn get_instances(args: &SyncStepArgs<S>, limb_bits: usize) -> Vec<Vec<bn256::Fr>> {
         use sha2::Digest;
         const INPUT_SIZE: usize = 8 * 3 + 32 * 2;
@@ -252,8 +264,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             })
             .collect_vec();
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits);
-
+            poseidon_hash_fq_array::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits);
 
         let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // Truncate to 253 bits
@@ -306,6 +317,7 @@ pub fn clear_3_bits<F: Field>(
 }
 
 impl<S: Spec, F: Field> StepCircuit<S, F> {
+    /// Decompresses siganure from bytes and assigns it to the circuit.
     fn assign_signature(
         ctx: &mut Context<F>,
         g2_chip: &G2Chip<F>,
@@ -318,6 +330,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
     }
 
     /// Takes a list of pubkeys and aggregates them.
+    /// The outputs are the aggregated pubkey, the sum of participation bits, and a list of assigned pubkeys.
     fn aggregate_pubkeys(
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,
@@ -440,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_circuit() {
+    fn test_step_circuit() {
         const K: u32 = 20;
         let witness = load_circuit_args();
 
@@ -461,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_proofgen() {
+    fn test_step_proofgen() {
         const K: u32 = 22;
         let params = gen_srs(K);
 
@@ -485,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_evm_verify() {
+    fn test_step_evm_verify() {
         const K: u32 = 22;
         let params = gen_srs(K);
 
