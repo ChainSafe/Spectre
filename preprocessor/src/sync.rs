@@ -168,7 +168,7 @@ mod tests {
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage,
         sync_step_circuit::StepCircuit,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        util::{gen_srs, AppCircuit},
     };
     use snark_verifier_sdk::CircuitExt;
 
