@@ -168,7 +168,7 @@ mod tests {
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage,
         sync_step_circuit::StepCircuit,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        util::{gen_srs, AppCircuit},
     };
     use snark_verifier_sdk::CircuitExt;
 
@@ -178,16 +178,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step.json";
         const K: u32 = 21;
         let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
             K,
         )

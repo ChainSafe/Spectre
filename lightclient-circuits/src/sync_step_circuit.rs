@@ -254,8 +254,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let poseidon_commitment =
             fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits);
 
-        // let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
-        // input[88..].copy_from_slice(&poseidon_commitment_le);
 
         let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // Truncate to 253 bits
