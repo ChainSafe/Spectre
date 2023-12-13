@@ -22,7 +22,7 @@ const SLOTS_PER_SYNC_COMMITTEE_PERIOD: usize = EPOCHS_PER_SYNC_COMMITTEE_PERIOD 
 #[tokio::test]
 async fn test_deploy_spectre() -> anyhow::Result<()> {
     let (_anvil_instance, ethclient) = make_client();
-    let _contract = deploy_spectre_mock_verifiers(ethclient, 0, [0; 32], 0).await?;
+    let _contract = deploy_spectre_mock_verifiers(ethclient, 0, U256::zero(), 0).await?;
     Ok(())
 }
 
@@ -79,7 +79,7 @@ async fn test_contract_initialization_and_first_step(
 async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
     ethclient: Arc<M>,
     initial_sync_period: usize,
-    initial_sync_committee_poseidon: [u8; 32],
+    initial_sync_committee_poseidon: U256,
     slots_per_period: usize,
 ) -> anyhow::Result<Spectre<M>> {
     let step_verifier = StepMockVerifier::deploy(ethclient.clone(), ())?

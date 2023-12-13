@@ -29,19 +29,12 @@ where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
     fn from(args: CommitteeRotationArgs<Spec>) -> Self {
-        let poseidon_commitment_be = poseidon_committee_commitment_from_compressed(
+        let poseidon_commitment = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
-        )
-        .unwrap()
-        .into_iter()
-        .rev() // need to reverse to match the endianness of the solidity encoding
-        .collect_vec()
-        .try_into()
-        .unwrap();
+        );
+        let sync_committee_poseidon =
+            ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
 
-        // Endianess here is super confusing
-        // This should be solved by having `committee_poseidong` only be `uint256`
-        // See https://github.com/ChainSafe/Spectre/pull/42
 
         let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
@@ -61,7 +54,7 @@ where
 
         RotateInput {
             sync_committee_ssz,
-            sync_committee_poseidon: poseidon_commitment_be,
+            sync_committee_poseidon,
         }
     }
 }
@@ -100,7 +93,8 @@ mod tests {
         let (_, witness) = read_test_files_and_gen_witness(&path);
         let accumulator = [bn256::Fr::zero(); 12]; // this can be anything.. The test is just checking it gets correctly concatenated to the start of the encoded input
 
-        let instance = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::instance(&witness, LIMB_BITS);
+        let instance =
+            CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
         let finalized_block_root = witness
             .finalized_header
             .clone()

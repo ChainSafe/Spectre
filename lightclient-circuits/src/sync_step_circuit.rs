@@ -181,8 +181,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         // Public Input Commitment
         // See "Onion hashing vs. Input concatenation" in https://github.com/ChainSafe/Spectre/issues/17#issuecomment-1740965182
         let participation_sum_le = to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
-        let poseidon_commit_le = to_bytes_le::<_, 32>(&poseidon_commit, gate, builder.main());
-        let public_inputs_concat = itertools::chain![
+        let pub_inputs_concat = itertools::chain![
             attested_slot_bytes.bytes.into_iter().take(8),
             finalized_slot_bytes.bytes.into_iter().take(8),
             participation_sum_le
@@ -192,25 +191,23 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
                 .into_iter()
                 .map(|b| QuantumCell::Existing(b)),
             execution_payload_root.bytes.into_iter(),
-            poseidon_commit_le
-                .into_iter()
-                .map(|b| QuantumCell::Existing(b)),
         ]
         .collect_vec();
 
-        let pi_hash_bytes = sha256_chip
-            .digest(builder, public_inputs_concat)?
+        let pub_inputs_bytes = sha256_chip
+            .digest(builder, pub_inputs_concat)?
             .try_into()
             .unwrap();
 
-        let pi_commit = truncate_sha256_into_single_elem(builder.main(), range, pi_hash_bytes);
+        let pub_inputs_commit =
+            truncate_sha256_into_single_elem(builder.main(), range, pub_inputs_bytes);
 
-        Ok(vec![pi_commit])
+        Ok(vec![pub_inputs_commit, poseidon_commit])
     }
 
-    pub fn instance_commitment(args: &SyncStepArgs<S>, limb_bits: usize) -> bn256::Fr {
+    pub fn get_instances(args: &SyncStepArgs<S>, limb_bits: usize) -> Vec<Vec<bn256::Fr>> {
         use sha2::Digest;
-        const INPUT_SIZE: usize = 8 * 3 + 32 * 3;
+        const INPUT_SIZE: usize = 8 * 3 + 32 * 2;
         let mut input = [0; INPUT_SIZE];
 
         let mut attested_slot_le = args.attested_header.slot.to_le_bytes().to_vec();
@@ -255,15 +252,17 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             })
             .collect_vec();
         let poseidon_commitment =
-            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits)
-                .unwrap();
-        let poseidon_commitment_le = poseidon_commitment.to_bytes_le();
-        input[88..].copy_from_slice(&poseidon_commitment_le);
+            fq_array_poseidon_native::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits);
+
 
         let mut public_input_commitment = sha2::Sha256::digest(&input).to_vec();
         // Truncate to 253 bits
         public_input_commitment[31] &= 0b00011111;
-        bn256::Fr::from_bytes_le(&public_input_commitment)
+
+        vec![vec![
+            bn256::Fr::from_bytes_le(&public_input_commitment),
+            poseidon_commitment,
+        ]]
     }
 }
 
@@ -453,10 +452,10 @@ mod tests {
         )
         .unwrap();
 
-        let sync_pi_commit = StepCircuit::<Testnet, Fr>::instance_commitment(&witness, LIMB_BITS);
+        let instance = StepCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
 
         let timer = start_timer!(|| "sync_step mock prover");
-        let prover = MockProver::<Fr>::run(K, &circuit, vec![vec![sync_pi_commit]]).unwrap();
+        let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
         prover.assert_satisfied_par();
         end_timer!(timer);
     }

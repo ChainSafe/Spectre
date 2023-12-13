@@ -7,7 +7,7 @@ library RotateLib {
 
     struct RotateInput {
         bytes32 syncCommitteeSSZ;
-        bytes32 syncCommitteePoseidon;
+        uint256 syncCommitteePoseidon;
     }
 
     /**
@@ -23,7 +23,7 @@ library RotateLib {
             inputs[i] = accumulator[i];
         }
 
-        inputs[accumulator.length] = uint256(args.syncCommitteePoseidon);
+        inputs[accumulator.length] = args.syncCommitteePoseidon;
 
         uint256 syncCommitteeSSZNumeric = uint256(args.syncCommitteeSSZ);
         for (uint256 i = 0; i < 32; i++) {

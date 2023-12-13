@@ -38,10 +38,11 @@ pub fn rotate_input_from_args<Spec: eth_types::Spec, Fr: eth_types::Field>(
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
-    let poseidon_commitment_le = poseidon_committee_commitment_from_compressed(
+    let poseidon_commitment = poseidon_committee_commitment_from_compressed(
         &args.pubkeys_compressed.iter().cloned().collect_vec(),
-    )
-    .unwrap();
+    );
+    let sync_committee_poseidon =
+        ethers::prelude::U256::from_little_endian(&poseidon_commitment.to_bytes());
 
     let mut pk_vector: Vector<Vector<u8, 48>, { Spec::SYNC_COMMITTEE_SIZE }> = args
         .pubkeys_compressed
@@ -61,6 +62,6 @@ where
 
     RotateInput {
         sync_committee_ssz,
-        sync_committee_poseidon: poseidon_commitment_le,
+        sync_committee_poseidon,
     }
 }
