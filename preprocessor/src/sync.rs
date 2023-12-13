@@ -178,16 +178,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step.json";
         const K: u32 = 21;
         let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
             K,
         )

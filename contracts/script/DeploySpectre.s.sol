@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 
 import {Spectre} from "../src/Spectre.sol";
 import {Verifier as CommitteeUpdateVerifier} from "../snark-verifiers/committee_update_verifier.sol"; 
-import {Verifier as SyncStepVerifier} from "../snark-verifiers/sync_step.sol"; 
+import {Verifier as SyncStepVerifier} from "../snark-verifiers/sync_step_verifier.sol"; 
 
 contract DeploySpectre is Script {
 
