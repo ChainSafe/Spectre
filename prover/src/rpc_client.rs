@@ -5,8 +5,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
 
 use crate::rpc_api::{
-    CommitteeUpdateEvmProofResult, GenProofRotationParams, GenProofStepParams,
-    SyncStepEvmProofResult, RPC_EVM_PROOF_ROTATION_CIRCUIT, RPC_EVM_PROOF_STEP_CIRCUIT,
+    CommitteeUpdateEvmProofResult, GenProofStepParams, SyncStepCompressedEvmProofResult,
+    RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED, RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED, GenProofCommitteeUpdateParams,
 };
 
 /// Error object in a response
@@ -47,17 +47,19 @@ impl Client {
     /// Generates a proof along with instance values for committee Rotation circuit
     pub async fn gen_evm_proof_committee_update(
         &self,
-        params: GenProofRotationParams,
+        params: GenProofCommitteeUpdateParams,
     ) -> Result<CommitteeUpdateEvmProofResult, Error> {
-        self.call(RPC_EVM_PROOF_ROTATION_CIRCUIT, params).await
+        self.call(RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED, params)
+            .await
     }
 
     /// Generates a proof along with instance values for Step circuit
     pub async fn gen_evm_proof_step(
         &self,
         params: GenProofStepParams,
-    ) -> Result<SyncStepEvmProofResult, Error> {
-        self.call(RPC_EVM_PROOF_STEP_CIRCUIT, params).await
+    ) -> Result<SyncStepCompressedEvmProofResult, Error> {
+        self.call(RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED, params)
+            .await
     }
 
     /// Utility method for sending RPC requests over HTTP
@@ -82,42 +84,6 @@ impl Client {
                 code: error.code,
                 message: error.message,
             }),
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::args;
-    use jsonrpc_v2::Error;
-
-    #[tokio::test]
-    #[ignore = "requires a running prover"]
-    async fn test_rpc_client() {
-        let client = Client::new("http://localhost:3000/rpc");
-
-        let p = GenProofStepParams {
-            spec: args::Spec::Testnet,
-            beacon_api: String::from("https://lodestar-sepolia.chainsafe.io"),
-        };
-
-        let r = client.gen_evm_proof_step(p).await;
-
-        match r {
-            Ok(r) => {
-                println!("res: {:?}", r);
-            }
-            Err(Error::Full {
-                data: _,
-                code,
-                message,
-            }) => {
-                println!("Error: {}, Code: {}", message, code);
-            }
-            Err(Error::Provided { code, message }) => {
-                println!("Error: {}, Code: {}", message, code);
-            }
         }
     }
 }
