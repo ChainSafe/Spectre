@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
 // ! The original implementation is made to be "dynamic" in a sense that it can handle variable-length inputs.
 // ! This is not needed for our use case so those "extra" contraints are removed.

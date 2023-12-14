@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use eth_types::{Field, LIMB_BITS};
 use halo2_base::{
     gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,

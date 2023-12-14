@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 pub use jsonrpc_v2;
 use jsonrpc_v2::{Error, Id, RequestObject, V2};
 use reqwest::IntoUrl;

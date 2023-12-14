@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use super::args::Spec;
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;

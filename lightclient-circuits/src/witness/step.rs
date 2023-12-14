@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use eth_types::Spec;
 use ethereum_consensus_types::signing::compute_signing_root;
 use ethereum_consensus_types::BeaconBlockHeader;

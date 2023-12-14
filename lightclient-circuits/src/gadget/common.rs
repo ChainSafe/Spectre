@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 //! Utility traits, functions used in the crate.
 use eth_types::Field;
 use halo2_base::{gates::GateInstructions, AssignedValue, Context, QuantumCell};

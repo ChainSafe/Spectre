@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 /**
  * These are the highest level integration tests for the Spectre protocol
  * They treat the Spectre contract as an ethereum light-client and test against the spec
