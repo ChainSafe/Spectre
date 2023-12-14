@@ -20,6 +20,7 @@ use snark_verifier_sdk::halo2::gen_proof_shplonk;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
 
+/// Halo2 circuit configuration parameters.
 pub trait Halo2ConfigPinning: Serialize {
     type BreakPoints;
     /// Loads configuration parameters from a file and sets environmental variables.

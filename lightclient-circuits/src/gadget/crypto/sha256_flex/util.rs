@@ -1,3 +1,5 @@
+// ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
+
 use eth_types::Field;
 use halo2_base::utils::{biguint_to_fe, fe_to_biguint};
 use itertools::Itertools;

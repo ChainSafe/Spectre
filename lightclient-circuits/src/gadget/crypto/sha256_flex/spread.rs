@@ -1,3 +1,5 @@
+// ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
+
 use eth_types::Field;
 use halo2_base::gates::circuit::BaseCircuitParams;
 use halo2_base::utils::{decompose, ScalarField};

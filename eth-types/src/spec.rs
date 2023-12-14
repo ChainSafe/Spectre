@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 
+/// Beacon chain specification.
 pub trait Spec: 'static + Sized + Copy + Default + Debug {
     const SYNC_COMMITTEE_SIZE: usize;
     const SYNC_COMMITTEE_ROOT_INDEX: usize;

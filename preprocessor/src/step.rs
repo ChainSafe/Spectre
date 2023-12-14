@@ -10,10 +10,10 @@ use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
-use tokio::fs;
 
 use crate::{get_light_client_bootstrap, get_light_client_finality_update};
 
+/// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
 pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<SyncStepArgs<S>>
@@ -54,6 +54,7 @@ where
     step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
 }
 
+/// Converts a [`LightClientFinalityUpdate`] to a [`SyncStepArgs`] witness.
 pub async fn step_args_from_finality_update<S: Spec>(
     finality_update: LightClientFinalityUpdate<
         { S::SYNC_COMMITTEE_SIZE },
@@ -150,15 +151,6 @@ pub async fn step_args_from_finality_update<S: Spec>(
         domain,
         _spec: PhantomData,
     })
-}
-
-pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<S>> {
-    serde_json::from_slice(
-        &fs::read(path)
-            .await
-            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
-    )
-    .map_err(|e| eyre::eyre!("Errror decoding witness {}", e))
 }
 
 #[cfg(test)]

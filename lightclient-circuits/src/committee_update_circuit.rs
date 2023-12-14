@@ -24,7 +24,7 @@ use ssz_rs::{Merkleized, Vector};
 use std::{env::var, iter, marker::PhantomData, vec};
 
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
-/// 
+///
 /// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
 ///
 /// The circuit exposes two public inputs:
@@ -109,7 +109,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     }
 
     /// Decodes the pub keys bytes into and X coordinate reperesented as a big integers.
-    /// 
+    ///
     /// Assumes that input bytes are in Big-Endian encoding.
     fn decode_pubkeys_x(
         ctx: &mut Context<F>,

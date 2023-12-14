@@ -1,7 +1,7 @@
 //! Common utility traits and functions.
 
-mod common;
-pub use common::*;
+mod gates;
+pub use gates::*;
 
 mod conversion;
 pub(crate) use conversion::*;

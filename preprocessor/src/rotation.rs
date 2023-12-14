@@ -2,15 +2,15 @@ use std::marker::PhantomData;
 
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
+use ethereum_consensus_types::LightClientUpdateCapella;
 use itertools::Itertools;
 use lightclient_circuits::witness::CommitteeUpdateArgs;
 use log::debug;
 use ssz_rs::Merkleized;
-use tokio::fs;
 
 use crate::{get_block_header, get_light_client_update_at_period};
 
+/// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
@@ -35,6 +35,7 @@ where
     rotation_args_from_update(&mut update).await
 }
 
+/// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
 pub async fn rotation_args_from_update<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
@@ -97,33 +98,6 @@ where
         _spec: PhantomData,
     };
     Ok(args)
-}
-
-pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<CommitteeUpdateArgs<S>> {
-    #[derive(serde::Deserialize)]
-    struct ArgsJson {
-        finalized_header: BeaconBlockHeader,
-        committee_root_branch: Vec<Vec<u8>>,
-        pubkeys_compressed: Vec<Vec<u8>>,
-    }
-
-    let ArgsJson {
-        pubkeys_compressed,
-        committee_root_branch,
-        finalized_header,
-    } = serde_json::from_slice(
-        &fs::read(path)
-            .await
-            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
-    )
-    .map_err(|e| eyre::eyre!("Error decoding witness {}", e))?;
-
-    Ok(CommitteeUpdateArgs::<S> {
-        pubkeys_compressed,
-        finalized_header,
-        sync_committee_branch: committee_root_branch,
-        _spec: PhantomData,
-    })
 }
 
 #[cfg(test)]

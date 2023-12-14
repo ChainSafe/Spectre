@@ -1,3 +1,5 @@
+// ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
+
 use super::spread::SpreadChip;
 use super::util::{bits_le_to_fe, fe_to_bits_le};
 use super::ShaFlexGateManager;

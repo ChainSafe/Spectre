@@ -11,4 +11,5 @@ pub use spec::{Mainnet, Minimal, Spec, Testnet};
 pub const NUM_LIMBS: usize = 4;
 pub const LIMB_BITS: usize = 104;
 
+/// The field used in circuits.
 pub trait Field = BigPrimeField + PrimeField<Repr = [u8; 32]>;
