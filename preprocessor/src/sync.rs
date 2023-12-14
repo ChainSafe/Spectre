@@ -164,11 +164,11 @@ pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
+    use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
-        halo2_base::gates::circuit::CircuitBuilderStage,
-        sync_step_circuit::StepCircuit,
-        util::{gen_srs, AppCircuit},
+        halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
+        util::AppCircuit,
     };
     use snark_verifier_sdk::CircuitExt;
 
@@ -179,7 +179,8 @@ mod tests {
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const K: u32 = 21;
-        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
@@ -208,7 +209,8 @@ mod tests {
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
-        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(

@@ -48,7 +48,7 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         _ => unreachable!(),
     });
 
-    Ok(root.bytes)
+    Ok(root.to_vec())
 }
 
 /// Verifies `leaf` against the `root` using Merkle `branch`. Requires `gindex` for deterministic traversal of the tree.
@@ -78,7 +78,7 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         gindex /= 2;
     }
 
-    let computed_root = computed_hash.bytes.into_iter().map(|b| match b {
+    let computed_root = computed_hash.into_iter().map(|b| match b {
         QuantumCell::Existing(av) => av,
         _ => unreachable!(),
     });

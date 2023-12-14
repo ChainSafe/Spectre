@@ -43,7 +43,7 @@ pub struct SyncStepArgs<S: Spec> {
     pub _spec: PhantomData<S>,
 }
 
-// This default witness is used for the test-cases in the `test-utils` crate.
+// This default witness is intended for circuit setup and testing purposes only.
 impl<S: Spec> Default for SyncStepArgs<S> {
     fn default() -> Self {
         const DOMAIN: [u8; 32] = [

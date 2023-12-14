@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{iter, marker::PhantomData};
 
+/// Input datum for the `CommitteeUpdateCircuit` to map next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
+/// 
+/// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeUpdateArgs<S: Spec> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
@@ -17,6 +20,7 @@ pub struct CommitteeUpdateArgs<S: Spec> {
     pub _spec: PhantomData<S>,
 }
 
+// This default witness is intended for circuit setup and testing purposes only.
 impl<S: Spec> Default for CommitteeUpdateArgs<S> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect_vec();

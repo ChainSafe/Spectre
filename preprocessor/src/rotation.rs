@@ -131,11 +131,12 @@ mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
+    use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
         halo2_base::gates::circuit::CircuitBuilderStage,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
@@ -144,7 +145,8 @@ mod tests {
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
@@ -173,7 +175,8 @@ mod tests {
             false,
             &CommitteeUpdateArgs::<Testnet>::default(),
         );
-        let client = MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(

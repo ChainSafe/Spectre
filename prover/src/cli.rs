@@ -1,11 +1,12 @@
 use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
 use ark_std::{end_timer, start_timer};
+use lightclient_circuits::halo2_base::utils::fs::gen_srs;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     halo2_proofs::halo2curves::bn256::{Bn256, Fr},
     sync_step_circuit::StepCircuit,
-    util::{gen_srs, AppCircuit},
+    util::AppCircuit,
 };
 use lightclient_circuits::{
     halo2_base::gates::circuit::CircuitBuilderStage, halo2_proofs::poly::commitment::Params,

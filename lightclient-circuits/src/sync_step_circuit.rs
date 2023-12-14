@@ -192,15 +192,15 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             let participation_sum_le =
                 to_bytes_le::<_, 8>(&participation_sum, gate, builder.main());
             let pub_inputs_concat = itertools::chain![
-                attested_slot_bytes.bytes.into_iter().take(8),
-                finalized_slot_bytes.bytes.into_iter().take(8),
+                attested_slot_bytes.into_iter().take(8),
+                finalized_slot_bytes.into_iter().take(8),
                 participation_sum_le
                     .into_iter()
                     .map(|b| QuantumCell::Existing(b)),
                 finalized_header_root
                     .into_iter()
                     .map(|b| QuantumCell::Existing(b)),
-                execution_payload_root.bytes.into_iter(),
+                execution_payload_root.into_iter(),
             ]
             .collect_vec();
 
