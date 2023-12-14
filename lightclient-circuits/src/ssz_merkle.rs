@@ -1,5 +1,6 @@
 use crate::{
     gadget::crypto::HashInstructions,
+    util::IntoConstant,
     witness::{HashInput, HashInputChunk},
 };
 use eth_types::Field;
@@ -11,19 +12,25 @@ use itertools::Itertools;
 
 /// Computes Merkle root of a list of SSZ chunks.
 ///
-/// Assumes that number if chunks is a power of two.
+/// Can work with numbers of chunks that are not a power of two, in which case the tree level is padded with zero hashes.
+/// However, zero hashes are only precomputed for the first two levels.
 pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     builder: &mut CircuitBuilder,
     hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 ) -> Result<Vec<AssignedValue<F>>, Error> {
     let mut chunks = chunks.into_iter().collect_vec();
-    assert!(chunks.len().is_power_of_two());
+    let len_even = chunks.len() + chunks.len() % 2;
+    let height = (len_even as f64).log2().ceil() as usize;
+    for depth in 0..height {
+        // Pad to even length using 32 zero bytes assigned as constants.
+        let len_even = chunks.len() + chunks.len() % 2;
+        let padded_chunks = chunks
+            .into_iter()
+            .pad_using(len_even, |_| ZERO_HASHES[depth].as_slice().into_constant())
+            .collect_vec();
 
-    let height = (chunks.len() as f64).log2() as usize;
-
-    for _ in 0..height {
-        chunks = chunks
+        chunks = padded_chunks
             .into_iter()
             .tuples()
             .map(|(left, right)| {
@@ -82,3 +89,11 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
 
     Ok(())
 }
+
+pub const ZERO_HASHES: [[u8; 32]; 2] = [
+    [0; 32],
+    [
+        245, 165, 253, 66, 209, 106, 32, 48, 39, 152, 239, 110, 211, 9, 151, 155, 67, 0, 61, 35,
+        32, 217, 240, 232, 234, 152, 49, 169, 39, 89, 251, 75,
+    ],
+];

@@ -33,13 +33,6 @@ pub struct SyncStepCompressedEvmProofResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncStepCompressedEvmProofResult {
-    pub proof: Vec<u8>,
-    pub accumulator: [U256; 12],
-    pub public_inputs: Vec<U256>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeUpdateEvmProofResult {
     pub proof: Vec<u8>,
     pub accumulator: [U256; 12],

@@ -15,6 +15,7 @@ use std::{
     path::Path,
 };
 
+/// Configuration for the aggregation circuit.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationConfigPinning {
     pub params: AggregationConfigParams,
@@ -79,12 +80,12 @@ impl AppCircuit for AggregationCircuit {
         snark: &Self::Witness,
         k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error> {
-        // let lookup_bits = k as usize - 1;
+        let lookup_bits = k as usize - 1;
         let params = gen_srs(k);
         let circuit_params = pinning.clone().map_or(
             AggregationConfigParams {
                 degree: k,
-                lookup_bits: 8,
+                lookup_bits,
                 ..Default::default()
             },
             |p| p.params,
@@ -97,14 +98,15 @@ impl AppCircuit for AggregationCircuit {
             Default::default(),
         );
 
+        // We assume that `AggregationCircuit` will only be used for a single aggregation/compression layer.
+        circuit.expose_previous_instances(false);
+
         match stage {
             CircuitBuilderStage::Prover => {
-                circuit.expose_previous_instances(false);
                 circuit.set_params(circuit_params);
                 circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
             }
             _ => {
-                circuit.expose_previous_instances(false);
                 set_var(
                     "AGG_CONFIG_PARAMS",
                     serde_json::to_string(&circuit.calculate_params(Some(10))).unwrap(),

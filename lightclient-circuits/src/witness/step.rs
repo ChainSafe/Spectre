@@ -13,6 +13,12 @@ use std::ops::Deref;
 
 use super::mock_root;
 
+/// Input datum for the `StepCircuit` to verify `attested_header` singed by the lightclient sync committee,
+/// and the `execution_payload_root` via Merkle `finality_branch` against the `finalized_header` root.
+/// 
+/// Assumes that aggregated BLS signarure is represented as a compressed G2 point and the public keys are uncompressed G1 points;
+/// `pariticipation_bits` vector has exactly `S::SYNC_COMMITTEE_SIZE`` bits;
+/// `finality_branch` and `execution_payload_branch` are exactly `S::FINALIZED_HEADER_DEPTH` and `S::EXECUTION_STATE_ROOT_DEPTH` long respectively.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStepArgs<S: Spec> {
     pub signature_compressed: Vec<u8>,
@@ -37,6 +43,7 @@ pub struct SyncStepArgs<S: Spec> {
     pub _spec: PhantomData<S>,
 }
 
+// This default witness is used for the test-cases in the `test-utils` crate.
 impl<S: Spec> Default for SyncStepArgs<S> {
     fn default() -> Self {
         const DOMAIN: [u8; 32] = [

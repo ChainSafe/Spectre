@@ -15,7 +15,7 @@ use ethereum_consensus_types::{BeaconBlockHeader, SyncCommittee};
 use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
-use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
+use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use std::ops::Deref;
@@ -80,7 +80,7 @@ pub fn valid_updates_from_test_path(
 
 pub fn read_test_files_and_gen_witness(
     path: &Path,
-) -> (SyncStepArgs<Minimal>, CommitteeRotationArgs<Minimal>) {
+) -> (SyncStepArgs<Minimal>, CommitteeUpdateArgs<Minimal>) {
     let bootstrap: LightClientBootstrap =
         load_snappy_ssz(path.join("bootstrap.ssz_snappy").to_str().unwrap()).unwrap();
 
@@ -109,7 +109,7 @@ pub fn read_test_files_and_gen_witness(
 
     sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
-    let rotation_wit = CommitteeRotationArgs::<Minimal> {
+    let rotation_wit = CommitteeUpdateArgs::<Minimal> {
         pubkeys_compressed: updates[0]
             .next_sync_committee
             .pubkeys

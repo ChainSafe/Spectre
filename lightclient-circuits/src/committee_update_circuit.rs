@@ -25,7 +25,12 @@ use std::{env::var, iter, marker::PhantomData, vec};
 
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 /// 
-/// 
+/// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
+///
+/// The circuit exposes two public inputs:
+/// - `poseidon_commit` is a Poseidon "onion" commitment to the X coordinates of sync committee public keys. Coordinates are expressed as big-integer with two limbs of LIMB_BITS * 2 bits.
+/// - `committee_root_ssz` is a Merkle SSZ root of the list of sync committee public keys.
+/// - `finalized_header_root` is a Merkle SSZ root of the finalized header.
 #[derive(Clone, Debug, Default)]
 pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
     _f: PhantomData<F>,
@@ -53,7 +58,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             })
             .collect_vec();
 
-        // Note: This is the root of the public keys in the SyncCommittee struct
+        // Note: This is the root of the public keys list in the SyncCommittee struct
         // not the root of the SyncCommittee struct itself.
         let committee_root_ssz =
             Self::sync_committee_root_ssz(builder, &sha256_chip, compressed_encodings.clone())?;
@@ -103,6 +108,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         Ok(public_inputs)
     }
 
+    /// Decodes the pub keys bytes into and X coordinate reperesented as a big integers.
+    /// 
+    /// Assumes that input bytes are in Big-Endian encoding.
     fn decode_pubkeys_x(
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,

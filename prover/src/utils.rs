@@ -50,8 +50,9 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
                 .unwrap();
             println!("ssz root: {:?}", hex::encode(ssz_root.deref()));
 
-            let committee_poseidon =
+            let mut committee_poseidon =
                 poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).to_bytes();
+            committee_poseidon.reverse();
             println!("poseidon commitment: {}", hex::encode(committee_poseidon));
 
             Ok(())
