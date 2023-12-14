@@ -2,6 +2,13 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-fn main() {
-    cli_batteries::build_rs().unwrap()
-}
+//! Witnesses for all circuits.
+
+mod step;
+pub use step::*;
+
+mod rotation;
+pub use rotation::*;
+
+mod hashing;
+pub use hashing::*;

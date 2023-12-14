@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::marker::PhantomData;
 
 use beacon_api_client::Client;
@@ -10,10 +14,10 @@ use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
-use tokio::fs;
 
 use crate::{get_light_client_bootstrap, get_light_client_finality_update};
 
+/// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
 pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
 ) -> eyre::Result<SyncStepArgs<S>>
@@ -54,6 +58,7 @@ where
     step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
 }
 
+/// Converts a [`LightClientFinalityUpdate`] to a [`SyncStepArgs`] witness.
 pub async fn step_args_from_finality_update<S: Spec>(
     finality_update: LightClientFinalityUpdate<
         { S::SYNC_COMMITTEE_SIZE },
@@ -152,23 +157,14 @@ pub async fn step_args_from_finality_update<S: Spec>(
     })
 }
 
-pub async fn read_step_args<S: Spec>(path: String) -> eyre::Result<SyncStepArgs<S>> {
-    serde_json::from_slice(
-        &fs::read(path)
-            .await
-            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
-    )
-    .map_err(|e| eyre::eyre!("Errror decoding witness {}", e))
-}
-
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
+    use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
-        halo2_base::gates::circuit::CircuitBuilderStage,
-        sync_step_circuit::StepCircuit,
-        util::{gen_srs, AppCircuit},
+        halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
+        util::AppCircuit,
     };
     use snark_verifier_sdk::CircuitExt;
 
@@ -179,7 +175,8 @@ mod tests {
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const K: u32 = 21;
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
@@ -208,7 +205,8 @@ mod tests {
             false,
             &SyncStepArgs::<Testnet>::default(),
         );
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(

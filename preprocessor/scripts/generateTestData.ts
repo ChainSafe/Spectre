@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 import fs from "fs";
 import { bls12_381 } from '@noble/curves/bls12-381'
 import {
@@ -122,7 +126,7 @@ let finalizedBlock = {
 
 beaconState.finalizedCheckpoint.root = ssz.phase0.BeaconBlockHeader.hashTreeRoot(finalizedBlock);
 
-const finilizedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(finalizedBlock);
+const finalizedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(finalizedBlock);
 
 assert.deepStrictEqual(createNodeFromProof(execPayloadMerkleProof).root, beaconBlockTree.node.root)
 
@@ -159,11 +163,11 @@ const attestedBlockJson = ssz.phase0.BeaconBlockHeader.toJson(attestedBlock);
 
 let beaconStateTree = ssz.capella.BeaconState.toView(beaconState);
 
-let finilizedBlockRootGindex = ssz.capella.BeaconState.getPathInfo(["finalizedCheckpoint", "root"]).gindex;
+let finalizedBlockRootGindex = ssz.capella.BeaconState.getPathInfo(["finalizedCheckpoint", "root"]).gindex;
 
-let finilizedBlockMerkleProof = createProof(beaconStateTree.node, { type: ProofType.single, gindex: finilizedBlockRootGindex }) as SingleProof;
+let finalizedBlockMerkleProof = createProof(beaconStateTree.node, { type: ProofType.single, gindex: finalizedBlockRootGindex }) as SingleProof;
 
-assert.deepStrictEqual(createNodeFromProof(finilizedBlockMerkleProof).root, beaconStateTree.node.root)
+assert.deepStrictEqual(createNodeFromProof(finalizedBlockMerkleProof).root, beaconStateTree.node.root)
 
 fs.writeFileSync(
     `../test_data/sync_step_${N_validators}.json`,
@@ -172,8 +176,8 @@ fs.writeFileSync(
         pubkeysUncompressed: Array.from(beaconState.validators.entries()).map(([i, _]) => Array.from(g1PointToBytesLE(pubKeyPoints[i], false))),
         pariticipationBits: Array.from(beaconState.validators.entries()).map((_) => true),
         attestedHeader: attestedBlockJson,
-        finalizedHeader: finilizedBlockJson,
-        finalityBranch: finilizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
+        finalizedHeader: finalizedBlockJson,
+        finalityBranch: finalizedBlockMerkleProof.witnesses.map((w) => Array.from(w)),
         executionPayloadBranch: execPayloadMerkleProof.witnesses.map((w) => Array.from(w)),
         executionPayloadRoot: execPayloadRoot,
         domain: Array.from(domain),

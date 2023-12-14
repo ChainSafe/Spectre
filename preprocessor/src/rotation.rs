@@ -1,19 +1,23 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::marker::PhantomData;
 
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
+use ethereum_consensus_types::LightClientUpdateCapella;
 use itertools::Itertools;
-use lightclient_circuits::witness::CommitteeRotationArgs;
+use lightclient_circuits::witness::CommitteeUpdateArgs;
 use log::debug;
 use ssz_rs::Merkleized;
-use tokio::fs;
 
 use crate::{get_block_header, get_light_client_update_at_period};
 
+/// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
     client: &Client<C>,
-) -> eyre::Result<CommitteeRotationArgs<S>>
+) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -35,6 +39,7 @@ where
     rotation_args_from_update(&mut update).await
 }
 
+/// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
 pub async fn rotation_args_from_update<S: Spec>(
     update: &mut LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
@@ -45,7 +50,7 @@ pub async fn rotation_args_from_update<S: Spec>(
         { S::BYTES_PER_LOGS_BLOOM },
         { S::MAX_EXTRA_DATA_BYTES },
     >,
-) -> eyre::Result<CommitteeRotationArgs<S>>
+) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
     [(); S::FINALIZED_HEADER_DEPTH]:,
@@ -87,7 +92,7 @@ where
         "Execution payload merkle proof verification failed"
     );
 
-    let args = CommitteeRotationArgs::<S> {
+    let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: update.attested_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
@@ -99,43 +104,17 @@ where
     Ok(args)
 }
 
-pub async fn read_rotation_args<S: Spec>(path: String) -> eyre::Result<CommitteeRotationArgs<S>> {
-    #[derive(serde::Deserialize)]
-    struct ArgsJson {
-        finalized_header: BeaconBlockHeader,
-        committee_root_branch: Vec<Vec<u8>>,
-        pubkeys_compressed: Vec<Vec<u8>>,
-    }
-
-    let ArgsJson {
-        pubkeys_compressed,
-        committee_root_branch,
-        finalized_header,
-    } = serde_json::from_slice(
-        &fs::read(path)
-            .await
-            .map_err(|e| eyre::eyre!("Error reading witness file {}", e))?,
-    )
-    .map_err(|e| eyre::eyre!("Error decoding witness {}", e))?;
-
-    Ok(CommitteeRotationArgs::<S> {
-        pubkeys_compressed,
-        finalized_header,
-        sync_committee_branch: committee_root_branch,
-        _spec: PhantomData,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
+    use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit,
         halo2_base::gates::circuit::CircuitBuilderStage,
-        util::{gen_srs, AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
     use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
@@ -144,7 +123,8 @@ mod tests {
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
         const K: u32 = 21;
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
@@ -171,9 +151,10 @@ mod tests {
             "../build/sync_step_21.pkey",
             CONFIG_PATH,
             false,
-            &CommitteeRotationArgs::<Testnet>::default(),
+            &CommitteeUpdateArgs::<Testnet>::default(),
         );
-        let client = MainnetClient::new(Url::parse("http://65.109.55.120:9596").unwrap());
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(

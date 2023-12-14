@@ -1,8 +1,12 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use crate::util::{CommonGateManager, GateBuilderConfig};
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
-    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
+    gates::circuit::BaseCircuitParams,
     halo2_proofs::{
         circuit::Region,
         plonk::{ConstraintSystem, Error},
@@ -24,6 +28,8 @@ use zkevm_hashes::{
     util::word::Word,
 };
 
+/// `ShaBitGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `Sha256CircuitConfig`.
+/// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.
 #[derive(Clone, Debug, CopyGetters)]
 pub struct ShaBitGateManager<F: Field> {
     #[getset(get_copy = "pub")]
@@ -53,11 +59,6 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
     }
 
     fn custom_context(&mut self) -> Self::CustomContext<'_> {}
-
-    fn from_stage(stage: CircuitBuilderStage) -> Self {
-        Self::new(stage == CircuitBuilderStage::Prover)
-            .unknown(stage == CircuitBuilderStage::Keygen)
-    }
 
     fn use_copy_manager(mut self, copy_manager: SharedCopyConstraintManager<F>) -> Self {
         self.set_copy_manager(copy_manager);
@@ -100,16 +101,6 @@ impl<F: Field> VirtualRegionManager<F> for ShaBitGateManager<F> {
                             .insert(loaded_input_word.cell.unwrap(), vanilla_input_word.cell());
                     });
             });
-
-        // if self.witness_gen_only() {
-        //     config
-        //         .assign_in_region(region, config, false, None)
-        //         .unwrap();
-        // } else {
-        //     let mut copy_manager = self.copy_manager.lock().unwrap();
-        //     config.assign_sha256_rows(region, config, self.use_unknown(), Some(&mut copy_manager))
-        //         .unwrap();
-        // }
     }
 }
 
@@ -118,7 +109,6 @@ impl<F: Field> ShaBitGateManager<F> {
         struct UnassignedShaTableRow<F: Field> {
             is_final: F,
             io: F,
-            // length: F,
         }
         let table_rows = virtual_rows
             .iter()
@@ -139,7 +129,6 @@ impl<F: Field> ShaBitGateManager<F> {
                 UnassignedShaTableRow {
                     is_final: F::from(row.is_final),
                     io: io_value,
-                    // length: F::from(row.length as u64),
                 }
             })
             // .enumerate()
@@ -151,7 +140,7 @@ impl<F: Field> ShaBitGateManager<F> {
         let loaded_blocks = table_rows
             .chunks_exact(SHA256_NUM_ROWS)
             .map(|rows| {
-                let last_row = rows.last().unwrap(); // rows[SHA256_NUM_ROWS - 1]
+                let last_row = rows.last().unwrap();
                 let is_final = copy_manager.mock_external_assigned(last_row.is_final);
                 let output_lo = copy_manager.mock_external_assigned(last_row.io);
                 let output_hi = copy_manager.mock_external_assigned(rows[SHA256_NUM_ROWS - 2].io);
@@ -162,8 +151,6 @@ impl<F: Field> ShaBitGateManager<F> {
                     .collect::<Vec<_>>()
                     .try_into()
                     .unwrap();
-                // let length =
-                //     copy_manager.mock_external_assigned(input_rows.last().unwrap().1.length);
                 LoadedSha256 {
                     is_final,
                     hash: Word::new([output_lo, output_hi]),
@@ -180,7 +167,6 @@ impl<F: Field> ShaBitGateManager<F> {
     /// Mutates `self` to use the given copy manager everywhere, including in all threads.
     pub fn set_copy_manager(&mut self, copy_manager: SharedCopyConstraintManager<F>) {
         self.copy_manager = copy_manager.clone();
-        // TODO: set to `self.sha_contexts`.
     }
 }
 

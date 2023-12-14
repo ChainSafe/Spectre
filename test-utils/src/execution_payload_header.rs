@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use crate::{
     test_types::{ByteList, ByteVector, ExecutionAddress},
     U256_BYTE_COUNT,

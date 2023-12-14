@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 #![allow(incomplete_features)]
 #![feature(int_roundings)]
 #![feature(associated_type_bounds)]
@@ -7,6 +11,7 @@
 #![feature(generic_arg_infer)]
 #![feature(return_position_impl_trait_in_trait)]
 #![allow(clippy::needless_range_loop)]
+
 pub mod gadget;
 pub mod util;
 pub mod witness;

@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::any::TypeId;
 
 use eth_types::Field;
@@ -21,6 +25,8 @@ pub const FIRST_PHASE: usize = 0;
 struct Dence;
 struct Spread;
 
+/// `ShaFlexGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `SpreadConfig`.
+/// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.
 #[derive(Clone, Debug, Default, CopyGetters)]
 pub struct ShaFlexGateManager<F: Field> {
     #[getset(get_copy = "pub")]
@@ -73,10 +79,6 @@ impl<F: Field> ShaFlexGateManager<F> {
         ));
         self.threads_spread.last_mut().unwrap()
     }
-
-    // pub fn thread_count(&self) -> usize {
-    //     self.core.thread_count()
-    // }
 }
 
 impl<F: Field> CommonGateManager<F> for ShaFlexGateManager<F> {

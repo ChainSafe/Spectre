@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::{ops::Deref, sync::Arc};
 
 use beacon_api_client::{BlockId, VersionedValue};
@@ -50,8 +54,9 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
                 .unwrap();
             println!("ssz root: {:?}", hex::encode(ssz_root.deref()));
 
-            let committee_poseidon =
+            let mut committee_poseidon =
                 poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).to_bytes();
+            committee_poseidon.reverse();
             println!("poseidon commitment: {}", hex::encode(committee_poseidon));
 
             Ok(())

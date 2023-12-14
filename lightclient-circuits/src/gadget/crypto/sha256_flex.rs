@@ -1,3 +1,11 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
+// ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
+// ! The original implementation is made to be "dynamic" in a sense that it can handle variable-length inputs.
+// ! This is not needed for our use case so those "extra" contraints are removed.
+
 mod compression;
 mod gate;
 mod spread;
@@ -23,6 +31,9 @@ pub use self::spread::SpreadChip;
 
 use super::{HashInstructions, ShaCircuitBuilder};
 
+/// [`Sha256Chip`] provides functions to compute SHA256 hash [`SpreadConfig`] gates.
+/// This is version of SHA256 chip is flexible by allowing do distribute advice cells into multiple sets of columns (`dense`, `spread`).
+/// It also heavily benefits from lookup tables (bigger `num_bits_lookup` is better).
 #[derive(Debug, Clone)]
 pub struct Sha256Chip<'a, F: Field> {
     spread: SpreadChip<'a, F>,
@@ -76,11 +87,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         };
         let padded_size = one_round_size * num_round;
         let zero_padding_byte_size = padded_size - input_byte_size_with_9;
-        // let remaining_byte_size = MAX_INPUT_SIZE - padded_size;
-        // assert_eq!(
-        //     remaining_byte_size,
-        //     one_round_size * (max_round - num_round)
-        // );
+
         let mut assign_byte = |byte: u8| builder.main().load_witness(F::from(byte as u64));
 
         assigned_input_bytes.push(assign_byte(0x80));
@@ -97,9 +104,6 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         }
 
         assert_eq!(assigned_input_bytes.len(), num_round * one_round_size);
-        // for _ in 0..remaining_byte_size {
-        //     assigned_input_bytes.push(assign_byte(0u8));
-        // }
 
         let assigned_num_round = builder.main().load_witness(F::from(num_round as u64));
 
@@ -180,98 +184,11 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
 
 impl<'a, F: Field> Sha256Chip<'a, F> {
     pub fn new(range: &'a RangeChip<F>) -> Self {
+        // Spread chip requires 16 % lookup_bits == 0 so we set it to either 8 or 16 based on circuit degree.
         let lookup_bits = if range.lookup_bits() > 8 { 16 } else { 8 };
 
         Self {
             spread: SpreadChip::new(range, lookup_bits),
         }
     }
-}
-
-#[cfg(test)]
-mod test {
-    // use std::env::var;
-    // use std::vec;
-    // use std::{cell::RefCell, marker::PhantomData};
-
-    // use crate::gadget::crypto::ShaCircuitBuilder;
-    // use crate::util::{gen_pkey, IntoWitness};
-    // use super::*;
-    // use ark_std::{end_timer, start_timer};
-    // use eth_types::Testnet;
-    // use halo2_base::gates::range::RangeConfig;
-    // use halo2_base::halo2_proofs::{
-    //     circuit::{Layouter, SimpleFloorPlanner},
-    //     dev::MockProver,
-    //     halo2curves::bn256::Fr,
-    //     plonk::{Circuit, ConstraintSystem},
-    // };
-    // use halo2_base::utils::fs::gen_srs;
-    // use halo2_base::SKIP_FIRST_PASS;
-    // use sha2::{Digest, Sha256};
-
-    // fn test_circuit<F: Field>(
-    //     k: usize,
-    //     mut builder: ShaThreadBuilder<F>,
-    //     input_vector: &[Vec<u8>],
-    // ) -> Result<ShaCircuitBuilder<F, ShaThreadBuilder<F>>, Error> {
-    //     let range = RangeChip::default(8);
-    //     let sha256 = Sha256Chip::new(&range);
-
-    //     for input in input_vector {
-    //         let _ = sha256.digest::<64>(&mut builder, input.as_slice().into_witness(), false)?;
-    //     }
-
-    //     builder.config(k, None);
-    //     Ok(ShaCircuitBuilder::mock(builder))
-    // }
-
-    // #[test]
-    // fn test_sha256_chip_constant_size() {
-    //     let k = 15;
-
-    //     let test_input = vec![0u8; 64];
-
-    //     let builder = ShaThreadBuilder::<Fr>::mock();
-
-    //     let circuit = test_circuit(k, builder, &[test_input]);
-    //     let prover = MockProver::run(k as u32, &circuit.unwrap(), vec![]).unwrap();
-
-    //     prover.assert_satisfied_par();
-    // }
-
-    // #[test]
-    // fn test_sha256_params_gen() {
-    //     let k = 15;
-    //     let test_input = vec![0u8; 64];
-    //     let builder = ShaThreadBuilder::<Fr>::keygen();
-
-    //     let circuit = test_circuit(k, builder, &[test_input]).unwrap();
-
-    //     let params = gen_srs(k as u32);
-    //     let pk = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
-    // }
-
-    // #[test]
-    // fn test_sha256_proof_gen() {
-    //     let k = 15;
-    //     let test_input = vec![0u8; 64];
-    //     let builder = ShaThreadBuilder::<Fr>::keygen();
-
-    //     let circuit = test_circuit(k, builder, &[test_input.clone()]).unwrap();
-
-    //     let params = gen_srs(k as u32);
-    //     let pk = gen_pkey(|| "sha256_chip", &params, None, &circuit).unwrap();
-
-    //     let break_points = circuit.break_points.take();
-
-    //     let builder = ShaThreadBuilder::<Fr>::prover();
-
-    //     let circuit = test_circuit(k, builder, &[test_input]).unwrap();
-
-    //     let proof = full_prover(&params, &pk, circuit, vec![]);
-
-    //     let is_valid = full_verifier(&params, pk.get_vk(), proof, vec![]);
-    //     assert!(is_valid);
-    // }
 }

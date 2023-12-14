@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use super::args::Spec;
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
@@ -5,11 +9,11 @@ use itertools::Itertools;
 use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
+use lightclient_circuits::halo2_base::utils::fs::gen_srs;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
 use lightclient_circuits::{
-    committee_update_circuit::CommitteeUpdateCircuit,
-    sync_step_circuit::StepCircuit,
-    util::{gen_srs, AppCircuit},
+    committee_update_circuit::CommitteeUpdateCircuit, sync_step_circuit::StepCircuit,
+    util::AppCircuit,
 };
 use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
@@ -19,8 +23,9 @@ use std::sync::Arc;
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 
 use crate::rpc_api::{
-    CommitteeUpdateEvmProofResult, SyncStepCompressedEvmProofResult,
-    RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED, RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED, GenProofCommitteeUpdateParams, GenProofStepParams,
+    CommitteeUpdateEvmProofResult, GenProofCommitteeUpdateParams, GenProofStepParams,
+    SyncStepCompressedEvmProofResult, RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
+    RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
 pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {

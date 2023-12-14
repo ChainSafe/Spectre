@@ -2,6 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-fn main() {
-    cli_batteries::build_rs().unwrap()
-}
+mod common;
+pub use common::*;
+pub mod crypto;

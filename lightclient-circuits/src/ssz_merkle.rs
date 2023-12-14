@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use crate::{
     gadget::crypto::HashInstructions,
     util::IntoConstant,
@@ -10,6 +14,10 @@ use halo2_base::{
 };
 use itertools::Itertools;
 
+/// Computes Merkle root of a list of SSZ chunks.
+///
+/// Can work with numbers of chunks that are not a power of two, in which case the tree level is padded with zero hashes.
+/// However, zero hashes are only precomputed for the first two levels.
 pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     builder: &mut CircuitBuilder,
     hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
@@ -44,20 +52,23 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         _ => unreachable!(),
     });
 
-    Ok(root.bytes)
+    Ok(root.to_vec())
 }
 
+/// Verifies `leaf` against the `root` using Merkle `branch`. Requires `gindex` for deterministic traversal of the tree.
+///
+/// Assumes that `root` and `leaf` are 32 bytes each.
 pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     builder: &mut CircuitBuilder,
     hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
-    proof: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+    branch: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
     leaf: HashInputChunk<QuantumCell<F>>,
     root: &[AssignedValue<F>],
     mut gindex: usize,
 ) -> Result<(), Error> {
     let mut computed_hash = leaf;
 
-    for witness in proof.into_iter() {
+    for witness in branch.into_iter() {
         computed_hash = hasher
             .digest(
                 builder,
@@ -71,7 +82,7 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         gindex /= 2;
     }
 
-    let computed_root = computed_hash.bytes.into_iter().map(|b| match b {
+    let computed_root = computed_hash.into_iter().map(|b| match b {
         QuantumCell::Existing(av) => av,
         _ => unreachable!(),
     });

@@ -1,8 +1,16 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 //! Utility traits, functions used in the crate.
 use eth_types::Field;
 use halo2_base::{gates::GateInstructions, AssignedValue, Context, QuantumCell};
 use itertools::Itertools;
 
+/// Constraints number `a` to have a little-endian byte representation that is returned.
+/// Uses a verification trick where instead of decomposing `a` into bytes in circuit,
+/// we upload LE bytes and composing them back into `checksum` via inner product.
+/// This relies on the fact tha inner product is significantly more efficient than decomposing into bytes that involves a lot of scalar division.
 pub fn to_bytes_le<F: Field, const MAX_BYTES: usize>(
     a: &AssignedValue<F>,
     gate: &impl GateInstructions<F>,
@@ -12,6 +20,7 @@ pub fn to_bytes_le<F: Field, const MAX_BYTES: usize>(
         .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
         .collect_vec();
 
+    // Compute LE bytes off-circuit.
     let assigned_bytes = a
         .value()
         .to_bytes_le()

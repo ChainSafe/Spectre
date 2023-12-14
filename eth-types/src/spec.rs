@@ -1,5 +1,10 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use core::fmt::Debug;
 
+/// Beacon chain specification.
 pub trait Spec: 'static + Sized + Copy + Default + Debug {
     const SYNC_COMMITTEE_SIZE: usize;
     const SYNC_COMMITTEE_ROOT_INDEX: usize;

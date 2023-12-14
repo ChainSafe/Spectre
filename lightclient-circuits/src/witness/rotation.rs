@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use eth_types::Spec;
 use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
@@ -5,8 +9,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{iter, marker::PhantomData};
 
+/// Input datum for the `CommitteeUpdateCircuit` to map next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
+/// 
+/// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommitteeRotationArgs<S: Spec> {
+pub struct CommitteeUpdateArgs<S: Spec> {
     pub pubkeys_compressed: Vec<Vec<u8>>,
 
     pub finalized_header: BeaconBlockHeader,
@@ -17,7 +24,8 @@ pub struct CommitteeRotationArgs<S: Spec> {
     pub _spec: PhantomData<S>,
 }
 
-impl<S: Spec> Default for CommitteeRotationArgs<S> {
+// This default witness is intended for circuit setup and testing purposes only.
+impl<S: Spec> Default for CommitteeUpdateArgs<S> {
     fn default() -> Self {
         let dummy_x_bytes = iter::once(192).pad_using(48, |_| 0).rev().collect_vec();
 
@@ -99,7 +107,7 @@ mod tests {
     #[test]
     fn test_committee_update_default_witness() {
         const K: u32 = 18;
-        let witness = CommitteeRotationArgs::<Testnet>::default();
+        let witness = CommitteeUpdateArgs::<Testnet>::default();
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,

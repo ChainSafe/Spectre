@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
@@ -20,6 +24,7 @@ use snark_verifier_sdk::halo2::gen_proof_shplonk;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
 
+/// Halo2 circuit configuration parameters.
 pub trait Halo2ConfigPinning: Serialize {
     type BreakPoints;
     /// Loads configuration parameters from a file and sets environmental variables.

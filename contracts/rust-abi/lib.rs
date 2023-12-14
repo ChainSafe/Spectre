@@ -1,10 +1,14 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 use ethers::{contract::abigen, types::U256};
 use itertools::Itertools;
 use lightclient_circuits::{
     poseidon::poseidon_committee_commitment_from_compressed,
-    witness::{CommitteeRotationArgs, SyncStepArgs},
+    witness::{CommitteeUpdateArgs, SyncStepArgs},
 };
 use ssz_rs::{Merkleized, Vector};
 use std::ops::Deref;
@@ -63,11 +67,11 @@ impl SyncStepInput {
 }
 
 // CommitteeRotationArgs type produced by abigen macro matches the solidity struct type
-impl<Spec: eth_types::Spec> From<CommitteeRotationArgs<Spec>> for RotateInput
+impl<Spec: eth_types::Spec> From<CommitteeUpdateArgs<Spec>> for RotateInput
 where
     [(); Spec::SYNC_COMMITTEE_SIZE]:,
 {
-    fn from(args: CommitteeRotationArgs<Spec>) -> Self {
+    fn from(args: CommitteeUpdateArgs<Spec>) -> Self {
         let sync_committee_poseidon = poseidon_committee_commitment_from_compressed(
             &args.pubkeys_compressed.iter().cloned().collect_vec(),
         );

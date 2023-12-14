@@ -1,7 +1,11 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use std::hash::Hash;
 
 use eth_types::Field;
-use halo2_base::{AssignedValue, Context, QuantumCell};
+use halo2_base::{AssignedValue, QuantumCell};
 use itertools::Itertools;
 
 use crate::util::{ConstantFrom, IntoWitness, WitnessFrom};
@@ -13,23 +17,12 @@ pub enum HashInput<T> {
 }
 
 impl<T: Clone> HashInput<T> {
-    pub fn len(&self) -> usize {
-        match self {
-            HashInput::Single(inner) => inner.bytes.len(),
-            HashInput::TwoToOne(left, right) => left.bytes.len() + right.bytes.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     pub fn to_vec(self) -> Vec<T> {
         match self {
-            HashInput::Single(inner) => inner.bytes,
+            HashInput::Single(inner) => inner.0,
             HashInput::TwoToOne(left, right) => {
-                let mut result = left.bytes;
-                result.extend(right.bytes);
+                let mut result = left.0;
+                result.extend(right.0);
                 result
             }
         }
@@ -37,27 +30,15 @@ impl<T: Clone> HashInput<T> {
 
     pub fn map<B, F: FnMut(T) -> B>(self, f: F) -> HashInput<B> {
         match self {
-            HashInput::Single(inner) => HashInput::Single(HashInputChunk {
-                bytes: inner.bytes.into_iter().map(f).collect(),
-                is_rlc: inner.is_rlc,
-            }),
+            HashInput::Single(inner) => {
+                HashInput::Single(HashInputChunk(inner.0.into_iter().map(f).collect()))
+            }
             HashInput::TwoToOne(left, right) => {
-                let left_size = left.bytes.len();
-                let mut all = left
-                    .bytes
-                    .into_iter()
-                    .chain(right.bytes)
-                    .map(f)
-                    .collect_vec();
+                let left_size = left.0.len();
+                let mut all = left.0.into_iter().chain(right.0).map(f).collect_vec();
                 let remainer = all.split_off(left_size);
-                let left = HashInputChunk {
-                    bytes: all,
-                    is_rlc: left.is_rlc,
-                };
-                let right = HashInputChunk {
-                    bytes: remainer,
-                    is_rlc: right.is_rlc,
-                };
+                let left = HashInputChunk(all);
+                let right = HashInputChunk(remainer);
 
                 HashInput::TwoToOne(left, right)
             }
@@ -72,28 +53,6 @@ impl<F: Field> IntoIterator for HashInput<QuantumCell<F>> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.to_vec().into_iter()
-    }
-}
-
-impl<F: Field> HashInput<QuantumCell<F>> {
-    pub fn into_assigned(self, ctx: &mut Context<F>) -> HashInput<AssignedValue<F>> {
-        self.map(|cell| match cell {
-            QuantumCell::Existing(v) => v,
-            QuantumCell::Witness(v) => ctx.load_witness(v),
-            QuantumCell::Constant(v) => ctx.load_constant(v),
-            _ => unreachable!(),
-        })
-    }
-}
-
-impl<F: Field> From<HashInput<QuantumCell<F>>> for HashInput<u8> {
-    fn from(input: HashInput<QuantumCell<F>>) -> Self {
-        input.map(|cell| match cell {
-            QuantumCell::Existing(v) => v.value().get_lower_32() as u8,
-            QuantumCell::Witness(v) => v.get_lower_32() as u8,
-            QuantumCell::Constant(v) => v.get_lower_32() as u8,
-            _ => unreachable!(),
-        })
     }
 }
 
@@ -121,14 +80,13 @@ impl<F: Field, I: Into<HashInputChunk<u8>>> WitnessFrom<I> for HashInput<Quantum
     fn witness_from(input: I) -> Self {
         let input: HashInputChunk<u8> = input.into();
 
-        HashInput::Single(HashInputChunk {
-            bytes: input
-                .bytes
+        HashInput::Single(HashInputChunk(
+            input
+                .0
                 .into_iter()
                 .map(|b| QuantumCell::Witness(F::from(b as u64)))
                 .collect(),
-            is_rlc: input.is_rlc,
-        })
+        ))
     }
 }
 
@@ -141,24 +99,29 @@ impl<F: Field, IL: Into<HashInputChunk<u8>>, IR: Into<HashInputChunk<u8>>> Witne
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct HashInputChunk<T> {
-    pub bytes: Vec<T>,
-    pub is_rlc: bool,
-}
+pub struct HashInputChunk<T>(Vec<T>);
 
 impl<T> HashInputChunk<T> {
     pub fn new(bytes: Vec<T>) -> Self {
-        Self {
-            is_rlc: bytes.len() >= 32,
-            bytes,
-        }
+        Self(bytes)
     }
 
     pub fn map<B, F: FnMut(T) -> B>(self, f: F) -> HashInputChunk<B> {
-        HashInputChunk {
-            bytes: self.bytes.into_iter().map(f).collect(),
-            is_rlc: self.is_rlc,
-        }
+        HashInputChunk(self.0.into_iter().map(f).collect())
+    }
+
+    pub fn to_vec(self) -> Vec<T> {
+        self.0
+    }
+}
+
+impl<F: Field> IntoIterator for HashInputChunk<QuantumCell<F>> {
+    type Item = QuantumCell<F>;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -166,14 +129,13 @@ impl<F: Field, I: Into<HashInputChunk<u8>>> WitnessFrom<I> for HashInputChunk<Qu
     fn witness_from(input: I) -> Self {
         let input: HashInputChunk<u8> = input.into();
 
-        HashInputChunk {
-            bytes: input
-                .bytes
+        HashInputChunk(
+            input
+                .0
                 .into_iter()
                 .map(|b| QuantumCell::Witness(F::from(b as u64)))
                 .collect(),
-            is_rlc: input.is_rlc,
-        }
+        )
     }
 }
 
@@ -181,51 +143,37 @@ impl<F: Field, I: Into<HashInputChunk<u8>>> ConstantFrom<I> for HashInputChunk<Q
     fn constant_from(input: I) -> Self {
         let input: HashInputChunk<u8> = input.into();
 
-        HashInputChunk {
-            bytes: input
-                .bytes
+        HashInputChunk(
+            input
+                .0
                 .into_iter()
                 .map(|b| QuantumCell::Constant(F::from(b as u64)))
                 .collect(),
-            is_rlc: input.is_rlc,
-        }
+        )
     }
 }
 
 impl From<&[u8]> for HashInputChunk<u8> {
     fn from(input: &[u8]) -> Self {
-        HashInputChunk {
-            bytes: input.to_vec(),
-            is_rlc: input.len() >= 32,
-        }
+        HashInputChunk(input.to_vec())
     }
 }
 
 impl From<Vec<u8>> for HashInputChunk<u8> {
     fn from(input: Vec<u8>) -> Self {
-        let is_rlc = input.len() >= 32;
-        HashInputChunk {
-            bytes: input,
-            is_rlc,
-        }
+        HashInputChunk(input)
     }
 }
 
 impl From<u64> for HashInputChunk<u8> {
     fn from(input: u64) -> Self {
-        HashInputChunk {
-            bytes: pad_to_32(&input.to_le_bytes()),
-            is_rlc: false,
-        }
+        HashInputChunk(pad_to_32(&input.to_le_bytes()))
     }
 }
 
 impl From<usize> for HashInputChunk<u8> {
     fn from(input: usize) -> Self {
-        HashInputChunk {
-            bytes: pad_to_32(&input.to_le_bytes()),
-            is_rlc: false,
-        }
+        HashInputChunk(pad_to_32(&input.to_le_bytes()))
     }
 }
 
@@ -237,10 +185,7 @@ impl<F: Field, I: IntoIterator<Item = AssignedValue<F>>> From<I>
             .into_iter()
             .map(|av| QuantumCell::Existing(av))
             .collect_vec();
-        HashInputChunk {
-            is_rlc: bytes.len() >= 32,
-            bytes,
-        }
+        HashInputChunk(bytes)
     }
 }
 

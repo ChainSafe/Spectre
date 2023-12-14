@@ -1,7 +1,10 @@
-#![allow(dead_code)]
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use eth_types::*;
 use halo2_base::{
-    gates::circuit::{BaseCircuitParams, CircuitBuilderStage},
+    gates::circuit::BaseCircuitParams,
     halo2_proofs::{
         circuit::{Layouter, Region},
         plonk::{ConstraintSystem, Error},
@@ -11,6 +14,7 @@ use halo2_base::{
     },
 };
 
+/// Custom config for a custom gate builder.
 pub trait GateBuilderConfig<F: Field>: Clone + Sized {
     fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self;
 
@@ -19,6 +23,7 @@ pub trait GateBuilderConfig<F: Field>: Clone + Sized {
     fn annotate_columns_in_region(&self, region: &mut Region<F>);
 }
 
+/// Thin abstraction over a gate a `VirtualRegionManager`.
 pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
     type CustomContext<'a>
     where
@@ -30,23 +35,6 @@ pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
 
     /// Returns `self` with a given copy manager
     fn use_copy_manager(self, copy_manager: SharedCopyConstraintManager<F>) -> Self;
-
-    fn from_stage(stage: CircuitBuilderStage) -> Self {
-        Self::new(stage == CircuitBuilderStage::Prover)
-            .unknown(stage == CircuitBuilderStage::Keygen)
-    }
-
-    fn mock() -> Self {
-        Self::new(false)
-    }
-
-    fn keygen() -> Self {
-        Self::new(false).unknown(true)
-    }
-
-    fn prover() -> Self {
-        Self::new(true)
-    }
 
     fn unknown(self, use_unknown: bool) -> Self;
 }

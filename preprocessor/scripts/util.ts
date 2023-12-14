@@ -1,3 +1,7 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 import { GindexBitstring } from "@chainsafe/persistent-merkle-tree";
 import { ProjPointType } from "@noble/curves/abstract/weierstrass";
 
@@ -27,7 +31,7 @@ export function serialize(obj: any, replacer: (value: any) => any = (value) => v
     if (value instanceof Uint8Array) {
       return Array.from(value);
     }
-    
+
     if (typeof value === 'bigint') {
       return Number(value);
     }
@@ -210,26 +214,6 @@ export function hexToIntArray(hex: string): number[] {
     array.push(byte);
   }
   return array;
-}
-
-function bigIntToBytesLE(value: bigint): ArrayBuffer {
-  // Assuming the BigInt fits in 8 bytes (change as needed)
-  const buffer = new ArrayBuffer(8);
-  const view = new DataView(buffer);
-
-  let remainder = value;
-  let i = 0;
-  while (remainder > 0n) {
-      // Get the lower 8 bits of the remainder
-      // And store it in the buffer
-      view.setUint8(i, Number(remainder & 255n));
-
-      // Shift the remainder 8 bits to the right
-      remainder >>= 8n;
-      i++;
-  }
-
-  return buffer;
 }
 
 export function chunkArray<T>(arr: T[], chunkSize: number): T[][] {

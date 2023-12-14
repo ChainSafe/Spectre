@@ -1,11 +1,15 @@
+// The Licensed Work is (c) 2023 ChainSafe
+// Code: https://github.com/ChainSafe/Spectre
+// SPDX-License-Identifier: LGPL-3.0-only
+
 use ark_std::{end_timer, start_timer};
 use eth_types::{Minimal, LIMB_BITS};
 use halo2_base::gates::circuit::CircuitBuilderStage;
 use halo2_base::halo2_proofs::dev::MockProver;
 use halo2_base::halo2_proofs::halo2curves::bn256;
+use halo2_base::utils::fs::gen_srs;
 use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
 use lightclient_circuits::sync_step_circuit::StepCircuit;
-use lightclient_circuits::util::gen_srs;
 use lightclient_circuits::util::AppCircuit;
 use lightclient_circuits::util::Eth2ConfigPinning;
 use lightclient_circuits::util::Halo2ConfigPinning;

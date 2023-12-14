@@ -1,8 +1,8 @@
 {
   "params": {
-    "k": 22,
+    "k": 21,
     "num_advice_per_phase": [
-      3
+      6
     ],
     "num_fixed": 1,
     "num_lookup_advice_per_phase": [
@@ -10,13 +10,16 @@
       0,
       0
     ],
-    "lookup_bits": 21,
+    "lookup_bits": 20,
     "num_instance_columns": 1
   },
   "break_points": [
     [
-      4194294,
-      4194294
+      2097142,
+      2097142,
+      2097140,
+      2097142,
+      2097142
     ]
   ]
 }
