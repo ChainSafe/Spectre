@@ -66,10 +66,10 @@ pub enum ProofCmd {
         #[clap(long, short)]
         pk_path: PathBuf,
 
-        #[clap(long, default_value = "23")]
+        #[clap(short='K', long, default_value = "23")]
         verifier_k: u32,
 
-        #[clap(long)]
+        #[clap(short='P', long)]
         verifier_pk_path: PathBuf,
 
         #[clap(short = 'L', long)]
@@ -85,10 +85,10 @@ pub enum ProofCmd {
         #[clap(long, short)]
         pk_path: PathBuf,
 
-        #[clap(long, default_value = "24")]
+        #[clap(short='K', long, default_value = "24")]
         verifier_k: u32,
 
-        #[clap(long)]
+        #[clap(short='P', long)]
         verifier_pk_path: PathBuf,
 
         #[clap(short = 'L', long)]

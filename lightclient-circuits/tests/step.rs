@@ -26,7 +26,7 @@ fn test_eth2_spec_mock_1(
     #[exclude("deneb*")]
     path: PathBuf,
 ) {
-    run_test_eth2_spec_mock::<18, 20>(path)
+    run_test_eth2_spec_mock::<18, 19>(path)
 }
 
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
