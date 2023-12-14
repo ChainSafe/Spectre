@@ -2,28 +2,12 @@ use crate::args;
 use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 
-pub const RPC_EVM_PROOF_STEP_CIRCUIT: &str = "genEvmProof_SyncStep";
 pub const RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED: &str = "genEvmProof_SyncStepCompressed";
-pub const RPC_EVM_PROOF_ROTATION_CIRCUIT: &str = "genEvmProof_CommitteeUpdate";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofRotationParams {
-    pub spec: args::Spec,
-
-    #[serde(default = "default_beacon_api")]
-    pub beacon_api: String,
-}
+pub const RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED: &str =
+    "genEvmProof_CommitteeUpdateCompressed";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofStepParams {
-    pub spec: args::Spec,
-
-    #[serde(default = "default_beacon_api")]
-    pub beacon_api: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofStepWithWitnessParams {
     pub spec: args::Spec,
 
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
@@ -34,17 +18,11 @@ pub struct GenProofStepWithWitnessParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenProofRotationWithWitnessParams {
+pub struct GenProofCommitteeUpdateParams {
     pub spec: args::Spec,
 
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_update: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncStepEvmProofResult {
-    pub proof: Vec<u8>,
-    pub public_inputs: Vec<U256>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,8 +48,4 @@ pub struct SyncCommitteePoseidonParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncCommitteePoseidonResult {
     pub commitment: [u8; 32],
-}
-
-fn default_beacon_api() -> String {
-    String::from("http://127.0.0.1:5052")
 }
