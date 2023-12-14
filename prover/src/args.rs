@@ -52,6 +52,22 @@ pub enum ProofCmd {
         #[clap(long, short)]
         pk_path: PathBuf,
     },
+    SyncStepCompressed {
+        #[command(subcommand)]
+        operation: OperationCmd,
+
+        #[clap(long, short, default_value = "21")]
+        k: u32,
+
+        #[clap(long, short)]
+        pk_path: PathBuf,
+
+        #[clap(long, default_value = "23")]
+        verifier_k: u32,
+
+        #[clap(long)]
+        verifier_pk_path: PathBuf,
+    },
     CommitteeUpdate {
         #[command(subcommand)]
         operation: OperationCmd,

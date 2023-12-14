@@ -5,7 +5,6 @@ use contract_tests::make_client;
 use eth_types::{Minimal, LIMB_BITS};
 use ethers::contract::abigen;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256;
-use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::sync_step_circuit::StepCircuit;
 use lightclient_circuits::witness::SyncStepArgs;
 use rstest::rstest;
@@ -43,6 +42,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             participation,
             finalized_header_root,
             execution_payload_root,
+            accumulator: Default::default() 
         }
     }
 }
@@ -54,26 +54,23 @@ async fn test_step_instance_commitment_evm_equivalence(
     #[exclude("deneb*")]
     path: PathBuf,
 ) -> anyhow::Result<()> {
+    use contract_tests::decode_solidity_u256_array;
+    use ethers::types::U256;
+
     let (witness, _) = read_test_files_and_gen_witness(&path);
     let instance = StepCircuit::<Minimal, bn256::Fr>::get_instances(&witness, LIMB_BITS);
-    let poseidon_commitment =
-        poseidon_committee_commitment_from_uncompressed(&witness.pubkeys_uncompressed);
 
     let (_anvil_instance, ethclient) = make_client();
     let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
 
     let result = contract
-        .to_input_commitment(SyncStepInput::from(witness))
+        .to_public_inputs(SyncStepInput::from(witness), U256::from_little_endian(&instance[0][1].to_bytes()))
         .call()
         .await?;
-    let mut result_bytes = [0u8; 32];
-    result.to_little_endian(&mut result_bytes);
+    let result_decoded = decode_solidity_u256_array(&result);
 
-    assert_eq!(
-        bn256::Fr::from_bytes(&result_bytes).unwrap(),
-        instance[0][0]
-    );
-    assert_eq!(poseidon_commitment, instance[0][1]);
+    assert_eq!(result_decoded[12], instance[0][0]); // public input commitment
+    assert_eq!(result_decoded[13], instance[0][1]); // committee poseidon
 
     Ok(())
 }

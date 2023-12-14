@@ -12,11 +12,11 @@ abigen!(
     Spectre,
     "./out/Spectre.sol/Spectre.json";
     StepVerifier,
-    "./out/sync_step.sol/Verifier.json";
+    "./out/sync_step_verifier.sol/Verifier.json";
     CommitteeUpdateVerifier,
     "./out/committee_update_verifier.sol/Verifier.json";
-    StepMockVerifier,
-    "./out/SyncStepMockVerifier.sol/SyncStepMockVerifier.json";
+    SyncStepCompressedMockVerifier,
+    "./out/SyncStepMockVerifier.sol/SyncStepCompressedMockVerifier.json";
     CommitteeUpdateMockVerifier,
     "./out/CommitteeUpdateMockVerifier.sol/CommitteeUpdateMockVerifier.json";
     RotateExternal,
@@ -51,7 +51,14 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             participation,
             finalized_header_root,
             execution_payload_root,
+            ..Default::default()
         }
+    }
+}
+
+impl SyncStepInput {
+    pub fn set_accumulator(&mut self, accumulator: [U256; 12]) {
+        self.accumulator = accumulator;
     }
 }
 
@@ -85,6 +92,13 @@ where
         RotateInput {
             sync_committee_ssz,
             sync_committee_poseidon,
+            ..Default::default()
         }
+    }
+}
+
+impl RotateInput {
+    pub fn set_accumulator(&mut self, accumulator: [U256; 12]) {
+        self.accumulator = accumulator;
     }
 }

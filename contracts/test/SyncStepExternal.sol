@@ -11,9 +11,10 @@ import {SyncStepLib} from "../src/SyncStepLib.sol";
 contract SyncStepExternal {
     using SyncStepLib for SyncStepLib.SyncStepInput;
 
-    function toInputCommitment(
-        SyncStepLib.SyncStepInput calldata args
-    ) public pure returns (uint256) {
-        return args.toInputCommitment();
+    function toPublicInputs(
+        SyncStepLib.SyncStepInput calldata args,
+        uint256 syncCommitteePoseidon
+    ) public pure returns (uint256[14] memory) {
+        return args.toPublicInputs(syncCommitteePoseidon);
     }
 }

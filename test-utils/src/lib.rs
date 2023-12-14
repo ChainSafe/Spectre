@@ -1,7 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-pub mod conversions;
 mod execution_payload_header;
 mod test_types;
 
@@ -15,9 +14,7 @@ use ethereum_consensus_types::signing::{compute_domain, DomainType};
 use ethereum_consensus_types::{BeaconBlockHeader, SyncCommittee};
 use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
-use lightclient_circuits::poseidon::{
-    poseidon_committee_commitment_from_compressed, poseidon_committee_commitment_from_uncompressed,
-};
+use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::witness::{CommitteeRotationArgs, SyncStepArgs};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;

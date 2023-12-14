@@ -16,12 +16,20 @@ lint: fmt
 setup-step network *k='22':
     cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey -k $2 setup
 
+setup-step-compressed network *k='23':
+    cargo run -r -- circuit sync-step-compressed -p ./build/sync_step_$1.pkey -k 21 \
+         --verifier-k $2 --verifier-pk-path ./build/sync_step_verifier_$1.pkey setup
+
 setup-committee-update network *k='25':
     cargo run -r -- circuit committee-update -p ./build/committee_update_$1.pkey -k 18 \
          --verifier-k $2 --verifier-pk-path ./build/committee_update_verifier_$1.pkey setup
 
 gen-verifier-step network:
     cargo run -r -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step.sol
+
+gen-verifier-step-compressed network:
+    cargo run -r -- circuit sync-step-compressed -p ./build/sync_step_$1.pkey --verifier-pk-path ./build/sync_step_verifier_$1.pkey \
+        gen-verifier -o ./contracts/snark-verifiers/sync_step_verifier.sol
 
 gen-verifier-committee-update network:
     cargo run -r -- circuit committee-update -p ./build/committee_update_$1.pkey --verifier-pk-path ./build/committee_update_verifier_$1.pkey \
