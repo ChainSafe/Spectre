@@ -60,7 +60,7 @@ pub enum ProofCmd {
         #[command(subcommand)]
         operation: OperationCmd,
 
-        #[clap(long, short, default_value = "21")]
+        #[clap(long, short, default_value = "20")]
         k: u32,
 
         #[clap(long, short)]
@@ -71,22 +71,28 @@ pub enum ProofCmd {
 
         #[clap(long)]
         verifier_pk_path: PathBuf,
+
+        #[clap(short = 'L', long)]
+        verifier_lookup_bits: Option<usize>,
     },
     CommitteeUpdate {
         #[command(subcommand)]
         operation: OperationCmd,
 
-        #[clap(long, short, default_value = "18")]
+        #[clap(long, short, default_value = "20")]
         k: u32,
 
         #[clap(long, short)]
         pk_path: PathBuf,
 
-        #[clap(long, default_value = "25")]
+        #[clap(long, default_value = "24")]
         verifier_k: u32,
 
         #[clap(long)]
         verifier_pk_path: PathBuf,
+
+        #[clap(short = 'L', long)]
+        verifier_lookup_bits: Option<usize>,
     },
 }
 

@@ -5,15 +5,14 @@
 use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
 use ark_std::{end_timer, start_timer};
+use lightclient_circuits::aggregation_circuit::AggregationConfigPinning;
+use lightclient_circuits::halo2_base::gates::circuit::CircuitBuilderStage;
 use lightclient_circuits::halo2_base::utils::fs::gen_srs;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
     halo2_proofs::halo2curves::bn256::{Bn256, Fr},
     sync_step_circuit::StepCircuit,
     util::AppCircuit,
-};
-use lightclient_circuits::{
-    halo2_base::gates::circuit::CircuitBuilderStage, halo2_proofs::poly::commitment::Params,
 };
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
@@ -56,6 +55,7 @@ where
                         &pk_path,
                         cfg_path,
                         &Default::default(),
+                        None,
                     );
 
                     Ok(())
@@ -82,18 +82,19 @@ where
             verifier_k,
             verifier_pk_path,
             pk_path,
+            verifier_lookup_bits,
         } => {
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
 
             let gen_dummy_snark = |k: u32| {
                 let params = gen_srs(k);
 
-                let pk = CommitteeUpdateCircuit::<S, Fr>::read_or_create_pk(
+                let pk = CommitteeUpdateCircuit::<S, Fr>::create_pk(
                     &params,
                     &pk_path,
                     &cfg_path,
-                    true,
                     &Default::default(),
+                    None,
                 );
 
                 CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
@@ -121,6 +122,9 @@ where
                         &verifier_pk_path,
                         verifier_cfg_path,
                         &vec![dummy_snark],
+                        verifier_lookup_bits.map(|lookup_bits| {
+                            AggregationConfigPinning::new(verifier_k, lookup_bits)
+                        }),
                     );
 
                     Ok(())
@@ -156,18 +160,19 @@ where
             pk_path,
             verifier_k,
             verifier_pk_path,
+            verifier_lookup_bits,
         } => {
             let cfg_path = get_config_path(&pk_path, &base_args.config_dir);
 
             let gen_dummy_snark = |k: u32| {
                 let params = gen_srs(k);
 
-                let pk = StepCircuit::<S, Fr>::read_or_create_pk(
+                let pk = StepCircuit::<S, Fr>::create_pk(
                     &params,
                     &pk_path,
                     &cfg_path,
-                    true,
                     &Default::default(),
+                    None,
                 );
 
                 StepCircuit::<S, Fr>::gen_snark_shplonk(
@@ -195,6 +200,9 @@ where
                         &verifier_pk_path,
                         verifier_cfg_path,
                         &vec![dummy_snark],
+                        verifier_lookup_bits.map(|lookup_bits| {
+                            AggregationConfigPinning::new(verifier_k, lookup_bits)
+                        }),
                     );
 
                     Ok(())
@@ -244,16 +252,12 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     estimate_gas: bool,
     default_witness: Circuit::Witness,
 ) -> eyre::Result<()> {
-    let pk = Circuit::read_pk(params, pk_path, &default_witness);
+    let pk = Circuit::read_pk(params, pk_path, cfg_path, &default_witness);
 
     let num_instances = {
-        let circuit = Circuit::create_circuit(
-            CircuitBuilderStage::Keygen,
-            None,
-            &default_witness,
-            params.k(),
-        )
-        .unwrap();
+        let circuit =
+            Circuit::create_circuit(CircuitBuilderStage::Keygen, None, &default_witness, params)
+                .unwrap();
         circuit.num_instance().first().map_or(0, |x| *x as u32)
     };
 

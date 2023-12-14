@@ -128,7 +128,7 @@ mod tests {
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
@@ -146,12 +146,12 @@ mod tests {
         const K: u32 = 21;
         let params = gen_srs(K);
 
-        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params,
             "../build/sync_step_21.pkey",
             CONFIG_PATH,
-            false,
             &CommitteeUpdateArgs::<Testnet>::default(),
+            None,
         );
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());

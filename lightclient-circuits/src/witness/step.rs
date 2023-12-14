@@ -138,7 +138,7 @@ mod tests {
         const K: u32 = 20;
         let witness = SyncStepArgs::<Testnet>::default();
 
-        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
             CircuitBuilderStage::Mock,
             None,
             &witness,

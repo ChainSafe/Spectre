@@ -32,7 +32,7 @@ fn test_eth2_spec_mock_1(
 fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathBuf) {
     let (sync_witness, rotation_witness) = read_test_files_and_gen_witness(&path);
 
-    let rotation_circuit = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::create_circuit(
+    let rotation_circuit = CommitteeUpdateCircuit::<Minimal, bn256::Fr>::mock_circuit(
         CircuitBuilderStage::Mock,
         None,
         &rotation_witness,
@@ -50,7 +50,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     prover.assert_satisfied_par();
     end_timer!(timer);
 
-    let sync_circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
+    let sync_circuit = StepCircuit::<Minimal, bn256::Fr>::mock_circuit(
         CircuitBuilderStage::Mock,
         None,
         &sync_witness,
@@ -76,12 +76,12 @@ fn test_eth2_spec_proofgen(
     let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let params = gen_srs(K);
-    let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
+    let pk = StepCircuit::<Minimal, bn256::Fr>::create_pk(
         &params,
         "../build/sync_step_20.pkey",
         "./config/sync_step_20.json",
-        false,
         &SyncStepArgs::<Minimal>::default(),
+        None,
     );
 
     let _ = StepCircuit::<Minimal, bn256::Fr>::gen_proof_shplonk(
@@ -102,19 +102,19 @@ fn test_eth2_spec_evm_verify(
     const K: u32 = 21;
     let params = gen_srs(K);
 
-    let pk = StepCircuit::<Minimal, bn256::Fr>::read_or_create_pk(
+    let pk = StepCircuit::<Minimal, bn256::Fr>::create_pk(
         &params,
         "../build/sync_step_21.pkey",
         "./config/sync_step_21.json",
-        false,
         &SyncStepArgs::<Minimal>::default(),
+        None
     );
 
     let (witness, _) = read_test_files_and_gen_witness(&path);
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step_21.json");
 
-    let circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
+    let circuit = StepCircuit::<Minimal, bn256::Fr>::mock_circuit(
         CircuitBuilderStage::Prover,
         Some(pinning),
         &witness,

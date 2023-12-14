@@ -22,7 +22,11 @@ use halo2_base::{
         circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, GateInstructions,
         RangeInstructions,
     },
-    halo2_proofs::{halo2curves::bn256, plonk::Error},
+    halo2_proofs::{
+        halo2curves::bn256::{self, Bn256},
+        plonk::Error,
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
+    },
     utils::CurveAffineExt,
     AssignedValue, Context, QuantumCell,
 };
@@ -399,12 +403,16 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         args: &Self::Witness,
-        k: u32,
+        params: &ParamsKZG<Bn256>,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
+        let k = params.k() as usize;
+        let lookup_bits = pinning
+            .as_ref()
+            .map_or(k - 1, |p| p.params.lookup_bits.unwrap_or(k - 1));
         let mut builder = Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
-            .use_k(k as usize)
+            .use_k(k)
             .use_instance_columns(1);
-        let range = builder.range_chip(k as usize - 1);
+        let range = builder.range_chip(lookup_bits);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
@@ -461,13 +469,9 @@ mod tests {
         const K: u32 = 20;
         let witness = load_circuit_args();
 
-        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            None,
-            &witness,
-            K,
-        )
-        .unwrap();
+        let circuit =
+            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
+                .unwrap();
 
         let instance = StepCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
 
@@ -482,12 +486,12 @@ mod tests {
         const K: u32 = 22;
         let params = gen_srs(K);
 
-        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
             "../build/sync_step_22.pkey",
             "./config/sync_step_22.json",
-            false,
             &SyncStepArgs::<Testnet>::default(),
+            None,
         );
 
         let witness = load_circuit_args();
@@ -506,12 +510,12 @@ mod tests {
         const K: u32 = 22;
         let params = gen_srs(K);
 
-        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
             "../build/sync_step_22.pkey",
             "./config/sync_step_22.json",
-            false,
             &SyncStepArgs::<Testnet>::default(),
+            None
         );
 
         let witness = load_circuit_args();
@@ -522,7 +526,7 @@ mod tests {
             CircuitBuilderStage::Prover,
             Some(pinning),
             &witness,
-            K,
+            &params,
         )
         .unwrap();
 
@@ -542,19 +546,19 @@ mod tests {
 
     #[test]
     fn test_step_aggregation_evm() {
-        const APP_K: u32 = 21;
-        const APP_PK_PATH: &str = "../build/sync_step_21.pkey";
-        const APP_PINNING_PATH: &str = "./config/sync_step_21.json";
+        const APP_K: u32 = 20;
+        const APP_PK_PATH: &str = "../build/sync_step_20.pkey";
+        const APP_PINNING_PATH: &str = "./config/sync_step_20.json";
+        const AGG_K: u32 = 23;
+        const AGG_PK_PATH: &str = "../build/sync_step_verifier_23.pkey";
         const AGG_CONFIG_PATH: &str = "./config/sync_step_verifier_23.json";
         let params_app = gen_srs(APP_K);
-
-        const AGG_K: u32 = 23;
-        let pk_app = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk_app = StepCircuit::<Testnet, Fr>::create_pk(
             &params_app,
             APP_PK_PATH,
             APP_PINNING_PATH,
-            false,
             &SyncStepArgs::<Testnet>::default(),
+            None
         );
 
         let witness = load_circuit_args();
@@ -567,14 +571,15 @@ mod tests {
         )
         .unwrap();
 
-        let params = gen_srs(AGG_K);
+        let agg_params = gen_srs(AGG_K);
 
-        let pk = AggregationCircuit::read_or_create_pk(
-            &params,
-            "../build/sync_step_verifier_23.pkey",
+        let pk = AggregationCircuit::create_pk(
+            &agg_params,
+            AGG_PK_PATH,
             AGG_CONFIG_PATH,
-            false,
             &vec![snark.clone()],
+            Some(AggregationConfigPinning::new(AGG_K, 19))
+
         );
 
         let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
@@ -583,7 +588,7 @@ mod tests {
             CircuitBuilderStage::Prover,
             Some(agg_config),
             &vec![snark.clone()],
-            AGG_K,
+            &agg_params,
         )
         .unwrap();
 
@@ -593,10 +598,10 @@ mod tests {
         println!("num_instances: {:?}", num_instances);
         println!("instances: {:?}", instances);
 
-        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        let proof = gen_evm_proof_shplonk(&agg_params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
         let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
-            &params,
+            &agg_params,
             &pk,
             None::<String>,
             &vec![snark],

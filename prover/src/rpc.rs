@@ -86,6 +86,7 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
         let pk_agg = AggregationCircuit::read_pk(
             &params_agg,
             format!("./build/{verifier_filename}.pkey"),
+            &pinning_path,
             &vec![snark.clone()],
         );
 
@@ -166,6 +167,7 @@ pub(crate) async fn gen_evm_proof_sync_step_compressed_handler(
         let pk_agg = AggregationCircuit::read_pk(
             &params_agg,
             format!("./build/{verifier_filename}.pkey"),
+            &pinning_path,
             &vec![snark.clone()],
         );
 
@@ -204,7 +206,7 @@ where
 {
     let params = gen_srs(Circuit::get_degree(&config_path));
 
-    let app_pk = Circuit::read_pk(&params, pk_path, &Circuit::Witness::default());
+    let app_pk = Circuit::read_pk(&params, pk_path, &config_path, &Circuit::Witness::default());
 
     Ok(Circuit::gen_snark_shplonk(
         &params,

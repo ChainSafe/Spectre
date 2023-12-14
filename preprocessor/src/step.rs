@@ -180,13 +180,9 @@ mod tests {
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
-        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            None,
-            &witness,
-            K,
-        )
-        .unwrap();
+        let circuit =
+            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
+                .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
@@ -198,12 +194,12 @@ mod tests {
         const K: u32 = 21;
         let params = gen_srs(K);
 
-        let pk = StepCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
             "../build/sync_step_21.pkey",
             CONFIG_PATH,
-            false,
             &SyncStepArgs::<Testnet>::default(),
+            None,
         );
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());

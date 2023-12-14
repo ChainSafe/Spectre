@@ -109,7 +109,7 @@ mod tests {
         const K: u32 = 18;
         let witness = CommitteeUpdateArgs::<Testnet>::default();
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
             CircuitBuilderStage::Mock,
             None,
             &witness,

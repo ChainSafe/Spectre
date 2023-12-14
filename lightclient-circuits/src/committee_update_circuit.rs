@@ -14,7 +14,11 @@ use crate::{
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
     gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder},
-    halo2_proofs::{halo2curves::bn256, plonk::Error},
+    halo2_proofs::{
+        halo2curves::bn256::{self, Bn256},
+        plonk::Error,
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
+    },
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -222,12 +226,16 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         witness: &witness::CommitteeUpdateArgs<S>,
-        k: u32,
+        params: &ParamsKZG<Bn256>,
     ) -> Result<impl crate::util::PinnableCircuit<bn256::Fr>, Error> {
+        let k = params.k() as usize;
+        let lookup_bits = pinning
+            .as_ref()
+            .map_or(k - 1, |p| p.params.lookup_bits.unwrap_or(k - 1));
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
-            .use_k(k as usize)
+            .use_k(k)
             .use_instance_columns(1);
-        let range = builder.range_chip(k as usize - 1);
+        let range = builder.range_chip(lookup_bits);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
@@ -322,7 +330,7 @@ mod tests {
         const K: u32 = 18;
         let witness = load_circuit_args();
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
             CircuitBuilderStage::Mock,
             None,
             &witness,
@@ -346,12 +354,12 @@ mod tests {
         const PINNING_PATH: &str = "./config/committee_update_18.json";
         const PKEY_PATH: &str = "../build/committee_update_18.pkey";
 
-        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params,
             PKEY_PATH,
             PINNING_PATH,
-            false,
             &CommitteeUpdateArgs::<Testnet>::default(),
+            None,
         );
 
         let witness = load_circuit_args();
@@ -367,33 +375,34 @@ mod tests {
 
     #[test]
     fn test_committee_update_aggregation_evm() {
-        const APP_K: u32 = 18;
-        const APP_PK_PATH: &str = "../build/committee_update_18.pkey";
-        const APP_PINNING_PATH: &str = "./config/committee_update_18.json";
-        const AGG_CONFIG_PATH: &str = "./config/committee_update_verifier_25.json";
+        const APP_K: u32 = 20;
+        const APP_PK_PATH: &str = "../build/committee_update_20.pkey";
+        const APP_PINNING_PATH: &str = "./config/committee_update_20.json";
+        const AGG_K: u32 = 25;
+        const AGG_PK_PATH: &str = "../build/committee_update_verifier_24.pkey";
+        const AGG_CONFIG_PATH: &str = "./config/committee_update_verifier_24.json";
         let params_app = gen_srs(APP_K);
 
-        const AGG_K: u32 = 25;
-        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::read_or_create_pk(
+        let pk_app = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params_app,
             APP_PK_PATH,
             APP_PINNING_PATH,
-            false,
             &CommitteeUpdateArgs::<Testnet>::default(),
+            None,
         );
 
         let witness = load_circuit_args();
         let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
 
-        let params = gen_srs(AGG_K);
-        println!("agg_params k: {:?}", params.k());
+        let agg_params = gen_srs(AGG_K);
+        println!("agg_params k: {:?}", agg_params.k());
 
-        let pk = AggregationCircuit::read_or_create_pk(
-            &params,
-            "../build/committee_update_verifier_25.pkey",
+        let pk = AggregationCircuit::create_pk(
+            &agg_params,
+            AGG_PK_PATH,
             AGG_CONFIG_PATH,
-            false,
             &vec![snark.clone()],
+            None,
         );
 
         let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
@@ -402,7 +411,7 @@ mod tests {
             CircuitBuilderStage::Prover,
             Some(agg_config),
             &vec![snark.clone()],
-            AGG_K,
+            &agg_params,
         )
         .unwrap();
 
@@ -412,10 +421,10 @@ mod tests {
         println!("num_instances: {:?}", num_instances);
         println!("instances: {:?}", instances);
 
-        let proof = gen_evm_proof_shplonk(&params, &pk, agg_circuit, instances.clone());
+        let proof = gen_evm_proof_shplonk(&agg_params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
         let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
-            &params,
+            &agg_params,
             &pk,
             None::<String>,
             &vec![snark],
