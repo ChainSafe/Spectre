@@ -1,7 +1,3 @@
-# The Licensed Work is (c) 2023 ChainSafe
-# Code: https://github.com/ChainSafe/Spectre
-# SPDX-License-Identifier: LGPL-3.0-only
-
 #!/bin/sh
 cd $(git rev-parse --show-toplevel)
 source .env
