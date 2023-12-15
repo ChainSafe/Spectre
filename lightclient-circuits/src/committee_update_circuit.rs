@@ -46,7 +46,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    fn synthesize(
+    pub fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::CommitteeUpdateArgs<S>,

@@ -51,7 +51,7 @@ download-spec-tests: clean-spec-tests
     #!/usr/bin/env bash
     if [[ ! -d 'consensus-spec-tests' ]]; then
         echo "Downloading test data."
-        test-utils/scripts/download_consensus_specs.sh
+        bash test-utils/scripts/download_consensus_specs.sh
     fi
 
 # deletes all the downloaded spec tests

@@ -63,7 +63,7 @@ pub struct StepCircuit<S: Spec + ?Sized, F: Field> {
 }
 
 impl<S: Spec, F: Field> StepCircuit<S, F> {
-    fn synthesize(
+    pub fn synthesize(
         builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::SyncStepArgs<S>,
@@ -439,6 +439,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -515,7 +516,7 @@ mod tests {
             "../build/sync_step_22.pkey",
             "./config/sync_step_22.json",
             &SyncStepArgs::<Testnet>::default(),
-            None
+            None,
         );
 
         let witness = load_circuit_args();
@@ -558,7 +559,7 @@ mod tests {
             APP_PK_PATH,
             APP_PINNING_PATH,
             &SyncStepArgs::<Testnet>::default(),
-            None
+            None,
         );
 
         let witness = load_circuit_args();
@@ -578,8 +579,7 @@ mod tests {
             AGG_PK_PATH,
             AGG_CONFIG_PATH,
             &vec![snark.clone()],
-            Some(AggregationConfigPinning::new(AGG_K, 19))
-
+            Some(AggregationConfigPinning::new(AGG_K, 19)),
         );
 
         let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
