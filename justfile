@@ -39,7 +39,10 @@ build-contracts:
     cd contracts && forge build
 
 deploy-contracts-local:
-    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --fork-url $LOCAL_RPC_URL --broadcast
+    cd contracts && forge script ./script/DeploySpectreLocal.s.sol:DeploySpectre --fork-url $LOCAL_RPC_URL --broadcast
+
+deploy-contracts-testnet:
+    cd contracts && forge script ./script/DeploySpectre.s.sol:DeploySpectre --private-key $DEPLOYER_PRIVATE_KEY --fork-url $SEPOLIA_RPC_URL --broadcast
 
 deploy-contracts network: # network one of [MAINNET, GOERLI, SEPOLIA]
     #! /usr/bin/env bash

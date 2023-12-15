@@ -13,7 +13,7 @@ import {Verifier as SyncStepVerifier} from "../snark-verifiers/sync_step_verifie
 contract DeploySpectre is Script {
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("ANVIL_PRIVATE_KEY");
         uint256 initialSyncPeriod = vm.envUint("INITIAL_SYNC_PERIOD");
         uint256 initialCommitteePoseidon = vm.envUint("INITIAL_COMMITTEE_POSEIDON");
         uint256 slotsPerPeriod = vm.envUint("SLOTS_PER_PERIOD");
