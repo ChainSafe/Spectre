@@ -150,6 +150,7 @@ pub enum Spec {
 
 #[derive(Clone, clap::Subcommand)]
 pub enum UtilsCmd {
+    /// Get `INITIAL_SYNC_PERIOD`, `INITIAL_COMMITTEE_POSEIDON` for contracts deployment.
     CommitteePoseidon {
         /// Beacon API URL
         #[clap(long, short)]
