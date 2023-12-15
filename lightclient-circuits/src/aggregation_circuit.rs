@@ -5,8 +5,11 @@
 use crate::util::{AppCircuit, Halo2ConfigPinning, PinnableCircuit};
 use halo2_base::{
     gates::{circuit::CircuitBuilderStage, flex_gate::MultiPhaseThreadBreakPoints},
-    halo2_proofs::{halo2curves::bn256::Fr, plonk::Error},
-    utils::fs::gen_srs,
+    halo2_proofs::{
+        halo2curves::bn256::{Bn256, Fr},
+        plonk::Error,
+        poly::{commitment::Params, kzg::commitment::ParamsKZG},
+    },
 };
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::{
@@ -20,10 +23,23 @@ use std::{
 };
 
 /// Configuration for the aggregation circuit.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AggregationConfigPinning {
     pub params: AggregationConfigParams,
     pub break_points: MultiPhaseThreadBreakPoints,
+}
+
+impl AggregationConfigPinning {
+    pub fn new(k: u32, lookup_bits: usize) -> Self {
+        Self {
+            params: AggregationConfigParams {
+                degree: k,
+                lookup_bits,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
 }
 
 impl Halo2ConfigPinning for AggregationConfigPinning {
@@ -82,14 +98,12 @@ impl AppCircuit for AggregationCircuit {
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         snark: &Self::Witness,
-        k: u32,
+        params: &ParamsKZG<Bn256>,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error> {
-        let lookup_bits = k as usize - 1;
-        let params = gen_srs(k);
         let circuit_params = pinning.clone().map_or(
             AggregationConfigParams {
-                degree: k,
-                lookup_bits,
+                degree: params.k(),
+                lookup_bits: params.k() as usize - 1,
                 ..Default::default()
             },
             |p| p.params,
@@ -97,7 +111,7 @@ impl AppCircuit for AggregationCircuit {
         let mut circuit = AggregationCircuit::new::<SHPLONK>(
             stage,
             circuit_params,
-            &params,
+            params,
             snark.clone(),
             Default::default(),
         );

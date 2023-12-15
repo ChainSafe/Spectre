@@ -1,7 +1,3 @@
-// The Licensed Work is (c) 2023 ChainSafe
-// Code: https://github.com/ChainSafe/Spectre
-// SPDX-License-Identifier: LGPL-3.0-only
-
 // ! This file is a modified version of the original file from https://github.com/zkemail/halo2-dynamic-sha256 (MIT license)
 
 use eth_types::Field;
