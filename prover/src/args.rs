@@ -37,6 +37,14 @@ pub enum BaseCmd {
         /// Port for RPC server to listen on
         #[clap(long, short, default_value = "3000")]
         port: String,
+
+        /// Network specification [mainnet, testnet]
+        #[clap(long, short, default_value = "mainnet")]
+        spec: Spec,
+
+        /// Path to directory with circuit artifacts
+        #[clap(long, short, default_value = "./build")]
+        build_dir: PathBuf,
     },
     /// Circuit related commands.
     Circuit {

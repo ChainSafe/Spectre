@@ -2,7 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use crate::args;
 use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +11,6 @@ pub const RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED: &str =
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofStepParams {
-    pub spec: args::Spec,
-
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_finality_update: Vec<u8>,
     pub pubkeys: Vec<u8>,
@@ -23,8 +20,6 @@ pub struct GenProofStepParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenProofCommitteeUpdateParams {
-    pub spec: args::Spec,
-
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_update: Vec<u8>,
 }
