@@ -9,8 +9,9 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::Url;
 
 use crate::rpc_api::{
-    CommitteeUpdateEvmProofResult, GenProofStepParams, SyncStepCompressedEvmProofResult,
-    RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED, RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED, GenProofCommitteeUpdateParams,
+    CommitteeUpdateEvmProofResult, GenProofCommitteeUpdateParams, GenProofStepParams,
+    SyncStepCompressedEvmProofResult, RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
+    RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
 /// Error object in a response

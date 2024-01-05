@@ -46,7 +46,7 @@ impl<Spec: eth_types::Spec> From<SyncStepArgs<Spec>> for SyncStepInput {
             participation,
             finalized_header_root,
             execution_payload_root,
-            accumulator: Default::default() 
+            accumulator: Default::default(),
         }
     }
 }
@@ -68,7 +68,10 @@ async fn test_step_instance_commitment_evm_equivalence(
     let contract = SyncStepExternal::deploy(ethclient, ())?.send().await?;
 
     let result = contract
-        .to_public_inputs(SyncStepInput::from(witness), U256::from_little_endian(&instance[0][1].to_bytes()))
+        .to_public_inputs(
+            SyncStepInput::from(witness),
+            U256::from_little_endian(&instance[0][1].to_bytes()),
+        )
         .call()
         .await?;
     let result_decoded = decode_solidity_u256_array(&result);

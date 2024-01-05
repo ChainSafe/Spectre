@@ -439,7 +439,6 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::fs;
