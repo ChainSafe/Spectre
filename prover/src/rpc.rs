@@ -2,6 +2,7 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
+use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
 use itertools::Itertools;
@@ -71,7 +72,7 @@ where
     let mut update = ssz_rs::deserialize(&light_client_update)?;
     let witness = rotation_args_from_update(&mut update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
-    
+
     let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
         state.committee_update.config_path(),
         params,
@@ -131,7 +132,7 @@ where
     let pubkeys = ssz_rs::deserialize(&pubkeys)?;
     let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
     let params = state.params.get(state.step.degree()).unwrap();
-    
+
     let snark = gen_uncompressed_snark::<StepCircuit<S, Fr>>(
         state.step.config_path(),
         params,
@@ -196,10 +197,10 @@ where
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    let rpc_server = Arc::new(jsonrpc_server::<S>(ProverState::new::<S>(
-        config_dir.as_ref(),
-        build_dir.as_ref(),
-    )));
+    let timer = start_timer!(|| "Load proving keys");
+    let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref());
+    end_timer!(timer);
+    let rpc_server = Arc::new(jsonrpc_server::<S>(state));
 
     let router = Router::new()
         .route("/rpc", post(handler))
