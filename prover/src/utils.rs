@@ -2,7 +2,7 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::{env, ops::Deref, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 
 use beacon_api_client::{BlockId, VersionedValue};
 use ethereum_consensus_types::LightClientBootstrap;

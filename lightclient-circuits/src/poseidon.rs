@@ -29,12 +29,12 @@ const R_P: usize = N_ROUNDS_PC[T - 2];
 const R_F: usize = 8;
 
 /// Generates Poseidon hash commitment to a list of BLS12-381 Fq elements.
-/// 
+///
 /// Fields elements are initially represented as `NUM_LIMBS` limbs of `LIMB_BITS` bits each.
 /// By composing element two limbs in one, we reduce the number of inputs to Poseidon in half.
-/// 
+///
 /// Each Poseidon sponge absorbs `POSEIDON_SIZE`-2 elements and previos sponge output if it's not the first batch, ie. onion commitment.
-/// 
+///
 /// Assumes that LIMB_BITS * 2 < 254 (BN254).
 pub fn fq_array_poseidon<'a, F: Field>(
     ctx: &mut Context<F>,
@@ -74,7 +74,7 @@ pub fn fq_array_poseidon<'a, F: Field>(
 }
 
 /// Generates Poseidon hash commitment to a list of BLS12-381 Fq elements.
-/// 
+///
 /// This is the off-circuit analog of `fq_array_poseidon`.
 pub fn poseidon_hash_fq_array<F: Field>(elems: impl Iterator<Item = Fq>, limb_bits: usize) -> F {
     let limbs = elems
