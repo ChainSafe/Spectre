@@ -92,13 +92,11 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
 
     let rotation_circuit = mock_committee_update_circuit(&rotation_witness, K_ROTATION, None);
 
+    let rotation_instance =
+        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&rotation_witness, LIMB_BITS);
     let timer = start_timer!(|| "committee_update mock prover run");
-    let prover = MockProver::<bn256::Fr>::run(
-        K_ROTATION,
-        &rotation_circuit,
-        CommitteeUpdateCircuit::<Minimal, bn256::Fr>::get_instances(&rotation_witness, LIMB_BITS),
-    )
-    .unwrap();
+    let prover =
+        MockProver::<bn256::Fr>::run(K_ROTATION, &rotation_circuit, rotation_instance).unwrap();
     prover.assert_satisfied_par();
     end_timer!(timer);
 

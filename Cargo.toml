@@ -77,14 +77,16 @@ pasta_curves = "0.5.1"
 ff = "0.13"
 sha2 = { version = "0.9", features = ["compress"] }
 uint = "0.9.1"
-ark-std = { version = "0.4.0", features = ["print-trace"] }
 
 # misc
 itertools = "0.12.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.78"
+getset = "0.1.2"
 log = "0.4.14"
 hex = "0.4"
+ark-std = { version = "0.4.0", features = ["print-trace"] }
+
 
 [patch.crates-io]
 halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom", rev = "1bd39b8" }

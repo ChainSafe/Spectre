@@ -4,6 +4,8 @@
 
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+pub mod prover;
+
 pub mod rpc_api;
 pub mod rpc_client;
 

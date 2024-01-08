@@ -20,8 +20,30 @@ mod args;
 
 async fn app(options: Cli) -> eyre::Result<()> {
     match options.subcommand {
-        args::BaseCmd::Rpc { port } => {
-            run_rpc(port.parse().unwrap()).await?;
+        args::BaseCmd::Rpc {
+            port,
+            spec,
+            build_dir,
+        } => {
+            match spec {
+                args::Spec::Testnet => {
+                    run_rpc::<eth_types::Testnet>(
+                        port.parse().unwrap(),
+                        options.args.config_dir,
+                        build_dir,
+                    )
+                    .await
+                }
+                args::Spec::Mainnet => {
+                    run_rpc::<eth_types::Mainnet>(
+                        port.parse().unwrap(),
+                        options.args.config_dir,
+                        build_dir,
+                    )
+                    .await
+                }
+                args::Spec::Minimal => Err(eyre::eyre!("Minimal spec is not supported for RPC")),
+            }?;
 
             log::info!("Stopped accepting RPC connections");
 

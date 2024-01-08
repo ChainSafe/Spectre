@@ -2,22 +2,22 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use super::args::Spec;
+use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
 use itertools::Itertools;
-use jsonrpc_v2::RequestObject as JsonRpcRequestObject;
+use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
-use lightclient_circuits::halo2_base::utils::fs::gen_srs;
-use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
-use lightclient_circuits::{
-    committee_update_circuit::CommitteeUpdateCircuit, sync_step_circuit::StepCircuit,
-    util::AppCircuit,
-};
+use lightclient_circuits::halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
+use lightclient_circuits::halo2_proofs::plonk::ProvingKey;
+use lightclient_circuits::halo2_proofs::poly::kzg::commitment::ParamsKZG;
+use lightclient_circuits::sync_step_circuit::StepCircuit;
+use lightclient_circuits::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
 use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
-use std::path::PathBuf;
+use spectre_prover::prover::ProverState;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
@@ -28,77 +28,69 @@ use crate::rpc_api::{
     RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
-pub(crate) fn jsonrpc_server() -> JsonRpcServer<JsonRpcMapRouter> {
+pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
+    state: ProverState,
+) -> JsonRpcServer<JsonRpcMapRouter>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     JsonRpcServer::new()
+        .with_data(Data::new(state))
         .with_method(
             RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
-            gen_evm_proof_committee_update_handler,
+            gen_evm_proof_committee_update_handler::<S>,
         )
         .with_method(
             RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
-            gen_evm_proof_sync_step_compressed_handler,
+            gen_evm_proof_sync_step_compressed_handler::<S>,
         )
         .finish_unwrapped()
 }
-
-pub(crate) async fn gen_evm_proof_committee_update_handler(
+pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
+    Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
-) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError> {
+) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let GenProofCommitteeUpdateParams {
-        spec,
         light_client_update,
     } = params;
 
-    // TODO: use config/build paths from CLI flags
+    let mut update = ssz_rs::deserialize(&light_client_update)?;
+    let witness = rotation_args_from_update(&mut update).await?;
+    let params = state.params.get(state.committee_update.degree()).unwrap();
 
-    let (snark, verifier_filename) = match spec {
-        Spec::Testnet => {
-            let mut update = ssz_rs::deserialize(&light_client_update)?;
-            let witness = rotation_args_from_update(&mut update).await?;
-            let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<eth_types::Testnet, Fr>>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_testnet.json"),
-                PathBuf::from("./build/committee_update_testnet.pkey"),
-                witness,
-            )?;
+    let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
+        state.committee_update.config_path(),
+        params,
+        state.committee_update.pk(),
+        witness,
+    )?;
 
-            (snark, "committee_update_verifier_testnet")
-        }
-        Spec::Mainnet => {
-            let mut update = ssz_rs::deserialize(&light_client_update)?;
-            let witness = rotation_args_from_update(&mut update).await?;
-            let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<eth_types::Mainnet, Fr>>(
-                PathBuf::from("./lightclient-circuits/config/committee_update_mainnet.json"),
-                PathBuf::from("./build/committee_update_mainnet.pkey"),
-                witness,
-            )?;
-
-            (snark, "committee_update_verifier_mainnet")
-        }
-        Spec::Minimal => return Err(JsonRpcError::internal("Minimal spec not supported in RPC")),
-    };
-
-    let (proof, instances) = {
-        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
-
-        // Circuits of all specs have the same pinning type so we can just use Mainnet spec.
-        let agg_k = AggregationCircuit::get_degree(&pinning_path);
-        let params_agg = gen_srs(agg_k);
-        let pk_agg = AggregationCircuit::read_pk(
-            &params_agg,
-            format!("./build/{verifier_filename}.pkey"),
-            &pinning_path,
-            &vec![snark.clone()],
-        );
-
-        AggregationCircuit::gen_evm_proof_shplonk(
-            &params_agg,
-            &pk_agg,
-            pinning_path,
-            None,
-            &vec![snark.clone()],
-        )
-        .map_err(JsonRpcError::internal)?
-    };
+    let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
+        state
+            .params
+            .get(state.committee_update_verifier.degree())
+            .unwrap(),
+        state.committee_update_verifier.pk(),
+        state.committee_update_verifier.config_path(),
+        None,
+        &vec![snark.clone()],
+    )
+    .map_err(JsonRpcError::internal)?;
 
     // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
     // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
@@ -120,66 +112,42 @@ pub(crate) async fn gen_evm_proof_committee_update_handler(
     })
 }
 
-pub(crate) async fn gen_evm_proof_sync_step_compressed_handler(
+pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
+    Data(state): Data<ProverState>,
     Params(params): Params<GenProofStepParams>,
-) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError> {
+) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+{
     let GenProofStepParams {
-        spec,
         light_client_finality_update,
         domain,
         pubkeys,
     } = params;
 
-    let (snark, verifier_filename) = match spec {
-        Spec::Testnet => {
-            let update = ssz_rs::deserialize(&light_client_finality_update)?;
-            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
-            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
-            let snark = gen_uncompressed_snark::<StepCircuit<eth_types::Mainnet, Fr>>(
-                PathBuf::from("./lightclient-circuits/config/sync_step_testnet.json"),
-                PathBuf::from("./build/sync_step_testnet.pkey"),
-                witness,
-            )?;
+    let update = ssz_rs::deserialize(&light_client_finality_update)?;
+    let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+    let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+    let params = state.params.get(state.step.degree()).unwrap();
 
-            (snark, "sync_step_verifier_testnet")
-        }
-        Spec::Mainnet => {
-            let update = ssz_rs::deserialize(&light_client_finality_update)?;
-            let pubkeys = ssz_rs::deserialize(&pubkeys)?;
-            let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
-            let snark = gen_uncompressed_snark::<StepCircuit<eth_types::Mainnet, Fr>>(
-                PathBuf::from("./lightclient-circuits/config/sync_step_mainnet.json"),
-                PathBuf::from("./build/sync_step_mainnet.pkey"),
-                witness,
-            )?;
+    let snark = gen_uncompressed_snark::<StepCircuit<S, Fr>>(
+        state.step.config_path(),
+        params,
+        state.step.pk(),
+        witness,
+    )?;
 
-            (snark, "sync_step_verifier_mainnet")
-        }
-        Spec::Minimal => return Err(JsonRpcError::internal("Minimal spec not supported in RPC")),
-    };
-
-    let (proof, instances) = {
-        let pinning_path = format!("./lightclient-circuits/config/{verifier_filename}.json");
-
-        // Circuits of all specs have the same pinning type so we can just use Mainnet spec.
-        let agg_k = AggregationCircuit::get_degree(&pinning_path);
-        let params_agg = gen_srs(agg_k);
-        let pk_agg = AggregationCircuit::read_pk(
-            &params_agg,
-            format!("./build/{verifier_filename}.pkey"),
-            &pinning_path,
-            &vec![snark.clone()],
-        );
-
-        AggregationCircuit::gen_evm_proof_shplonk(
-            &params_agg,
-            &pk_agg,
-            pinning_path,
-            None,
-            &vec![snark.clone()],
-        )
-        .map_err(JsonRpcError::internal)?
-    };
+    let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
+        state.params.get(state.step_verifier.degree()).unwrap(),
+        state.step_verifier.pk(),
+        state.step_verifier.config_path(),
+        None,
+        &vec![snark.clone()],
+    )
+    .map_err(JsonRpcError::internal)?;
 
     let mut instances = instances[0]
         .iter()
@@ -197,29 +165,42 @@ pub(crate) async fn gen_evm_proof_sync_step_compressed_handler(
 }
 
 fn gen_uncompressed_snark<Circuit: AppCircuit>(
-    config_path: PathBuf,
-    pk_path: PathBuf,
+    config_path: &Path,
+    params: &ParamsKZG<Bn256>,
+    pk: &ProvingKey<G1Affine>,
     witness: Circuit::Witness,
 ) -> eyre::Result<Snark>
 where
     Circuit::Witness: Default,
 {
-    let params = gen_srs(Circuit::get_degree(&config_path));
-
-    let app_pk = Circuit::read_pk(&params, pk_path, &config_path, &Circuit::Witness::default());
-
     Ok(Circuit::gen_snark_shplonk(
-        &params,
-        &app_pk,
+        params,
+        pk,
         config_path,
         None::<PathBuf>,
         &witness,
     )?)
 }
 
-pub async fn run_rpc(port: usize) -> Result<(), eyre::Error> {
+pub async fn run_rpc<S: eth_types::Spec>(
+    port: usize,
+    config_dir: impl AsRef<Path>,
+    build_dir: impl AsRef<Path>,
+) -> Result<(), eyre::Error>
+where
+    [(); S::SYNC_COMMITTEE_SIZE]:,
+    [(); S::FINALIZED_HEADER_DEPTH]:,
+    [(); S::BYTES_PER_LOGS_BLOOM]:,
+    [(); S::MAX_EXTRA_DATA_BYTES]:,
+    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+    [(); S::SYNC_COMMITTEE_DEPTH]:,
+    [(); S::FINALIZED_HEADER_INDEX]:,
+{
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    let rpc_server = Arc::new(jsonrpc_server());
+    let timer = start_timer!(|| "Load proving keys");
+    let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref());
+    end_timer!(timer);
+    let rpc_server = Arc::new(jsonrpc_server::<S>(state));
 
     let router = Router::new()
         .route("/rpc", post(handler))
