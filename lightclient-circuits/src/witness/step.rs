@@ -19,7 +19,7 @@ use super::mock_root;
 
 /// Input datum for the `StepCircuit` to verify `attested_header` singed by the lightclient sync committee,
 /// and the `execution_payload_root` via Merkle `finality_branch` against the `finalized_header` root.
-/// 
+///
 /// Assumes that aggregated BLS signarure is represented as a compressed G2 point and the public keys are uncompressed G1 points;
 /// `pariticipation_bits` vector has exactly `S::SYNC_COMMITTEE_SIZE`` bits;
 /// `finality_branch` and `execution_payload_branch` are exactly `S::FINALIZED_HEADER_DEPTH` and `S::EXECUTION_STATE_ROOT_DEPTH` long respectively.
@@ -138,13 +138,9 @@ mod tests {
         const K: u32 = 20;
         let witness = SyncStepArgs::<Testnet>::default();
 
-        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
-            CircuitBuilderStage::Mock,
-            None,
-            &witness,
-            K,
-        )
-        .unwrap();
+        let circuit =
+            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
+                .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();

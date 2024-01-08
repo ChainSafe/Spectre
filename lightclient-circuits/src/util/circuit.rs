@@ -122,7 +122,8 @@ pub trait AppCircuit {
     ) -> ProvingKey<G1Affine> {
         let pinning = Self::Pinning::from_path(pinning_path);
         let circuit =
-            Self::create_circuit(CircuitBuilderStage::Keygen, Some(pinning), witness, params).unwrap();
+            Self::create_circuit(CircuitBuilderStage::Keygen, Some(pinning), witness, params)
+                .unwrap();
         custom_read_pk(path, &circuit)
     }
 

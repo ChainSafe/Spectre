@@ -41,7 +41,7 @@ where
 
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
 pub async fn rotation_args_from_update<S: Spec>(
-    update: &mut LightClientUpdateCapella<
+    update: &LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
         { S::SYNC_COMMITTEE_ROOT_INDEX },
         { S::SYNC_COMMITTEE_DEPTH },
@@ -60,6 +60,7 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
+    let mut update = update.clone();
     let pubkeys_compressed = update
         .next_sync_committee
         .pubkeys
@@ -94,7 +95,7 @@ where
 
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
-        finalized_header: update.attested_header.beacon.clone(),
+        finalized_header: update.finalized_header.beacon.clone(),
         sync_committee_branch: sync_committee_branch
             .into_iter()
             .map(|n| n.to_vec())
@@ -121,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update.json";
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
         const K: u32 = 21;
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
