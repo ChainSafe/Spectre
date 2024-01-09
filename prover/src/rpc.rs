@@ -6,7 +6,7 @@ use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
 use ethers::prelude::*;
 use itertools::Itertools;
-use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
+use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject, ResponseObjects};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
@@ -19,8 +19,9 @@ use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use spectre_prover::prover::ProverState;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
-pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
+pub type JsonRpcServerState = Arc<ServerState>;
 
 use crate::rpc_api::{
     CommitteeUpdateEvmProofResult, GenProofCommitteeUpdateParams, GenProofStepParams,
@@ -28,30 +29,52 @@ use crate::rpc_api::{
     RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
-pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
-    state: ProverState,
-) -> JsonRpcServer<JsonRpcMapRouter>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
-    JsonRpcServer::new()
-        .with_data(Data::new(state))
-        .with_method(
-            RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
-            gen_evm_proof_committee_update_handler::<S>,
-        )
-        .with_method(
-            RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
-            gen_evm_proof_sync_step_compressed_handler::<S>,
-        )
-        .finish_unwrapped()
+pub struct ServerState {
+    json_rpc_server: JsonRpcServer<JsonRpcMapRouter>,
+    concurrency: Semaphore,
 }
+
+impl ServerState {
+    pub(crate) fn new<S: eth_types::Spec>(state: ProverState, concurrency: usize) -> Self
+    where
+        [(); S::SYNC_COMMITTEE_SIZE]:,
+        [(); S::FINALIZED_HEADER_DEPTH]:,
+        [(); S::BYTES_PER_LOGS_BLOOM]:,
+        [(); S::MAX_EXTRA_DATA_BYTES]:,
+        [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+        [(); S::SYNC_COMMITTEE_DEPTH]:,
+        [(); S::FINALIZED_HEADER_INDEX]:,
+    {
+        let json_rpc_server = JsonRpcServer::new()
+            .with_data(Data::new(state))
+            .with_method(
+                RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
+                gen_evm_proof_committee_update_handler::<S>,
+            )
+            .with_method(
+                RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
+                gen_evm_proof_sync_step_compressed_handler::<S>,
+            )
+            .finish_unwrapped();
+        Self {
+            json_rpc_server,
+            concurrency: Semaphore::new(concurrency),
+        }
+    }
+
+    pub async fn handle(&self, rpc_call: JsonRpcRequestObject) -> Result<ResponseObjects, String> {
+        log::info!(
+            "Incoming RPC request with method: {}, {} running proofs",
+            rpc_call.method_ref(),
+            self.concurrency.available_permits()
+        );
+        if let Err(e) = self.concurrency.acquire().await {
+            return Err(e.to_string());
+        }
+        Ok(self.json_rpc_server.handle(rpc_call).await)
+    }
+}
+
 pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
@@ -69,8 +92,8 @@ where
         light_client_update,
     } = params;
 
-    let mut update = ssz_rs::deserialize(&light_client_update)?;
-    let witness = rotation_args_from_update(&mut update).await?;
+    let update = ssz_rs::deserialize(&light_client_update)?;
+    let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
     let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
@@ -186,6 +209,7 @@ pub async fn run_rpc<S: eth_types::Spec>(
     port: usize,
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
+    concurrency: usize,
 ) -> Result<(), eyre::Error>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -200,7 +224,7 @@ where
     let timer = start_timer!(|| "Load proving keys");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref());
     end_timer!(timer);
-    let rpc_server = Arc::new(jsonrpc_server::<S>(state));
+    let rpc_server = Arc::new(ServerState::new(state, concurrency));
 
     let router = Router::new()
         .route("/rpc", post(handler))
@@ -218,13 +242,20 @@ async fn handler(
     axum::Json(rpc_call): axum::Json<JsonRpcRequestObject>,
 ) -> impl IntoResponse {
     let response_headers = [("content-type", "application/json-rpc;charset=utf-8")];
-    log::debug!("RPC request with method: {}", rpc_call.method_ref());
 
-    let response = rpc_server.handle(rpc_call).await;
-    let response_str = serde_json::to_string(&response);
-    log::debug!("RPC response: {:?}", response_str);
-    match response_str {
-        Ok(result) => (StatusCode::OK, response_headers, result),
+    match rpc_server.handle(rpc_call).await {
+        Ok(response) => {
+            let response_str = serde_json::to_string(&response);
+            log::debug!("RPC response: {:?}", response_str);
+            match response_str {
+                Ok(result) => (StatusCode::OK, response_headers, result),
+                Err(err) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    response_headers,
+                    err.to_string(),
+                ),
+            }
+        }
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             response_headers,

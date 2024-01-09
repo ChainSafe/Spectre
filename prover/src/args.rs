@@ -45,6 +45,10 @@ pub enum BaseCmd {
         /// Path to directory with circuit artifacts
         #[clap(long, short, default_value = "./build")]
         build_dir: PathBuf,
+
+        /// How many proofs can be run at the same tome
+        #[clap(long, short, default_value = "1")]
+        concurrency: usize,
     },
     /// Circuit related commands.
     Circuit {
