@@ -21,7 +21,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
-
 use crate::rpc_api::{
     CommitteeUpdateEvmProofResult, GenProofCommitteeUpdateParams, GenProofStepParams,
     SyncStepCompressedEvmProofResult, RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
@@ -52,6 +51,7 @@ where
         )
         .finish_unwrapped()
 }
+
 pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
@@ -65,12 +65,19 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
+    if let Err(e) = state.concurrency.clone().acquire_owned().await {
+        return Err(JsonRpcError::internal(format!(
+            "Failed to acquire concurrency lock: {}",
+            e
+        )));
+    };
+
     let GenProofCommitteeUpdateParams {
         light_client_update,
     } = params;
 
-    let mut update = ssz_rs::deserialize(&light_client_update)?;
-    let witness = rotation_args_from_update(&mut update).await?;
+    let update = ssz_rs::deserialize(&light_client_update)?;
+    let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
     let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
@@ -122,6 +129,12 @@ where
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
+    if let Err(e) = state.concurrency.clone().acquire_owned().await {
+        return Err(JsonRpcError::internal(format!(
+            "Failed to acquire concurrency lock: {}",
+            e
+        )));
+    };
     let GenProofStepParams {
         light_client_finality_update,
         domain,
@@ -186,6 +199,7 @@ pub async fn run_rpc<S: eth_types::Spec>(
     port: usize,
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
+    concurrency: usize,
 ) -> Result<(), eyre::Error>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -198,10 +212,9 @@ where
 {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     let timer = start_timer!(|| "Load proving keys");
-    let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref());
+    let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);
     end_timer!(timer);
     let rpc_server = Arc::new(jsonrpc_server::<S>(state));
-
     let router = Router::new()
         .route("/rpc", post(handler))
         .with_state(rpc_server);
@@ -218,6 +231,7 @@ async fn handler(
     axum::Json(rpc_call): axum::Json<JsonRpcRequestObject>,
 ) -> impl IntoResponse {
     let response_headers = [("content-type", "application/json-rpc;charset=utf-8")];
+
     log::debug!("RPC request with method: {}", rpc_call.method_ref());
 
     let response = rpc_server.handle(rpc_call).await;

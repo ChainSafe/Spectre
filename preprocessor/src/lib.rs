@@ -126,7 +126,7 @@ pub async fn get_block_header<C: ClientTypes>(
 }
 
 pub async fn light_client_update_to_args<S: Spec>(
-    update: &mut LightClientUpdateCapella<
+    update: &LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },
         { S::SYNC_COMMITTEE_ROOT_INDEX },
         { S::SYNC_COMMITTEE_DEPTH },

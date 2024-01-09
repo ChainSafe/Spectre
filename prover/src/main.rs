@@ -24,6 +24,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
             port,
             spec,
             build_dir,
+            concurrency,
         } => {
             match spec {
                 args::Spec::Testnet => {
@@ -31,6 +32,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
                         port.parse().unwrap(),
                         options.args.config_dir,
                         build_dir,
+                        concurrency,
                     )
                     .await
                 }
@@ -39,6 +41,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
                         port.parse().unwrap(),
                         options.args.config_dir,
                         build_dir,
+                        concurrency,
                     )
                     .await
                 }

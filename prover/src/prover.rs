@@ -16,6 +16,8 @@ use lightclient_circuits::util::AppCircuit;
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 #[derive(Clone, Debug, Getters)]
 pub struct CircuitContext {
@@ -35,10 +37,11 @@ pub struct ProverState {
     pub step_verifier: CircuitContext,
     pub committee_update: CircuitContext,
     pub committee_update_verifier: CircuitContext,
+    pub concurrency: Arc<Semaphore>,
 }
 
 impl ProverState {
-    pub fn new<S: Spec>(config_dir: &Path, build_dir: &Path) -> Self {
+    pub fn new<S: Spec>(config_dir: &Path, build_dir: &Path, concurrency: usize) -> Self {
         let mut params_map = BTreeMap::new();
 
         fn load_ctx<Circuit: AppCircuit>(
@@ -109,6 +112,7 @@ impl ProverState {
                 vec![committee_update_snark],
             ),
             params: params_map,
+            concurrency: Arc::new(Semaphore::new(concurrency)),
         }
     }
 }

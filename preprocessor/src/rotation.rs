@@ -35,8 +35,8 @@ where
         slot, period
     );
 
-    let mut update = get_light_client_update_at_period(client, period).await?;
-    rotation_args_from_update(&mut update).await
+    let update = get_light_client_update_at_period(client, period).await?;
+    rotation_args_from_update(&update).await
 }
 
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
