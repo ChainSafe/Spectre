@@ -193,9 +193,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
             .pubkeys_compressed
+            .as_slice()
             .iter()
-            .cloned()
-            .map(|v| v.try_into().unwrap())
+            .map(|v| v.as_slice().try_into().unwrap())
             .collect_vec()
             .try_into()
             .unwrap();

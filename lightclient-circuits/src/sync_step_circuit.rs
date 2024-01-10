@@ -84,8 +84,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         let pubkey_affines = args
             .pubkeys_uncompressed
+            .as_slice()
             .iter()
-            .cloned()
             .map(|bytes| {
                 G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
                     .unwrap()
@@ -264,8 +264,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         let pubkey_affines = args
             .pubkeys_uncompressed
+            .as_slice()
             .iter()
-            .cloned()
             .map(|bytes| {
                 G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
                     .unwrap()
