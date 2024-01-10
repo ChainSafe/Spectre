@@ -211,7 +211,7 @@ where
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    let timer = start_timer!(|| "Load proving keys");
+    let timer = start_timer!(|| "Load Prover State and Context");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);
     end_timer!(timer);
     let rpc_server = Arc::new(jsonrpc_server::<S>(state));

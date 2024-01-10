@@ -51,11 +51,10 @@ impl ProverState {
             default_witness: Circuit::Witness,
         ) -> CircuitContext {
             let degree = Circuit::get_degree(&config_path);
-            let params = gen_srs(degree);
 
-            let pk = Circuit::read_pk(&params, pk_path, &config_path, &default_witness);
+            let params = params_map.entry(degree).or_insert_with(|| gen_srs(degree));
 
-            params_map.insert(degree, params);
+            let pk = Circuit::read_pk(params, pk_path, &config_path, &default_witness);
 
             CircuitContext {
                 config_path,
