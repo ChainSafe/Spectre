@@ -99,8 +99,13 @@ mod tests {
     use crate::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
     use eth_types::Testnet;
     use halo2_base::{
-        gates::circuit::CircuitBuilderStage, halo2_proofs::dev::MockProver,
-        halo2_proofs::halo2curves::bn256::Fr,
+        gates::circuit::CircuitBuilderStage,
+        halo2_proofs::dev::MockProver,
+        halo2_proofs::{
+            halo2curves::bn256::{Bn256, Fr},
+            poly::kzg::commitment::ParamsKZG,
+        },
+        utils::fs::gen_srs,
     };
     use snark_verifier_sdk::CircuitExt;
 
@@ -108,12 +113,13 @@ mod tests {
     fn test_committee_update_default_witness() {
         const K: u32 = 18;
         let witness = CommitteeUpdateArgs::<Testnet>::default();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
+            &params,
             CircuitBuilderStage::Mock,
             None,
             &witness,
-            K,
         )
         .unwrap();
 

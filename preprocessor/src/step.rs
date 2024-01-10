@@ -160,6 +160,8 @@ pub async fn step_args_from_finality_update<S: Spec>(
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
+    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
+    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
@@ -179,10 +181,15 @@ mod tests {
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit =
-            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
-                .unwrap();
+        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
+            &params,
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+        )
+        .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();

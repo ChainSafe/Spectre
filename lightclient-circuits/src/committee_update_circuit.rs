@@ -329,12 +329,13 @@ mod tests {
     fn test_committee_update_circuit() {
         const K: u32 = 18;
         let witness = load_circuit_args();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
+            &params,
             CircuitBuilderStage::Mock,
             None,
             &witness,
-            K,
         )
         .unwrap();
 
@@ -392,25 +393,25 @@ mod tests {
         );
 
         let witness = load_circuit_args();
-        let snark = gen_application_snark(&params_app, &pk_app, &witness, APP_PINNING_PATH);
+        let snark = vec![gen_application_snark(
+            &params_app,
+            &pk_app,
+            &witness,
+            APP_PINNING_PATH,
+        )];
 
         let agg_params = gen_srs(AGG_K);
         println!("agg_params k: {:?}", agg_params.k());
 
-        let pk = AggregationCircuit::create_pk(
-            &agg_params,
-            AGG_PK_PATH,
-            AGG_CONFIG_PATH,
-            &vec![snark.clone()],
-            None,
-        );
+        let pk =
+            AggregationCircuit::create_pk(&agg_params, AGG_PK_PATH, AGG_CONFIG_PATH, &snark, None);
 
         let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
 
         let agg_circuit = AggregationCircuit::create_circuit(
             CircuitBuilderStage::Prover,
             Some(agg_config),
-            &vec![snark.clone()],
+            &snark,
             &agg_params,
         )
         .unwrap();
@@ -423,13 +424,9 @@ mod tests {
 
         let proof = gen_evm_proof_shplonk(&agg_params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
-        let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
-            &agg_params,
-            &pk,
-            None::<String>,
-            &vec![snark],
-        )
-        .unwrap();
+        let deployment_code =
+            AggregationCircuit::gen_evm_verifier_shplonk(&agg_params, &pk, None::<String>, &snark)
+                .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances, proof);
     }

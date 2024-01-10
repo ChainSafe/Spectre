@@ -468,10 +468,15 @@ mod tests {
     fn test_step_circuit() {
         const K: u32 = 20;
         let witness = load_circuit_args();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit =
-            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
-                .unwrap();
+        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
+            &params,
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+        )
+        .unwrap();
 
         let instance = StepCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
 
@@ -562,14 +567,14 @@ mod tests {
         );
 
         let witness = load_circuit_args();
-        let snark = StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
+        let snark = vec![StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params_app,
             &pk_app,
             APP_PINNING_PATH,
             None::<String>,
             &witness,
         )
-        .unwrap();
+        .unwrap()];
 
         let agg_params = gen_srs(AGG_K);
 
@@ -577,7 +582,7 @@ mod tests {
             &agg_params,
             AGG_PK_PATH,
             AGG_CONFIG_PATH,
-            &vec![snark.clone()],
+            &snark.clone(),
             Some(AggregationConfigPinning::new(AGG_K, 19)),
         );
 
@@ -586,7 +591,7 @@ mod tests {
         let agg_circuit = AggregationCircuit::create_circuit(
             CircuitBuilderStage::Prover,
             Some(agg_config),
-            &vec![snark.clone()],
+            &snark,
             &agg_params,
         )
         .unwrap();
@@ -599,13 +604,9 @@ mod tests {
 
         let proof = gen_evm_proof_shplonk(&agg_params, &pk, agg_circuit, instances.clone());
         println!("proof size: {}", proof.len());
-        let deployment_code = AggregationCircuit::gen_evm_verifier_shplonk(
-            &agg_params,
-            &pk,
-            None::<String>,
-            &vec![snark],
-        )
-        .unwrap();
+        let deployment_code =
+            AggregationCircuit::gen_evm_verifier_shplonk(&agg_params, &pk, None::<String>, &snark)
+                .unwrap();
         println!("deployment_code size: {}", deployment_code.len());
         evm_verify(deployment_code, instances, proof);
     }

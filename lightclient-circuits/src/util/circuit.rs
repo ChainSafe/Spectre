@@ -15,7 +15,6 @@ use halo2_base::halo2_proofs::{
     plonk::{Circuit, Error, VerifyingKey},
     poly::kzg::commitment::ParamsKZG,
 };
-use halo2_base::utils::fs::gen_srs;
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
     encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
@@ -252,13 +251,12 @@ pub trait AppCircuit {
 
     /// Same as [`AppCircuit::create_circuit`] but with a mock circuit.
     fn mock_circuit(
+        params: &ParamsKZG<Bn256>,
         stage: CircuitBuilderStage,
         pinning: Option<Self::Pinning>,
         witness: &Self::Witness,
-        k: u32,
     ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error> {
-        let params = gen_srs(k);
-        Self::create_circuit(stage, pinning, witness, &params)
+        Self::create_circuit(stage, pinning, witness, params)
     }
 }
 

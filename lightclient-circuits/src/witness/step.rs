@@ -128,8 +128,12 @@ mod tests {
     use crate::{sync_step_circuit::StepCircuit, util::AppCircuit};
     use eth_types::Testnet;
     use halo2_base::{
-        gates::circuit::CircuitBuilderStage, halo2_proofs::dev::MockProver,
+        gates::circuit::CircuitBuilderStage,
         halo2_proofs::halo2curves::bn256::Fr,
+        halo2_proofs::{
+            dev::MockProver, halo2curves::bn256::Bn256, poly::kzg::commitment::ParamsKZG,
+        },
+        utils::fs::gen_srs,
     };
     use snark_verifier_sdk::CircuitExt;
 
@@ -137,10 +141,15 @@ mod tests {
     fn test_step_default_witness() {
         const K: u32 = 20;
         let witness = SyncStepArgs::<Testnet>::default();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit =
-            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &witness, K)
-                .unwrap();
+        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
+            &params,
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+        )
+        .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
