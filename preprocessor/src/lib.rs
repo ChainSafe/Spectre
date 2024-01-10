@@ -46,10 +46,10 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    let route = format!("eth/v1/beacon/light_client/updates");
+    let route = "eth/v1/beacon/light_client/updates";
     let mut updates: Vec<VersionedValue<_>> = client
         .http
-        .get(client.endpoint.join(&route)?)
+        .get(client.endpoint.join(route)?)
         .query(&[("start_period", period), ("count", 1)])
         .send()
         .await?

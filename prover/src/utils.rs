@@ -39,7 +39,7 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
             };
 
             let sync_period = bootstrap.header.beacon.slot / (32 * 256);
-            print!("Sync period: {} \n", sync_period);
+            println!("Sync period: {}", sync_period);
             let pubkeys_uncompressed = bootstrap
                 .current_sync_committee
                 .pubkeys
