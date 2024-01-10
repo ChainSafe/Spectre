@@ -95,7 +95,7 @@ where
         state.committee_update_verifier.pk(),
         state.committee_update_verifier.config_path(),
         None,
-        &vec![snark.clone()],
+        &vec![snark],
     )
     .map_err(JsonRpcError::internal)?;
 
@@ -158,7 +158,7 @@ where
         state.step_verifier.pk(),
         state.step_verifier.config_path(),
         None,
-        &vec![snark.clone()],
+        &vec![snark],
     )
     .map_err(JsonRpcError::internal)?;
 
