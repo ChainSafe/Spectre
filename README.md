@@ -108,5 +108,6 @@ where `<NETWORK>` is one of `["GOERLI", "SEPOLIA", "MAINNET"]`.
 Prover is accessible via JSON RPC interface. To start it, run:
 
 ```shell
-cargo run -r -- rpc --port 3000
+cargo run -r -- rpc --port 3000 --spec testnet
 ```
+where `--spec` is one of `["testnet", "mainnet"]`.

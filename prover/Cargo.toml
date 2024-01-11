@@ -11,14 +11,13 @@ path = "src/main.rs"
 # cli
 clap = { version = "4.2", features = ["derive"] }
 strum = { version = "=0.25", features = ["derive"] }
-cli-batteries = "0.5"
 hex = "0.4"
 eyre = "0.6"
 anstyle = "1.0.0"
 axum = { version = "0.7", features = ["tracing", "tower-log"] }
 tokio = { version = "1.32", features = ["macros"] }
-
 jsonrpc-v2 = { version = "0.13", default-features = false, features = ["easy-errors", "macros", "bytes-v10", "hyper-integration"] }
+tracing-subscriber = "0.3"
 
 # halo2
 halo2curves.workspace = true
@@ -54,9 +53,6 @@ beacon-api-client.workspace = true
 ethereum-consensus-types.workspace = true
 futures = "0.3.29"
 ssz_rs.workspace = true
-
-[build-dependencies]
-cli-batteries = "=0.5"
 
 [features]
 default = ["halo2_solidity_verifier"]

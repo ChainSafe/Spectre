@@ -13,9 +13,8 @@ mod utils;
 
 use crate::{cli::spec_app, rpc::run_rpc};
 use args::Cli;
-use cli_batteries::version;
+use clap::Parser;
 use utils::utils_cli;
-
 mod args;
 
 async fn app(options: Cli) -> eyre::Result<()> {
@@ -61,6 +60,9 @@ async fn app(options: Cli) -> eyre::Result<()> {
     }
 }
 
-fn main() {
-    cli_batteries::run(version!(), app);
+#[tokio::main]
+async fn main() {
+    let args = Cli::parse();
+    tracing_subscriber::fmt::init();
+    app(args).await.unwrap();
 }

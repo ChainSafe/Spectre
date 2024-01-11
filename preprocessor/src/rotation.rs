@@ -110,6 +110,8 @@ mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
+    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
+    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::{
@@ -128,12 +130,13 @@ mod tests {
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
+        let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
-            K,
+            &params,
         )
         .unwrap();
 

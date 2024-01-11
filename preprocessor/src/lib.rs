@@ -46,10 +46,10 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    let route = format!("eth/v1/beacon/light_client/updates");
+    let route = "eth/v1/beacon/light_client/updates";
     let mut updates: Vec<VersionedValue<_>> = client
         .http
-        .get(client.endpoint.join(&route)?)
+        .get(client.endpoint.join(route)?)
         .query(&[("start_period", period), ("count", 1)])
         .send()
         .await?
@@ -176,6 +176,9 @@ mod tests {
     use eth_types::Testnet;
     use ethereum_consensus_types::signing::{compute_domain, DomainType};
     use ethereum_consensus_types::ForkData;
+    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
+    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
+    use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning};
@@ -206,7 +209,7 @@ mod tests {
 
         // Fetch light client update and create circuit arguments
         let (s, mut c) = {
-            let mut update = get_light_client_update_at_period(&client, period)
+            let update = get_light_client_update_at_period(&client, period)
                 .await
                 .unwrap();
 
@@ -236,7 +239,7 @@ mod tests {
                 fork_version,
             };
             let domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
-            light_client_update_to_args::<Testnet>(&mut update, pubkeys_compressed, domain)
+            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain)
                 .await
                 .unwrap()
         };
@@ -263,9 +266,15 @@ mod tests {
         // Replaces the attested header with step circuits finalized header
         c.finalized_header = s.finalized_header.clone();
 
-        let circuit =
-            StepCircuit::<Testnet, Fr>::mock_circuit(CircuitBuilderStage::Mock, None, &s, K)
-                .unwrap();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
+
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &s,
+            &params,
+        )
+        .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
@@ -273,11 +282,11 @@ mod tests {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
 
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &c,
-            K,
+            &params,
         )
         .unwrap();
 
