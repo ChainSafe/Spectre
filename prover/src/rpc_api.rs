@@ -38,13 +38,3 @@ pub struct CommitteeUpdateEvmProofResult {
     pub committee_poseidon: U256,
     pub public_inputs: Vec<U256>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncCommitteePoseidonParams {
-    pub pubkeys: Vec<Vec<u8>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncCommitteePoseidonResult {
-    pub commitment: [u8; 32],
-}
