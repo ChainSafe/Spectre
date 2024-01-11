@@ -239,7 +239,7 @@ mod tests {
                 fork_version,
             };
             let domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
-            light_client_update_to_args::<Testnet>(&mut update, pubkeys_compressed, domain)
+            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain)
                 .await
                 .unwrap()
         };
