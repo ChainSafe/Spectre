@@ -132,11 +132,11 @@ mod tests {
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
-            &params,
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &witness,
+            &params,
         )
         .unwrap();
 

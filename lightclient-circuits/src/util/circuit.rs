@@ -248,16 +248,6 @@ pub trait AppCircuit {
 
         Ok(calldata)
     }
-
-    /// Same as [`AppCircuit::create_circuit`] but with a mock circuit.
-    fn mock_circuit(
-        params: &ParamsKZG<Bn256>,
-        stage: CircuitBuilderStage,
-        pinning: Option<Self::Pinning>,
-        witness: &Self::Witness,
-    ) -> Result<impl crate::util::PinnableCircuit<Fr>, Error> {
-        Self::create_circuit(stage, pinning, witness, params)
-    }
 }
 
 pub fn custom_gen_evm_verifier_shplonk<C: CircuitExt<Fr>>(

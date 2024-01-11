@@ -183,11 +183,11 @@ mod tests {
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit = StepCircuit::<Testnet, Fr>::mock_circuit(
-            &params,
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             None,
             &witness,
+            &params,
         )
         .unwrap();
 

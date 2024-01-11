@@ -158,11 +158,11 @@ fn test_eth2_spec_evm_verify(
 
     let pinning = Eth2ConfigPinning::from_path("./config/sync_step_21.json");
 
-    let circuit = StepCircuit::<Minimal, bn256::Fr>::mock_circuit(
-        &params,
+    let circuit = StepCircuit::<Minimal, bn256::Fr>::create_circuit(
         CircuitBuilderStage::Prover,
         Some(pinning),
         &witness,
+        &params,
     )
     .unwrap();
 

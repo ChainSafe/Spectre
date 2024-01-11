@@ -268,9 +268,13 @@ mod tests {
 
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
-        let circuit =
-            StepCircuit::<Testnet, Fr>::mock_circuit(&params, CircuitBuilderStage::Mock, None, &s)
-                .unwrap();
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &s,
+            &params,
+        )
+        .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
@@ -278,11 +282,11 @@ mod tests {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
 
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::mock_circuit(
-            &params,
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),
             &c,
+            &params,
         )
         .unwrap();
 
