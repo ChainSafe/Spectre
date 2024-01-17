@@ -8,10 +8,7 @@ use halo2_base::{
     poseidon::hasher::PoseidonSponge, AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{bigint::ProperCrtUint, bls12_381::FpChip, fields::FieldChip};
-use halo2curves::{
-    bls12_381::{self, Fq},
-    group::UncompressedEncoding,
-};
+use halo2curves::bls12_381::{self, Fq};
 use itertools::Itertools;
 use pse_poseidon::Poseidon as PoseidonNative;
 
@@ -107,7 +104,7 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         .iter()
         .cloned()
         .map(|bytes| {
-            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked(
+            halo2curves::bls12_381::G1Affine::from_uncompressed_unchecked_be(
                 &bytes.as_slice().try_into().unwrap(),
             )
             .unwrap()
