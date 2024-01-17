@@ -12,3 +12,6 @@ pub use rotation::*;
 
 mod hashing;
 pub use hashing::*;
+
+mod polyfill;
+pub use polyfill::*;

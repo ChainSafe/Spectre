@@ -17,6 +17,7 @@ pub mod witness;
 
 pub mod aggregation_circuit;
 pub mod committee_update_circuit;
+pub mod polyfill_circuit;
 pub mod sync_step_circuit;
 
 pub mod poseidon;
