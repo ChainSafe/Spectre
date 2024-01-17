@@ -38,10 +38,7 @@ use halo2_ecc::{
     },
     fields::FieldChip,
 };
-use halo2curves::{
-    bls12_381::{G1Affine, G2Affine},
-    group::UncompressedEncoding,
-};
+use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use ssz_rs::Merkleized;
@@ -87,7 +84,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .as_slice()
             .iter()
             .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                G1Affine::from_uncompressed_unchecked_be(&bytes.as_slice().try_into().unwrap())
                     .unwrap()
             })
             .collect_vec();
@@ -267,7 +264,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .as_slice()
             .iter()
             .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked(&bytes.as_slice().try_into().unwrap())
+                G1Affine::from_uncompressed_unchecked_be(&bytes.as_slice().try_into().unwrap())
                     .unwrap()
             })
             .collect_vec();
