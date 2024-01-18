@@ -4,6 +4,7 @@
 
 use std::marker::PhantomData;
 
+use crate::{get_block_header, get_light_client_bootstrap, get_light_client_finality_update};
 use beacon_api_client::Client;
 use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
@@ -16,8 +17,6 @@ use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
-
-use crate::{get_block_header, get_light_client_bootstrap, get_light_client_finality_update};
 
 // typeName: 'BeaconBlock',
 // maxChunkCount: 5,
@@ -97,10 +96,14 @@ mod tests {
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
+    use lightclient_circuits::aggregation_circuit::AggregationConfigPinning;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::polyfill_circuit::PolyfillCircuit;
+    use lightclient_circuits::util::Halo2ConfigPinning;
     use lightclient_circuits::witness::PolyfillArgs;
     use lightclient_circuits::{halo2_base::gates::circuit::CircuitBuilderStage, util::AppCircuit};
+    use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};
+    use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
@@ -193,13 +196,13 @@ mod tests {
             &PolyfillArgs::<Testnet>::default(),
             None,
         );
-
+        let mut snarks = vec![];
         for w in witness.windows(2) {
             let arg = PolyfillArgs::<Testnet> {
                 headers: w.to_vec(),
                 _p: PhantomData,
             };
-            PolyfillCircuit::<Testnet, Fr>::gen_snark_shplonk(
+            let snark = PolyfillCircuit::<Testnet, Fr>::gen_snark_shplonk(
                 &params,
                 &pk,
                 CONFIG_PATH,
@@ -212,6 +215,45 @@ mod tests {
                 w.first().unwrap().slot,
                 w.last().unwrap().slot
             );
+            snarks.push(snark);
         }
+
+        const AGG_K: u32 = 23;
+        const AGG_PK_PATH: &str = "../build/polyfill_verifier_23.pkey";
+        const AGG_CONFIG_PATH: &str = "./config/polyfill_verifier_23.json";
+
+        let agg_params = gen_srs(AGG_K);
+
+        let pk = AggregationCircuit::create_pk(
+            &agg_params,
+            AGG_PK_PATH,
+            AGG_CONFIG_PATH,
+            &snarks,
+            Some(AggregationConfigPinning::new(AGG_K, 19)),
+        );
+
+        let agg_config = AggregationConfigPinning::from_path(AGG_CONFIG_PATH);
+
+        let agg_circuit = AggregationCircuit::create_circuit(
+            CircuitBuilderStage::Prover,
+            Some(agg_config),
+            &snarks,
+            &agg_params,
+        )
+        .unwrap();
+
+        let instances = agg_circuit.instances();
+        let num_instances = agg_circuit.num_instance();
+
+        println!("num_instances: {:?}", num_instances);
+        println!("instances: {:?}", instances);
+
+        let proof = gen_evm_proof_shplonk(&agg_params, &pk, agg_circuit, instances.clone());
+        println!("proof size: {}", proof.len());
+        let deployment_code =
+            AggregationCircuit::gen_evm_verifier_shplonk(&agg_params, &pk, None::<String>, &snarks)
+                .unwrap();
+        println!("deployment_code size: {}", deployment_code.len());
+        evm_verify(deployment_code, instances, proof);
     }
 }
