@@ -9,13 +9,15 @@ use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
 use ethereum_consensus_types::bls::BlsPublicKey;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
+use ethereum_consensus_types::{
+    BeaconBlockHeader, ForkData, LightClientBootstrap, LightClientFinalityUpdate,
+};
 use itertools::Itertools;
-use lightclient_circuits::witness::SyncStepArgs;
+use lightclient_circuits::witness::{get_helper_indices, merkle_tree, SyncStepArgs};
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
 
-use crate::{get_light_client_bootstrap, get_light_client_finality_update};
+use crate::{block_header_to_leaves, get_light_client_bootstrap, get_light_client_finality_update};
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
 pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
@@ -119,6 +121,33 @@ pub async fn step_args_from_finality_update<S: Spec>(
         "Finality merkle proof verification failed"
     );
 
+    let beacon_header_multiproof_and_helper_indices =
+        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
+            let header_leaves = block_header_to_leaves(header).unwrap();
+            let merkle_tree = merkle_tree(&header_leaves);
+            let helper_indices = get_helper_indices(gindices);
+            let proof = helper_indices
+                .iter()
+                .copied()
+                .map(|i| merkle_tree[i])
+                .collect_vec();
+
+            assert_eq!(proof.len(), helper_indices.len());
+            (proof, helper_indices)
+        };
+
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut finality_update.attested_header.beacon.clone(),
+            &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+        );
+
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut finality_update.finalized_header.beacon.clone(),
+            &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+        );
+
     Ok(SyncStepArgs {
         signature_compressed: finality_update
             .sync_aggregate
@@ -154,6 +183,16 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .collect_vec(),
         domain,
         _spec: PhantomData,
+        attested_header_multiproof: attested_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        attested_header_helper_indices,
+        finalized_header_multiproof: finalized_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        finalized_header_helper_indices,
     })
 }
 

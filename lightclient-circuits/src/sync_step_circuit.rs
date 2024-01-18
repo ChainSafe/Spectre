@@ -11,7 +11,7 @@ use crate::{
         to_bytes_le,
     },
     poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
-    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multiproof, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
     Eth2CircuitBuilder,
@@ -106,7 +106,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
-        // Compute attested header root
         let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
         let attested_header_state_root = args
             .attested_header
@@ -115,19 +114,31 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let attested_header_root = ssz_merkleize_chunks(
+        let attested_header_root = args
+            .attested_header
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_ref()
+            .into_iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+
+        verify_merkle_multiproof(
             builder,
             &sha256_chip,
-            [
+            args.attested_header_multiproof
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            vec![
                 attested_slot_bytes.clone(),
-                args.attested_header.proposer_index.into_witness(),
-                args.attested_header.parent_root.as_ref().into_witness(),
                 attested_header_state_root.clone().into(),
-                args.attested_header.body_root.as_ref().into_witness(),
             ],
+            &attested_header_root,
+            [S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+            args.attested_header_helper_indices.clone(),
         )?;
 
-        // Compute finalized header root
         let finalized_block_body_root = args
             .finalized_header
             .body_root
@@ -136,16 +147,30 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .map(|&b| builder.main().load_witness(F::from(b as u64)))
             .collect_vec();
         let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
-        let finalized_header_root = ssz_merkleize_chunks(
+
+        let finalized_header_root = args
+            .finalized_header
+            .clone()
+            .hash_tree_root()
+            .unwrap()
+            .as_ref()
+            .into_iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+
+        verify_merkle_multiproof(
             builder,
             &sha256_chip,
-            [
+            args.finalized_header_multiproof
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            vec![
                 finalized_slot_bytes.clone(),
-                args.finalized_header.proposer_index.into_witness(),
-                args.finalized_header.parent_root.as_ref().into_witness(),
-                args.finalized_header.state_root.as_ref().into_witness(),
                 finalized_block_body_root.clone().into(),
             ],
+            &finalized_header_root,
+            [S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+            args.finalized_header_helper_indices.clone(),
         )?;
 
         let signing_root = sha256_chip.digest(

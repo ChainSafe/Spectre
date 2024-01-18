@@ -43,6 +43,11 @@ pub struct SyncStepArgs<S: Spec> {
 
     pub domain: [u8; 32],
 
+    pub attested_header_multiproof: Vec<Vec<u8>>,
+    pub attested_header_helper_indices: Vec<usize>,
+    pub finalized_header_multiproof: Vec<Vec<u8>>,
+    pub finalized_header_helper_indices: Vec<usize>,
+
     #[serde(skip)]
     pub _spec: PhantomData<S>,
 }
@@ -118,6 +123,12 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             execution_payload_branch: execution_branch,
             execution_payload_root: execution_root,
             _spec: PhantomData,
+
+            // TODO: This is obviously not right lol
+            attested_header_multiproof: vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH],
+            attested_header_helper_indices: vec![0; S::FINALIZED_HEADER_DEPTH],
+            finalized_header_multiproof: vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH],
+            finalized_header_helper_indices: vec![0; S::FINALIZED_HEADER_DEPTH],
         }
     }
 }
