@@ -90,14 +90,14 @@ pub async fn fetch_polyfill_args<S: Spec, C: ClientTypes>(
     block_headers.push(get_block_header(&client, BlockId::Root(end)).await?);
     Ok(block_headers)
 }
-pub fn slot_proof(header: &mut BeaconBlockHeader) -> Vec<Node> {
+pub fn slot_proof_and_indices(header: &mut BeaconBlockHeader) -> (Vec<Node>, Vec<usize>) {
     let SLOT_GINDEX = 8;
     let SLOT_DEPTH = 3;
     let header_leaves = block_header_to_leaves(header).unwrap();
     let merkle_tree = merkle_tree(&header_leaves);
     let slot_proof = single_proof(&merkle_tree, SLOT_GINDEX);
     assert_eq!(slot_proof.len(), SLOT_DEPTH);
-    slot_proof
+    (slot_proof, get_helper_indices(&[SLOT_GINDEX]))
 }
 #[cfg(test)]
 mod tests {
@@ -147,7 +147,8 @@ mod tests {
         let params: ParamsKZG<Bn256> = gen_srs(K);
         for w in witness.windows(2) {
             let mut parent_header = w.last().unwrap().clone();
-            let parent_slot_proof = slot_proof(&mut parent_header)
+            let (parent_slot_proof, helper_indices) = slot_proof_and_indices(&mut parent_header);
+            let parent_slot_proof = parent_slot_proof
                 .iter()
                 .map(|n| n.as_ref().to_vec())
                 .collect_vec();
@@ -156,6 +157,7 @@ mod tests {
                 verified_header: w.first().unwrap().clone(),
                 parent_header,
                 parent_slot_proof,
+                helper_indices,
                 _p: PhantomData,
             };
             let circuit = PolyfillCircuit::<Testnet, Fr>::create_circuit(
@@ -216,7 +218,8 @@ mod tests {
         let mut snarks = vec![];
         for w in witness.windows(2) {
             let mut parent_header = w.last().unwrap().clone();
-            let parent_slot_proof = slot_proof(&mut parent_header)
+            let (parent_slot_proof, helper_indices) = slot_proof_and_indices(&mut parent_header);
+            let parent_slot_proof = parent_slot_proof
                 .iter()
                 .map(|n| n.as_ref().to_vec())
                 .collect_vec();
@@ -225,6 +228,7 @@ mod tests {
                 verified_header: w.first().unwrap().clone(),
                 parent_header,
                 parent_slot_proof,
+                helper_indices,
                 _p: PhantomData,
             };
             let snark = PolyfillCircuit::<Testnet, Fr>::gen_snark_shplonk(

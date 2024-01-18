@@ -11,7 +11,7 @@ use crate::{
         to_bytes_le,
     },
     poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
-    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multi_proof, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
     Eth2CircuitBuilder,
@@ -72,7 +72,6 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
         let parent_header = args.parent_header.clone();
         let verified_header = args.verified_header.clone();
 
-        // Use end_block_root to prove that it is the direct parent
         let parent_block_root = verified_header
             .parent_root
             .as_ref()
@@ -80,6 +79,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
 
+        // Verifies that the parent hash is actually in the verified (trusted) header
         let trusted_block_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
@@ -92,18 +92,22 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             ],
         )?;
         let parent_slot_bytes: HashInputChunk<_> = parent_header.slot.into_witness();
+
         // TODO: Make gindex a constant
-        verify_merkle_proof(
+        // Verifies that the parent slot is the same as the one in the parent header
+        verify_merkle_multi_proof(
             builder,
             &sha256_chip,
             args.parent_slot_proof
                 .iter()
                 .map(|w| w.clone().into_witness()),
-            parent_slot_bytes.clone(),
+            vec![parent_slot_bytes.clone()],
             parent_block_root.as_slice(),
-            8,
+            vec![8],
+            args.helper_indices.clone(),
         )?;
 
+        // Convert parent slot from bytes to single field element
         let parent_slot = {
             let ctx = builder.main();
             let byte_bases = (0..32)

@@ -1,7 +1,7 @@
 // TODO: A lot if not all/most of this code is copy pasta from: https://github.com/ralexstokes/ssz-rs/pull/118
 // TODO: Remove this once the above PR lands in ssz-rs
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ethereum_consensus_types::BeaconBlockHeader;
 use itertools::Itertools;
@@ -73,7 +73,7 @@ fn get_path_indices(tree_index: GeneralizedIndex) -> Vec<GeneralizedIndex> {
     result
 }
 
-fn get_helper_indices(indices: &[GeneralizedIndex]) -> Vec<GeneralizedIndex> {
+pub(crate) fn get_helper_indices(indices: &[GeneralizedIndex]) -> Vec<GeneralizedIndex> {
     let mut all_helper_indices = HashSet::new();
     let mut all_path_indices = HashSet::new();
 
@@ -118,6 +118,55 @@ pub fn block_header_to_leaves(
         obj.state_root.hash_tree_root()?,
         obj.body_root.hash_tree_root()?,
     ])
+}
+
+pub fn calculate_multi_merkle_root(
+    leaves: &[Node],
+    proof: &[Node],
+    indices: &[GeneralizedIndex],
+) -> Node {
+    debug_assert_eq!(leaves.len(), indices.len());
+    let helper_indices = get_helper_indices(indices);
+    debug_assert_eq!(proof.len(), helper_indices.len());
+
+    let mut objects = HashMap::new();
+    for (index, node) in indices.iter().zip(leaves.iter()) {
+        objects.insert(*index, *node);
+    }
+    for (index, node) in helper_indices.iter().zip(proof.iter()) {
+        objects.insert(*index, *node);
+    }
+
+    let mut keys = objects.keys().cloned().collect::<Vec<_>>();
+    keys.sort_by(|a, b| b.cmp(a));
+
+    let mut hasher = Sha256::new();
+    let mut pos = 0;
+    while pos < keys.len() {
+        let key = keys.get(pos).unwrap();
+        let key_present = objects.contains_key(key);
+        let sibling_present = objects.contains_key(&sibling(*key));
+        let parent_index = parent(*key);
+        let parent_missing = !objects.contains_key(&parent_index);
+        let should_compute = key_present && sibling_present && parent_missing;
+        if should_compute {
+            let right_index = key | 1;
+            let left_index = sibling(right_index);
+            let left_input = objects.get(&left_index).unwrap();
+            let right_input = objects.get(&right_index).unwrap();
+            hasher.update(left_input.as_ref());
+            hasher.update(right_input.as_ref());
+
+            let parent = objects
+                .entry(parent_index)
+                .or_insert_with(|| Node::default());
+            parent.as_mut().copy_from_slice(&hasher.finalize_reset());
+            keys.push(parent_index);
+        }
+        pos += 1;
+    }
+
+    objects.get(&1).unwrap().clone()
 }
 
 // From: https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md

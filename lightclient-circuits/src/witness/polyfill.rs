@@ -28,6 +28,9 @@ pub struct PolyfillArgs<S: Spec> {
     pub verified_header: BeaconBlockHeader,
     pub parent_header: BeaconBlockHeader,
     pub parent_slot_proof: Vec<Vec<u8>>,
+
+    // Not actually withness data but used for verifying multiproof
+    pub helper_indices: Vec<usize>,
     pub _p: PhantomData<S>,
 }
 
@@ -73,6 +76,8 @@ impl<S: Spec> Default for PolyfillArgs<S> {
             verified_header: current_header,
             parent_header,
             parent_slot_proof: vec![vec![0; 32]; 3],
+            helper_indices: todo!(),
+            // helper_indices: vec![0; 3],
             _p: PhantomData,
         }
     }
