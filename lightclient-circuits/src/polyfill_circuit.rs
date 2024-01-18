@@ -80,6 +80,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             .collect_vec();
 
         // Verifies that the parent hash is actually in the verified (trusted) header
+        // TODO: We can actually rewrite this to do a merkle inclusion proof against the header.
         let verified_block_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
