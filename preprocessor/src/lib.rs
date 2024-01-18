@@ -127,29 +127,6 @@ pub async fn get_block_header<C: ClientTypes>(
     Ok(block.header.message)
 }
 
-pub async fn get_block_body<C: ClientTypes>(
-    client: &Client<C>,
-    id: BlockId,
-) -> eyre::Result<C::SignedBeaconBlock> {
-    // // TODO: Once the ethereum beacon_api_client is updated, we can avoid this struct definition
-    // #[derive(Serialize, Deserialize)]
-    // struct BeaconHeaderSummary {
-    //     pub root: Root,
-    //     pub canonical: bool,
-    //     pub header: SignedBeaconBlockHeader,
-    // }
-    // #[derive(Serialize, Deserialize)]
-    // struct SignedBeaconBlockHeader {
-    //     pub message: BeaconBlockHeader,
-    //     pub signature: BlsSignature,
-    // }
-
-    // let route = format!("eth/v1/beacon/headers/{id}");
-    // let block: BeaconHeaderSummary = client.get::<Value<_>>(&route).await?.data;
-    // Ok(block.header.message)
-    Ok(client.get_beacon_block(id).await?)
-}
-
 pub async fn light_client_update_to_args<S: Spec>(
     update: &LightClientUpdateCapella<
         { S::SYNC_COMMITTEE_SIZE },

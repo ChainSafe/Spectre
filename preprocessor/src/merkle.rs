@@ -133,7 +133,6 @@ pub fn block_header_to_leaves(
 //     for i in range(bottom_length - 1, 0, -1):
 //         o[i] = hash(o[i * 2] + o[i * 2 + 1])
 //     return o
-
 pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
     let bottom_length = get_power_of_two_ceil(leaves.len());
     let mut o = vec![Node::default(); bottom_length * 2];
@@ -156,7 +155,6 @@ mod test {
     use super::*;
     use beacon_api_client::{mainnet::Client as MainnetClient, BlockId};
     use eth_types::{Spec, Testnet};
-    use ethereum_consensus_types::beacon_block_header;
     use itertools::Itertools;
     use reqwest::Url;
     use ssz_rs::prelude::*;
@@ -213,17 +211,15 @@ mod test {
         );
 
         let mut beacon_header = finality_update.finalized_header.beacon.clone();
-        let mut block_body = get_block_body(
-            &client,
-            BlockId::Root(beacon_header.hash_tree_root().unwrap()),
-        )
-        .await
-        .unwrap()
-        .capella()
-        .unwrap()
-        .message
-        .body
-        .clone();
+        let mut block_body = client
+            .get_beacon_block(BlockId::Root(beacon_header.hash_tree_root().unwrap()))
+            .await
+            .unwrap()
+            .capella()
+            .unwrap()
+            .message
+            .body
+            .clone();
 
         // block body to leaves
         let leaves = vec![
