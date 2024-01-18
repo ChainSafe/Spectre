@@ -12,3 +12,6 @@ pub use rotation::*;
 
 mod hashing;
 pub use hashing::*;
+
+mod multiproof;
+pub use multiproof::*;
