@@ -1,10 +1,8 @@
 // TODO: A lot if not all/most of this code is copy pasta from: https://github.com/ralexstokes/ssz-rs/pull/118 which is mostly implemented w.r.t. the spec
 // TODO: Remove this once the above PR lands in ssz-rs
 
-use ethereum_consensus_types::BeaconBlockHeader;
-use itertools::Itertools;
 use sha2::{Digest, Sha256};
-use ssz_rs::{MerkleizationError, Merkleized, Node, SimpleSerialize};
+use ssz_rs::Node;
 use std::collections::{HashMap, HashSet};
 
 pub type GeneralizedIndex = usize;
@@ -182,3 +180,9 @@ pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
     o
 }
 
+pub fn create_multiproof(merkle_tree: &[Node], indices_to_prove: &[GeneralizedIndex]) -> Vec<Node> {
+    get_helper_indices(indices_to_prove)
+        .into_iter()
+        .map(|i| merkle_tree[i])
+        .collect()
+}
