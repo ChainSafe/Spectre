@@ -11,7 +11,7 @@ use crate::{
         to_bytes_le,
     },
     poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
-    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multiproof, verify_merkle_proof},
+    ssz_merkle::{verify_merkle_multiproof, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
     Eth2CircuitBuilder,
@@ -117,6 +117,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let attested_header_root = args
             .attested_header
             .clone()
+            // TODO: I really dont like how were doing hash_tree_root here
             .hash_tree_root()
             .unwrap()
             .as_ref()
@@ -151,6 +152,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let finalized_header_root = args
             .finalized_header
             .clone()
+            // TODO: I really dont like how were doing hash_tree_root here
             .hash_tree_root()
             .unwrap()
             .as_ref()

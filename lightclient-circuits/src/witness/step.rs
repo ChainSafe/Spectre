@@ -124,11 +124,10 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             execution_payload_root: execution_root,
             _spec: PhantomData,
 
-            // TODO: This is obviously not right lol
-            attested_header_multiproof: vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH],
-            attested_header_helper_indices: vec![0; S::FINALIZED_HEADER_DEPTH],
-            finalized_header_multiproof: vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH],
-            finalized_header_helper_indices: vec![0; S::FINALIZED_HEADER_DEPTH],
+            attested_header_multiproof: vec![vec![0; 32]; 3],
+            attested_header_helper_indices: vec![0; 3],
+            finalized_header_multiproof: vec![vec![0; 32]; 4],
+            finalized_header_helper_indices: vec![0; 4],
         }
     }
 }

@@ -131,17 +131,18 @@ pub async fn step_args_from_finality_update<S: Spec>(
                 .copied()
                 .map(|i| merkle_tree[i])
                 .collect_vec();
-
+            // println!("Proof length: {}", proof.len());
             assert_eq!(proof.len(), helper_indices.len());
             (proof, helper_indices)
         };
 
+    // Proof length is 3
     let (attested_header_multiproof, attested_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
             &mut finality_update.attested_header.beacon.clone(),
             &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
         );
-
+    // Proof length is 4
     let (finalized_header_multiproof, finalized_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
             &mut finality_update.finalized_header.beacon.clone(),
