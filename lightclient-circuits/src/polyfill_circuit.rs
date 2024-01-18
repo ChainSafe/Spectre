@@ -72,7 +72,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
         let parent_header = args.parent_header.clone();
         let verified_header = args.verified_header.clone();
 
-        let parent_block_root = verified_header
+        let parent_header_root = verified_header
             .parent_root
             .as_ref()
             .iter()
@@ -86,7 +86,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             [
                 verified_header.slot.into_witness(),
                 verified_header.proposer_index.into_witness(),
-                parent_block_root.clone().into(),
+                parent_header_root.clone().into(),
                 verified_header.state_root.as_ref().into_witness(),
                 verified_header.body_root.as_ref().into_witness(),
             ],
@@ -95,7 +95,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
         let parent_slot_bytes: HashInputChunk<_> = parent_header.slot.into_witness();
 
         // TODO: Make gindex a constant
-        // Verifies that the parent slot is the same as the one in the parent header
+        // Verifies that the parent slot AND body root is the same as the one in the parent header
         verify_merkle_multi_proof(
             builder,
             &sha256_chip,
@@ -103,7 +103,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
                 .iter()
                 .map(|w| w.clone().into_witness()),
             vec![parent_slot_bytes.clone(), parent_body_root.clone()],
-            parent_block_root.as_slice(),
+            parent_header_root.as_slice(),
             vec![8, 12],
             args.helper_indices.clone(),
         )?;
@@ -133,7 +133,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
         // )?;
 
         Ok(iter::once(parent_slot)
-            .chain(parent_block_root.into_iter())
+            .chain(parent_header_root.into_iter())
             .chain(verified_block_root.into_iter())
             .collect_vec())
     }
