@@ -4,6 +4,7 @@
 
 use std::marker::PhantomData;
 
+use crate::merkle::*;
 use crate::{get_block_header, get_light_client_bootstrap, get_light_client_finality_update};
 use beacon_api_client::Client;
 use beacon_api_client::{BlockId, ClientTypes, StateId};
@@ -89,7 +90,15 @@ pub async fn fetch_polyfill_args<S: Spec, C: ClientTypes>(
     block_headers.push(get_block_header(&client, BlockId::Root(end)).await?);
     Ok(block_headers)
 }
-
+pub fn slot_proof(header: &mut BeaconBlockHeader) -> Vec<Node> {
+    let SLOT_GINDEX = 8;
+    let SLOT_DEPTH = 3;
+    let header_leaves = block_header_to_leaves(header).unwrap();
+    let merkle_tree = merkle_tree(&header_leaves);
+    let slot_proof = single_proof(&merkle_tree, SLOT_GINDEX);
+    assert_eq!(slot_proof.len(), SLOT_DEPTH);
+    slot_proof
+}
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
@@ -137,8 +146,16 @@ mod tests {
 
         let params: ParamsKZG<Bn256> = gen_srs(K);
         for w in witness.windows(2) {
+            let mut parent_header = w.last().unwrap().clone();
+            let parent_slot_proof = slot_proof(&mut parent_header)
+                .iter()
+                .map(|n| n.as_ref().to_vec())
+                .collect_vec();
+
             let arg = PolyfillArgs::<Testnet> {
-                headers: w.to_vec(),
+                verified_header: w.first().unwrap().clone(),
+                parent_header,
+                parent_slot_proof,
                 _p: PhantomData,
             };
             let circuit = PolyfillCircuit::<Testnet, Fr>::create_circuit(
@@ -198,8 +215,16 @@ mod tests {
         );
         let mut snarks = vec![];
         for w in witness.windows(2) {
+            let mut parent_header = w.last().unwrap().clone();
+            let parent_slot_proof = slot_proof(&mut parent_header)
+                .iter()
+                .map(|n| n.as_ref().to_vec())
+                .collect_vec();
+
             let arg = PolyfillArgs::<Testnet> {
-                headers: w.to_vec(),
+                verified_header: w.first().unwrap().clone(),
+                parent_header,
+                parent_slot_proof,
                 _p: PhantomData,
             };
             let snark = PolyfillCircuit::<Testnet, Fr>::gen_snark_shplonk(

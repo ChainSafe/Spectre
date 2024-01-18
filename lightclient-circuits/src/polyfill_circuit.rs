@@ -69,50 +69,67 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
         args: &witness::PolyfillArgs<S>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let sha256_chip = Sha256Chip::new(range);
-
-        let start = args.headers.first().unwrap().clone();
-        let end = args.headers.last().unwrap().clone();
-
-        // TODO: I think we should be able to optimize this by doing a merkle proof of the slot instead of merklizing the whole thing
-        let end_slot_bytes: HashInputChunk<_> = end.slot.into_witness();
-        let end_block_root = ssz_merkleize_chunks(
-            builder,
-            &sha256_chip,
-            [
-                end_slot_bytes.clone(),
-                end.proposer_index.into_witness(),
-                end.parent_root.as_ref().into_witness(),
-                end.state_root.as_ref().into_witness(),
-                end.body_root.as_ref().into_witness(),
-            ],
-        )?;
+        let parent_header = args.parent_header.clone();
+        let verified_header = args.verified_header.clone();
 
         // Use end_block_root to prove that it is the direct parent
-        let start_slot_bytes: HashInputChunk<_> = start.slot.into_witness();
-        let start_block_root = ssz_merkleize_chunks(
+        let parent_block_root = verified_header
+            .parent_root
+            .as_ref()
+            .iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+
+        let trusted_block_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
             [
-                start_slot_bytes.clone(),
-                start.proposer_index.into_witness(),
-                end_block_root.clone().into(),
-                start.state_root.as_ref().into_witness(),
-                start.body_root.as_ref().into_witness(),
+                verified_header.slot.into_witness(),
+                verified_header.proposer_index.into_witness(),
+                parent_block_root.clone().into(),
+                verified_header.state_root.as_ref().into_witness(),
+                verified_header.body_root.as_ref().into_witness(),
             ],
         )?;
+        let parent_slot_bytes: HashInputChunk<_> = parent_header.slot.into_witness();
+        // TODO: Make gindex a constant
+        verify_merkle_proof(
+            builder,
+            &sha256_chip,
+            args.parent_slot_proof
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            parent_slot_bytes.clone(),
+            parent_block_root.as_slice(),
+            8,
+        )?;
 
-        let end_slot = {
+        let parent_slot = {
             let ctx = builder.main();
             let byte_bases = (0..32)
                 .map(|i| QuantumCell::Constant(range.gate().pow_of_two()[i * 8]))
                 .collect_vec();
 
-            range.gate().inner_product(ctx, end_slot_bytes, byte_bases)
+            range
+                .gate()
+                .inner_product(ctx, parent_slot_bytes, byte_bases)
         };
 
-        Ok(iter::once(end_slot)
-            .chain(start_block_root.into_iter())
-            .chain(end_block_root.into_iter())
+        // // Verify execution payload root against finalized block body via the Merkle "execution" proof
+        // verify_merkle_proof(
+        //     builder,
+        //     &sha256_chip,
+        //     args.execution_payload_branch
+        //         .iter()
+        //         .map(|w| w.clone().into_witness()),
+        //     execution_payload_root.clone(),
+        //     &finalized_block_body_root,
+        //     S::EXECUTION_STATE_ROOT_INDEX,
+        // )?;
+
+        Ok(iter::once(parent_slot)
+            .chain(parent_block_root.into_iter())
+            .chain(trusted_block_root.into_iter())
             .collect_vec())
     }
 }

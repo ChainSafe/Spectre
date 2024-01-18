@@ -3,11 +3,10 @@
 
 use std::collections::HashSet;
 
-use beacon_api_client::{mainnet::Client as MainnetClient, BlockId, ClientTypes};
 use ethereum_consensus_types::BeaconBlockHeader;
+use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use ssz_rs::{MerkleizationError, Merkleized, Node, SimpleSerialize};
-
 // From: https://users.rust-lang.org/t/logarithm-of-integers/8506/5
 const fn num_bits<T>() -> usize {
     std::mem::size_of::<T>() * 8
@@ -18,7 +17,7 @@ const fn log_2(x: usize) -> u32 {
     num_bits::<usize>() as u32 - x.leading_zeros() - 1
 }
 
-pub const fn get_power_of_two_ceil(x: usize) -> usize {
+pub(crate) const fn get_power_of_two_ceil(x: usize) -> usize {
     match x {
         x if x <= 1 => 1,
         2 => 2,
@@ -26,29 +25,29 @@ pub const fn get_power_of_two_ceil(x: usize) -> usize {
     }
 }
 
-pub type GeneralizedIndex = usize;
+pub(crate) type GeneralizedIndex = usize;
 
-pub const fn get_path_length(index: GeneralizedIndex) -> usize {
+pub(crate) const fn get_path_length(index: GeneralizedIndex) -> usize {
     log_2(index) as usize
 }
 
-pub const fn get_bit(index: GeneralizedIndex, position: usize) -> bool {
+pub(crate) const fn get_bit(index: GeneralizedIndex, position: usize) -> bool {
     index & (1 << position) > 0
 }
 
-pub const fn sibling(index: GeneralizedIndex) -> GeneralizedIndex {
+pub(crate) const fn sibling(index: GeneralizedIndex) -> GeneralizedIndex {
     index ^ 1
 }
 
-pub const fn child_left(index: GeneralizedIndex) -> GeneralizedIndex {
+pub(crate) const fn child_left(index: GeneralizedIndex) -> GeneralizedIndex {
     index * 2
 }
 
-pub const fn child_right(index: GeneralizedIndex) -> GeneralizedIndex {
+pub(crate) const fn child_right(index: GeneralizedIndex) -> GeneralizedIndex {
     index * 2 + 1
 }
 
-pub const fn parent(index: GeneralizedIndex) -> GeneralizedIndex {
+pub(crate) const fn parent(index: GeneralizedIndex) -> GeneralizedIndex {
     index / 2
 }
 
@@ -148,9 +147,18 @@ pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
     o
 }
 
+pub fn single_proof(merkle_tree: &[Node], index: GeneralizedIndex) -> Vec<Node> {
+    let proof = get_helper_indices(&[index])
+        .into_iter()
+        .map(|i| merkle_tree[i])
+        .collect_vec();
+
+    proof
+}
+
 #[cfg(test)]
 mod test {
-    use crate::{get_block_body, get_light_client_finality_update};
+    use crate::get_light_client_finality_update;
 
     use super::*;
     use beacon_api_client::{mainnet::Client as MainnetClient, BlockId};

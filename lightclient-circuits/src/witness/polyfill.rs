@@ -25,7 +25,9 @@ use super::mock_root;
 /// `finality_branch` and `execution_payload_branch` are exactly `S::FINALIZED_HEADER_DEPTH` and `S::EXECUTION_STATE_ROOT_DEPTH` long respectively.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolyfillArgs<S: Spec> {
-    pub headers: Vec<BeaconBlockHeader>,
+    pub verified_header: BeaconBlockHeader,
+    pub parent_header: BeaconBlockHeader,
+    pub parent_slot_proof: Vec<Vec<u8>>,
     pub _p: PhantomData<S>,
 }
 
@@ -47,7 +49,7 @@ impl<S: Spec> Default for PolyfillArgs<S> {
 
         let mut parent_header = BeaconBlockHeader {
             body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
-            slot: 4,
+            slot: 0,
             ..Default::default()
         };
 
@@ -61,14 +63,16 @@ impl<S: Spec> Default for PolyfillArgs<S> {
             S::FINALIZED_HEADER_INDEX,
         );
 
-        let mut current_header = BeaconBlockHeader {
+        let current_header = BeaconBlockHeader {
             parent_root: parent_header_root,
-            slot: 6,
+            slot: 0,
             state_root: Node::try_from(attested_state_root.as_slice()).unwrap(),
             ..Default::default()
         };
         Self {
-            headers: vec![current_header, parent_header],
+            verified_header: current_header,
+            parent_header,
+            parent_slot_proof: vec![vec![0; 32]; 3],
             _p: PhantomData,
         }
     }
