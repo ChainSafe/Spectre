@@ -2,6 +2,7 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
+use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use crate::merkle::*;
@@ -91,13 +92,23 @@ pub async fn fetch_polyfill_args<S: Spec, C: ClientTypes>(
     Ok(block_headers)
 }
 pub fn slot_proof_and_indices(header: &mut BeaconBlockHeader) -> (Vec<Node>, Vec<usize>) {
-    let SLOT_GINDEX = 8;
-    let SLOT_DEPTH = 3;
+    let SLOT_GINDEX: usize = 8;
+    let BODY_GINDEX: usize = 12;
+    let PROOF_GINDICES = [SLOT_GINDEX, BODY_GINDEX];
+
     let header_leaves = block_header_to_leaves(header).unwrap();
     let merkle_tree = merkle_tree(&header_leaves);
-    let slot_proof = single_proof(&merkle_tree, SLOT_GINDEX);
-    assert_eq!(slot_proof.len(), SLOT_DEPTH);
-    (slot_proof, get_helper_indices(&[SLOT_GINDEX]))
+    let helper_indices = get_helper_indices(&PROOF_GINDICES);
+    let proof = helper_indices
+        .iter()
+        .copied()
+        .map(|i| merkle_tree[i])
+        .collect_vec();
+    println!("Proof for slot and body length: {}", proof.len());
+    println!("helper_indices: {:?}", helper_indices);
+
+    assert_eq!(proof.len(), helper_indices.len());
+    (proof, helper_indices)
 }
 #[cfg(test)]
 mod tests {

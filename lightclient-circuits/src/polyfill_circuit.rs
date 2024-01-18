@@ -80,7 +80,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             .collect_vec();
 
         // Verifies that the parent hash is actually in the verified (trusted) header
-        let trusted_block_root = ssz_merkleize_chunks(
+        let verified_block_root = ssz_merkleize_chunks(
             builder,
             &sha256_chip,
             [
@@ -91,6 +91,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
                 verified_header.body_root.as_ref().into_witness(),
             ],
         )?;
+        let parent_body_root: HashInputChunk<_> = parent_header.body_root.as_ref().into_witness();
         let parent_slot_bytes: HashInputChunk<_> = parent_header.slot.into_witness();
 
         // TODO: Make gindex a constant
@@ -101,9 +102,9 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
             args.parent_slot_proof
                 .iter()
                 .map(|w| w.clone().into_witness()),
-            vec![parent_slot_bytes.clone()],
+            vec![parent_slot_bytes.clone(), parent_body_root.clone()],
             parent_block_root.as_slice(),
-            vec![8],
+            vec![8, 12],
             args.helper_indices.clone(),
         )?;
 
@@ -133,7 +134,7 @@ impl<S: Spec, F: Field> PolyfillCircuit<S, F> {
 
         Ok(iter::once(parent_slot)
             .chain(parent_block_root.into_iter())
-            .chain(trusted_block_root.into_iter())
+            .chain(verified_block_root.into_iter())
             .collect_vec())
     }
 }

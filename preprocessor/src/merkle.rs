@@ -196,13 +196,18 @@ pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
     o
 }
 
-pub fn single_proof(merkle_tree: &[Node], index: GeneralizedIndex) -> Vec<Node> {
-    let proof = get_helper_indices(&[index])
-        .into_iter()
+pub fn single_proof_and_indices(
+    merkle_tree: &[Node],
+    index: GeneralizedIndex,
+) -> (Vec<Node>, Vec<usize>) {
+    let helper_indices = get_helper_indices(&[index]);
+    let proof = helper_indices
+        .iter()
+        .copied()
         .map(|i| merkle_tree[i])
         .collect_vec();
 
-    proof
+    (proof, helper_indices)
 }
 
 #[cfg(test)]
