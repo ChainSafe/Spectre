@@ -20,6 +20,15 @@ Verifier contracts for consensus proofs are auto-generated via the [`privacy-sca
 
 ## Usage
 
+### Before build
+
+Spectre uses `abigen` macro to generate smart contract types and `rstest` for consensus spec tests. To ensure that all the necessary data for macros expansion is present during first build or testing, please run:
+
+```
+just build-contracts
+just download-spec-tests
+``` 
+
 ### Setup circuits
 
 #### Step circuit
