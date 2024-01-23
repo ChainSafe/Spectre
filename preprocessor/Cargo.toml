@@ -3,11 +3,28 @@ name = "preprocessor"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "preprocessor"
+path = "src/lib.rs"
+
+[[bin]]
+name = "unit-test-gen"
+path = "src/unit_test_gen.rs"
+# required-features = ["test-gen"]
+
+
 [dependencies]
 ssz_rs.workspace = true
 halo2curves.workspace = true
 group.workspace = true
 beacon-api-client.workspace = true
+
+# for test gen
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f"}
+# ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f", optional = true }
+blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ]  }
+# blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ], optional = true }
+
 
 # misc
 eyre = "0.6"
@@ -28,3 +45,6 @@ reqwest = "0.11.22"
 halo2-base.workspace = true
 snark-verifier-sdk.workspace = true
 ark-std.workspace = true
+
+# [features]
+# # test-gen = ["ethereum-consensus", "blst"]
