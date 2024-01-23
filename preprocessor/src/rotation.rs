@@ -6,13 +6,13 @@ use std::marker::PhantomData;
 
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::LightClientUpdateCapella;
+use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
 use itertools::Itertools;
-use lightclient_circuits::witness::CommitteeUpdateArgs;
+use lightclient_circuits::witness::{get_helper_indices, merkle_tree, CommitteeUpdateArgs};
 use log::debug;
 use ssz_rs::Merkleized;
 
-use crate::{get_block_header, get_light_client_update_at_period};
+use crate::{block_header_to_leaves, get_block_header, get_light_client_update_at_period};
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
@@ -93,6 +93,26 @@ where
         "Execution payload merkle proof verification failed"
     );
 
+    let beacon_header_multiproof_and_helper_indices =
+        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
+            let header_leaves = block_header_to_leaves(header).unwrap();
+            let merkle_tree = merkle_tree(&header_leaves);
+            let helper_indices = get_helper_indices(gindices);
+            let proof = helper_indices
+                .iter()
+                .copied()
+                .map(|i| merkle_tree[i])
+                .collect_vec();
+            assert_eq!(proof.len(), helper_indices.len());
+            (proof, helper_indices)
+        };
+
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut update.finalized_header.beacon.clone(),
+            &[S::HEADER_STATE_ROOT_INDEX],
+        );
+
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: update.finalized_header.beacon.clone(),
@@ -101,12 +121,19 @@ where
             .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
+        finalized_header_multiproof: finalized_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        finalized_header_helper_indices,
     };
     Ok(args)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::get_light_client_bootstrap;
+
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
@@ -128,9 +155,29 @@ mod tests {
         const K: u32 = 21;
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
+
+        let mut finalized_sync_committee_branch = {
+            let block_root = client
+                .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
+                .await
+                .unwrap();
+
+            get_light_client_bootstrap::<Testnet, _>(&client, block_root)
+                .await
+                .unwrap()
+                .current_sync_committee_branch
+                .iter()
+                .map(|n| n.to_vec())
+                .collect_vec()
+        };
+
+        // Magic swap of sync committee branch
+        finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
+        finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
+        witness.sync_committee_branch = finalized_sync_committee_branch;
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,

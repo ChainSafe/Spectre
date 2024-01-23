@@ -123,6 +123,8 @@ pub fn read_test_files_and_gen_witness(
             .collect_vec(),
         finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
+        finalized_header_multiproof: todo!(),
+        finalized_header_helper_indices: todo!(),
         _spec: Default::default(),
     };
     (sync_wit, rotation_wit)

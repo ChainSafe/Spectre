@@ -20,6 +20,8 @@ pub struct CommitteeUpdateArgs<S: Spec> {
 
     pub sync_committee_branch: Vec<Vec<u8>>,
 
+    pub finalized_header_multiproof: Vec<Vec<u8>>,
+    pub finalized_header_helper_indices: Vec<usize>,
     #[serde(skip)]
     pub _spec: PhantomData<S>,
 }
@@ -70,6 +72,8 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
                 ..Default::default()
             },
             _spec: PhantomData,
+            finalized_header_multiproof: vec![vec![0; 32]; 3],
+            finalized_header_helper_indices: vec![0; 3],
         }
     }
 }

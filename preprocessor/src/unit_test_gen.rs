@@ -225,6 +225,12 @@ fn main() {
         finalized_header_helper_indices,
     };
 
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
+
     let rotation_args: CommitteeUpdateArgs<Mainnet> = CommitteeUpdateArgs {
         pubkeys_compressed: pubkeys.iter().map(|x| x.deref().to_vec()).collect_vec(),
         finalized_header: attested_header,
@@ -233,6 +239,11 @@ fn main() {
             .map(|x| x.to_vec())
             .collect_vec(),
         _spec: std::marker::PhantomData,
+        finalized_header_multiproof: attested_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        finalized_header_helper_indices: attested_header_helper_indices,
     };
 
     std::fs::write(

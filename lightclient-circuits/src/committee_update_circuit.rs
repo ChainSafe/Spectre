@@ -5,7 +5,7 @@
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
     poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
-    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multiproof, verify_merkle_proof},
     sync_step_circuit::clear_3_bits,
     util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
@@ -30,7 +30,6 @@ use halo2curves::bls12_381;
 use itertools::Itertools;
 use ssz_rs::{Merkleized, Vector};
 use std::{env::var, iter, marker::PhantomData, vec};
-
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 ///
 /// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
@@ -84,16 +83,26 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let finalized_header_root = ssz_merkleize_chunks(
+        let finalized_header_root = args
+            .finalized_header
+            .clone()
+            // TODO: I really dont like how were doing hash_tree_root here
+            .hash_tree_root()
+            .unwrap()
+            .as_ref()
+            .into_iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+        verify_merkle_multiproof(
             builder,
             &sha256_chip,
-            [
-                args.finalized_header.slot.into_witness(),
-                args.finalized_header.proposer_index.into_witness(),
-                args.finalized_header.parent_root.as_ref().into_witness(),
-                finalized_state_root.clone().into(),
-                args.finalized_header.body_root.as_ref().into_witness(),
-            ],
+            args.finalized_header_multiproof
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            vec![finalized_state_root.clone().into()],
+            &finalized_header_root,
+            [S::HEADER_STATE_ROOT_INDEX],
+            args.finalized_header_helper_indices.clone(),
         )?;
 
         // Verify that the sync committee root is in the finalized state root
