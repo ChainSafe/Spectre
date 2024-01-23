@@ -274,7 +274,6 @@ mod tests {
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
-    use ethereum_consensus_types::BeaconBlockHeader;
     use halo2_base::{
         halo2_proofs::{
             dev::MockProver,
