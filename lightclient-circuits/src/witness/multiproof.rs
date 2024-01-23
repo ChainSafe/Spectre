@@ -53,7 +53,7 @@ pub const fn parent(index: GeneralizedIndex) -> GeneralizedIndex {
 /// given tree index to the root.
 pub fn get_branch_indices(tree_index: GeneralizedIndex) -> Vec<GeneralizedIndex> {
     let mut focus = sibling(tree_index);
-    let mut result = vec![focus.clone()];
+    let mut result = vec![focus];
     while focus > 1 {
         focus = sibling(parent(focus));
         result.push(focus);
@@ -68,7 +68,7 @@ pub fn get_path_indices(tree_index: GeneralizedIndex) -> Vec<GeneralizedIndex> {
     let mut result = vec![focus];
     while focus > 1 {
         focus = parent(focus);
-        result.push(focus.clone());
+        result.push(focus);
     }
     result.truncate(result.len() - 1);
     result
@@ -151,7 +151,7 @@ pub fn calculate_multi_merkle_root(
 
             let parent = objects
                 .entry(parent_index)
-                .or_insert_with(|| Node::default());
+                .or_default();
             parent.as_mut().copy_from_slice(&hasher.finalize_reset());
             keys.push(parent_index);
         }
