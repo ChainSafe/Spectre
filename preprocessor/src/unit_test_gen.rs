@@ -41,15 +41,12 @@ fn main() {
         .iter()
         .map(|sk| SecretKey::try_from(sk.as_slice()).unwrap());
 
-    println!("{:?}", priv_key_hex.len());
     let mut beacon_state: BeaconState = {
         let mut file = File::open(BEACON_STATE_PATH).unwrap();
         let mut buf = vec![];
         file.read_to_end(&mut buf).unwrap();
         ssz_rs::Deserialize::deserialize(&buf).unwrap()
     };
-
-    println!("{:?}", beacon_state.validators.len());
 
     let validators = (0..N_VALIDATORS)
         .map(|i| {
@@ -69,6 +66,7 @@ fn main() {
             validator
         })
         .collect::<Vec<_>>();
+
     let pubkeys = validators
         .iter()
         .map(|x| x.public_key.clone())
@@ -77,14 +75,11 @@ fn main() {
     beacon_state.validators = validators.try_into().unwrap();
     beacon_state.current_sync_committee.public_keys = pubkeys.clone().try_into().unwrap();
     beacon_state.next_sync_committee.public_keys = pubkeys.clone().try_into().unwrap();
-
     beacon_state.current_sync_committee.aggregate_public_key =
         eth_aggregate_public_keys(&pubkeys).unwrap();
-    println!("{:?}", beacon_state.validators.len());
 
     let mut beacon_block_body = BeaconBlockBody::default();
     beacon_block_body.eth1_data = beacon_state.eth1_data.clone();
-    println!("Body {:?}", beacon_block_body);
 
     let exec_payload_merkle_proof =
         exec_payload_merkle_proof(&mut beacon_block_body.clone()).unwrap();
@@ -105,7 +100,6 @@ fn main() {
         state_root: beacon_state_root,
         body_root: beacon_state.finalized_checkpoint.root.clone(),
     };
-    println!("Beacon slot {}", beacon_state.slot);
     let context = Context::for_mainnet();
 
     let domain = ethereum_consensus::capella::compute_domain(
@@ -125,6 +119,8 @@ fn main() {
         })
         .collect::<Vec<_>>();
     let agg_sig = crypto::aggregate(&sigs).unwrap();
+
+    // Sanity check
     crypto::eth_fast_aggregate_verify(
         &pubkeys.iter().map(|k| k).collect_vec().as_slice(),
         &data_root,
@@ -132,14 +128,13 @@ fn main() {
     )
     .unwrap();
 
-    // -----State Tree----
     let finalized_block_merkle_proof =
         finalized_checkpoint_block_root_proof(&mut beacon_state.clone()).unwrap();
-    // assert merkle proof verifies
 
     let committee_root_merkle_proof =
-        commitee_root_merkle_proof(&mut beacon_state.clone()).unwrap();
+        committee_root_merkle_proof(&mut beacon_state.clone()).unwrap();
 
+    // Conversion from ethereum_consensus block header to ours
     let attested_header = ethereum_consensus_types::BeaconBlockHeader {
         slot: attested_block.slot,
         proposer_index: attested_block.proposer_index,
@@ -147,7 +142,6 @@ fn main() {
         state_root: attested_block.state_root,
         body_root: attested_block.body_root,
     };
-
     let finalized_header = ethereum_consensus_types::BeaconBlockHeader {
         slot: finalized_block.slot,
         proposer_index: finalized_block.proposer_index,
@@ -155,6 +149,7 @@ fn main() {
         state_root: finalized_block.state_root,
         body_root: finalized_block.body_root,
     };
+
     let sync_args: SyncStepArgs<Mainnet> = SyncStepArgs {
         signature_compressed: {
             ethereum_consensus_types::BlsSignature::try_from(hex::encode(agg_sig.deref()))
@@ -196,6 +191,7 @@ fn main() {
             .collect_vec(),
         _spec: std::marker::PhantomData,
     };
+
     std::fs::write(
         "../test_data/sync_step_512.json",
         serde_json::to_string(&sync_args).unwrap(),
@@ -208,7 +204,7 @@ fn main() {
     .unwrap();
 }
 
-pub fn commitee_root_merkle_proof(
+pub fn committee_root_merkle_proof(
     beacon_state: &mut BeaconState,
 ) -> Result<Vec<Node>, MerkleizationError> {
     let leaves = beacon_state_to_leaves(beacon_state)?;
