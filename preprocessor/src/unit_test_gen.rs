@@ -4,7 +4,7 @@ use ethereum_consensus::capella::mainnet::{
     BeaconBlockBody, BeaconBlockHeader, BeaconState, Validator,
 };
 use ethereum_consensus::crypto::{self, eth_aggregate_public_keys, SecretKey};
-use ethereum_consensus::primitives::{BlsPublicKey, DomainType};
+use ethereum_consensus::primitives::DomainType;
 use ethereum_consensus::signing::compute_signing_root;
 use ethereum_consensus::state_transition::Context;
 use itertools::Itertools as _;
@@ -52,8 +52,9 @@ fn main() {
         .map(|i| {
             let sk = SecretKey::try_from(priv_key_hex[i].as_slice()).unwrap();
             let pubkey = sk.public_key();
-            let bls_public_key = BlsPublicKey::from(pubkey);
-            let validator = Validator {
+            let bls_public_key = pubkey;
+
+            Validator {
                 public_key: bls_public_key.clone(),
                 withdrawal_credentials: Default::default(),
                 effective_balance: 32_000_000,
@@ -62,8 +63,7 @@ fn main() {
                 activation_epoch: i as u64 + 1,
                 exit_epoch: 100,
                 withdrawable_epoch: 0,
-            };
-            validator
+            }
         })
         .collect::<Vec<_>>();
 
@@ -78,8 +78,10 @@ fn main() {
     beacon_state.current_sync_committee.aggregate_public_key =
         eth_aggregate_public_keys(&pubkeys).unwrap();
 
-    let mut beacon_block_body = BeaconBlockBody::default();
-    beacon_block_body.eth1_data = beacon_state.eth1_data.clone();
+    let mut beacon_block_body = BeaconBlockBody {
+        eth1_data: beacon_state.eth1_data.clone(),
+        ..Default::default()
+    };
 
     let exec_payload_merkle_proof =
         exec_payload_merkle_proof(&mut beacon_block_body.clone()).unwrap();
@@ -88,8 +90,11 @@ fn main() {
         .hash_tree_root()
         .unwrap();
 
-    let mut finalized_block = BeaconBlockHeader::default();
-    finalized_block.body_root = beacon_block_body.hash_tree_root().unwrap();
+    let mut finalized_block = BeaconBlockHeader {
+        body_root: beacon_block_body.hash_tree_root().unwrap(),
+        ..Default::default()
+    };
+
     beacon_state.finalized_checkpoint.root = finalized_block.hash_tree_root().unwrap();
 
     let beacon_state_root = beacon_state.hash_tree_root().unwrap();
@@ -98,7 +103,7 @@ fn main() {
         proposer_index: 0,
         parent_root: Default::default(),
         state_root: beacon_state_root,
-        body_root: beacon_state.finalized_checkpoint.root.clone(),
+        body_root: beacon_state.finalized_checkpoint.root,
     };
     let context = Context::for_mainnet();
 
@@ -122,7 +127,7 @@ fn main() {
 
     // Sanity check
     crypto::eth_fast_aggregate_verify(
-        &pubkeys.iter().map(|k| k).collect_vec().as_slice(),
+        pubkeys.iter().collect_vec().as_slice(),
         &data_root,
         &agg_sig,
     )
