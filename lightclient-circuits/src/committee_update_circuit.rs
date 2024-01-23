@@ -274,7 +274,6 @@ mod tests {
     use super::*;
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
-    use ethereum_consensus_types::BeaconBlockHeader;
     use halo2_base::{
         halo2_proofs::{
             dev::MockProver,
@@ -288,25 +287,7 @@ mod tests {
     use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, CircuitExt, Snark};
 
     fn load_circuit_args() -> CommitteeUpdateArgs<Testnet> {
-        #[derive(serde::Deserialize)]
-        struct ArgsJson {
-            finalized_header: BeaconBlockHeader,
-            committee_root_branch: Vec<Vec<u8>>,
-            pubkeys_compressed: Vec<Vec<u8>>,
-        }
-
-        let ArgsJson {
-            pubkeys_compressed,
-            committee_root_branch,
-            finalized_header,
-        } = serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap();
-
-        CommitteeUpdateArgs {
-            pubkeys_compressed,
-            _spec: PhantomData,
-            finalized_header,
-            sync_committee_branch: committee_root_branch,
-        }
+        serde_json::from_slice(&fs::read("../test_data/rotation_512.json").unwrap()).unwrap()
     }
 
     fn gen_application_snark(
