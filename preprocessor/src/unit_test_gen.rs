@@ -155,6 +155,33 @@ fn main() {
         body_root: finalized_block.body_root,
     };
 
+    let beacon_header_multiproof_and_helper_indices =
+        |header: &mut ethereum_consensus_types::BeaconBlockHeader, gindices: &[usize]| {
+            let header_leaves = preprocessor::block_header_to_leaves(header).unwrap();
+            let merkle_tree = merkle_tree(&header_leaves);
+            let helper_indices = get_helper_indices(gindices);
+            let proof = helper_indices
+                .iter()
+                .copied()
+                .map(|i| merkle_tree[i])
+                .collect_vec();
+            assert_eq!(proof.len(), helper_indices.len());
+            (proof, helper_indices)
+        };
+
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut finalized_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_BODY_ROOT_INDEX],
+        );
+
     let sync_args: SyncStepArgs<Mainnet> = SyncStepArgs {
         signature_compressed: {
             ethereum_consensus_types::BlsSignature::try_from(hex::encode(agg_sig.deref()))
@@ -185,6 +212,17 @@ fn main() {
             .collect_vec(),
         domain,
         _spec: std::marker::PhantomData,
+
+        attested_header_multiproof: attested_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        attested_header_helper_indices,
+        finalized_header_multiproof: finalized_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        finalized_header_helper_indices,
     };
 
     let rotation_args: CommitteeUpdateArgs<Mainnet> = CommitteeUpdateArgs {

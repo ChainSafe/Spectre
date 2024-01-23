@@ -149,9 +149,7 @@ pub fn calculate_multi_merkle_root(
             hasher.update(left_input.as_ref());
             hasher.update(right_input.as_ref());
 
-            let parent = objects
-                .entry(parent_index)
-                .or_default();
+            let parent = objects.entry(parent_index).or_default();
             parent.as_mut().copy_from_slice(&hasher.finalize_reset());
             keys.push(parent_index);
         }
