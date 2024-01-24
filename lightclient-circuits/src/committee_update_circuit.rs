@@ -308,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_committee_update_circuit() {
-        const K: u32 = 18;
+        const K: u32 = 20;
         let witness = load_circuit_args();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
@@ -330,11 +330,11 @@ mod tests {
 
     #[test]
     fn test_committee_update_proofgen() {
-        const K: u32 = 18;
+        const K: u32 = 20;
         let params = gen_srs(K);
 
-        const PINNING_PATH: &str = "./config/committee_update_18.json";
-        const PKEY_PATH: &str = "../build/committee_update_18.pkey";
+        const PINNING_PATH: &str = "./config/committee_update_20.json";
+        const PKEY_PATH: &str = "../build/committee_update_20.pkey";
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params,
@@ -360,7 +360,7 @@ mod tests {
         const APP_K: u32 = 20;
         const APP_PK_PATH: &str = "../build/committee_update_20.pkey";
         const APP_PINNING_PATH: &str = "./config/committee_update_20.json";
-        const AGG_K: u32 = 25;
+        const AGG_K: u32 = 24;
         const AGG_PK_PATH: &str = "../build/committee_update_verifier_24.pkey";
         const AGG_CONFIG_PATH: &str = "./config/committee_update_verifier_24.json";
         let params_app = gen_srs(APP_K);
