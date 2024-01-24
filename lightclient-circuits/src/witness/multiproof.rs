@@ -1,8 +1,9 @@
 // TODO: A lot if not all/most of this code is copy pasta from: https://github.com/ralexstokes/ssz-rs/pull/118 which is mostly implemented w.r.t. the spec
 // TODO: Remove this once the above PR lands in ssz-rs
 
+use ethereum_consensus_types::BeaconBlockHeader;
 use sha2::{Digest, Sha256};
-use ssz_rs::Node;
+use ssz_rs::{MerkleizationError, Merkleized, Node};
 use std::collections::{HashMap, HashSet};
 
 pub type GeneralizedIndex = usize;
@@ -183,4 +184,17 @@ pub fn create_multiproof(merkle_tree: &[Node], indices_to_prove: &[GeneralizedIn
         .into_iter()
         .map(|i| merkle_tree[i])
         .collect()
+}
+
+/// Returns nodes representing the leaves a BeaconBlockHeader in merkleized representation.
+pub fn block_header_to_leaves(
+    header: &mut BeaconBlockHeader,
+) -> Result<[Node; 5], MerkleizationError> {
+    Ok([
+        header.slot.hash_tree_root()?,
+        header.proposer_index.hash_tree_root()?,
+        header.parent_root.hash_tree_root()?,
+        header.state_root.hash_tree_root()?,
+        header.body_root.hash_tree_root()?,
+    ])
 }

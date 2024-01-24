@@ -8,11 +8,13 @@ use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
 use itertools::Itertools;
-use lightclient_circuits::witness::{get_helper_indices, merkle_tree, CommitteeUpdateArgs};
+use lightclient_circuits::witness::{
+    block_header_to_leaves, get_helper_indices, merkle_tree, CommitteeUpdateArgs,
+};
 use log::debug;
 use ssz_rs::Merkleized;
 
-use crate::{block_header_to_leaves, get_block_header, get_light_client_update_at_period};
+use crate::{get_block_header, get_light_client_update_at_period};
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
@@ -123,7 +125,7 @@ where
         _spec: PhantomData,
         finalized_header_multiproof: finalized_header_multiproof
             .into_iter()
-            .map(|n| n.as_ref().to_vec())
+            .map(|n| n.to_vec())
             .collect_vec(),
         finalized_header_helper_indices,
     };

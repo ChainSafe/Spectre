@@ -9,7 +9,8 @@ use ethereum_consensus::signing::compute_signing_root;
 use ethereum_consensus::state_transition::Context;
 use itertools::Itertools as _;
 use lightclient_circuits::witness::{
-    get_helper_indices, merkle_tree, parent, CommitteeUpdateArgs, SyncStepArgs,
+    block_header_to_leaves, get_helper_indices, merkle_tree, parent, CommitteeUpdateArgs,
+    SyncStepArgs,
 };
 use ssz_rs::{MerkleizationError, Merkleized, Node};
 use std::fs::File;
@@ -157,7 +158,7 @@ fn main() {
 
     let beacon_header_multiproof_and_helper_indices =
         |header: &mut ethereum_consensus_types::BeaconBlockHeader, gindices: &[usize]| {
-            let header_leaves = preprocessor::block_header_to_leaves(header).unwrap();
+            let header_leaves = block_header_to_leaves(header).unwrap();
             let merkle_tree = merkle_tree(&header_leaves);
             let helper_indices = get_helper_indices(gindices);
             let proof = helper_indices

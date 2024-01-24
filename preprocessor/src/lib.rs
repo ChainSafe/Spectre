@@ -6,7 +6,6 @@
 #![feature(generic_const_exprs)]
 
 mod rotation;
-mod ssz_proofs;
 mod step;
 
 use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
@@ -21,7 +20,6 @@ use itertools::Itertools;
 use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 pub use rotation::*;
 use serde::{Deserialize, Serialize};
-pub use ssz_proofs::*;
 use ssz_rs::{Node, Vector};
 pub use step::*;
 

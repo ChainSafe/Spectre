@@ -10,7 +10,7 @@ mod test_types;
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
-use eth_types::Minimal;
+use eth_types::{Minimal, Spec as _};
 use ethereum_consensus_types::presets::minimal::{
     LightClientBootstrap, LightClientUpdateCapella, BYTES_PER_LOGS_BLOOM, MAX_EXTRA_DATA_BYTES,
 };
@@ -19,7 +19,9 @@ use ethereum_consensus_types::{BeaconBlockHeader, SyncCommittee};
 use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
-use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
+use lightclient_circuits::witness::{
+    block_header_to_leaves, get_helper_indices, merkle_tree, CommitteeUpdateArgs, SyncStepArgs,
+};
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
 use std::ops::Deref;
@@ -113,6 +115,26 @@ pub fn read_test_files_and_gen_witness(
 
     sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
 
+    let beacon_header_multiproof_and_helper_indices =
+        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
+            let header_leaves = block_header_to_leaves(header).unwrap();
+            let merkle_tree = merkle_tree(&header_leaves);
+            let helper_indices = get_helper_indices(gindices);
+            let proof = helper_indices
+                .iter()
+                .copied()
+                .map(|i| merkle_tree[i])
+                .collect_vec();
+            assert_eq!(proof.len(), helper_indices.len());
+            (proof, helper_indices)
+        };
+
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut sync_wit.attested_header.clone(),
+            &[Minimal::HEADER_STATE_ROOT_INDEX],
+        );
+
     let rotation_wit = CommitteeUpdateArgs::<Minimal> {
         pubkeys_compressed: updates[0]
             .next_sync_committee
@@ -123,8 +145,11 @@ pub fn read_test_files_and_gen_witness(
             .collect_vec(),
         finalized_header: sync_wit.attested_header.clone(),
         sync_committee_branch,
-        finalized_header_multiproof: todo!(),
-        finalized_header_helper_indices: todo!(),
+        finalized_header_multiproof: finalized_header_multiproof
+            .into_iter()
+            .map(|n| n.to_vec())
+            .collect_vec(),
+        finalized_header_helper_indices,
         _spec: Default::default(),
     };
     (sync_wit, rotation_wit)
@@ -245,5 +270,44 @@ fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
         .iter()
         .map(|b| b.deref().to_vec())
         .collect();
+
+    let beacon_header_multiproof_and_helper_indices =
+        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
+            let header_leaves = block_header_to_leaves(header).unwrap();
+            let merkle_tree = merkle_tree(&header_leaves);
+            let helper_indices = get_helper_indices(gindices);
+            let proof = helper_indices
+                .iter()
+                .copied()
+                .map(|i| merkle_tree[i])
+                .collect_vec();
+            assert_eq!(proof.len(), helper_indices.len());
+            (proof, helper_indices)
+        };
+
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut args.attested_header.clone(),
+            &[Minimal::HEADER_SLOT_INDEX, Minimal::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut args.finalized_header.clone(),
+            &[Minimal::HEADER_SLOT_INDEX, Minimal::HEADER_BODY_ROOT_INDEX],
+        );
+
+    args.finalized_header_multiproof = finalized_header_multiproof
+        .into_iter()
+        .map(|n| n.to_vec())
+        .collect_vec();
+    args.finalized_header_helper_indices = finalized_header_helper_indices;
+    args.attested_header_multiproof = attested_header_multiproof
+        .into_iter()
+        .map(|n| n.to_vec())
+        .collect_vec();
+    args.attested_header_helper_indices = attested_header_helper_indices;
+
     args
 }

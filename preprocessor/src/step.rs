@@ -13,11 +13,13 @@ use ethereum_consensus_types::{
     BeaconBlockHeader, ForkData, LightClientBootstrap, LightClientFinalityUpdate,
 };
 use itertools::Itertools;
-use lightclient_circuits::witness::{get_helper_indices, merkle_tree, SyncStepArgs};
+use lightclient_circuits::witness::{
+    block_header_to_leaves, get_helper_indices, merkle_tree, SyncStepArgs,
+};
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
 
-use crate::{block_header_to_leaves, get_light_client_bootstrap, get_light_client_finality_update};
+use crate::{get_light_client_bootstrap, get_light_client_finality_update};
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
 pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
