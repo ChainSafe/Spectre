@@ -121,7 +121,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .hash_tree_root()
             .unwrap()
             .as_ref()
-            .into_iter()
+            .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
 
@@ -156,7 +156,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .hash_tree_root()
             .unwrap()
             .as_ref()
-            .into_iter()
+            .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
 

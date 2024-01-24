@@ -6,10 +6,10 @@ use std::marker::PhantomData;
 
 use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::{BeaconBlockHeader, LightClientUpdateCapella};
+use ethereum_consensus_types::LightClientUpdateCapella;
 use itertools::Itertools;
 use lightclient_circuits::witness::{
-    block_header_to_leaves, get_helper_indices, merkle_tree, CommitteeUpdateArgs,
+    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
 };
 use log::debug;
 use ssz_rs::Merkleized;
@@ -94,20 +94,6 @@ where
         .is_ok(),
         "Execution payload merkle proof verification failed"
     );
-
-    let beacon_header_multiproof_and_helper_indices =
-        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
-            let header_leaves = block_header_to_leaves(header).unwrap();
-            let merkle_tree = merkle_tree(&header_leaves);
-            let helper_indices = get_helper_indices(gindices);
-            let proof = helper_indices
-                .iter()
-                .copied()
-                .map(|i| merkle_tree[i])
-                .collect_vec();
-            assert_eq!(proof.len(), helper_indices.len());
-            (proof, helper_indices)
-        };
 
     let (finalized_header_multiproof, finalized_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(

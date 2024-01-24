@@ -20,7 +20,7 @@ use ethereum_consensus_types::{ForkData, Root};
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::witness::{
-    block_header_to_leaves, get_helper_indices, merkle_tree, CommitteeUpdateArgs, SyncStepArgs,
+    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs, SyncStepArgs,
 };
 use ssz_rs::prelude::*;
 use ssz_rs::Merkleized;
@@ -114,21 +114,6 @@ pub fn read_test_files_and_gen_witness(
     let mut agg_pk: ByteVector<48> = ByteVector(Vector::try_from(agg_pubkeys_compressed).unwrap());
 
     sync_committee_branch.insert(0, agg_pk.hash_tree_root().unwrap().deref().to_vec());
-
-    let beacon_header_multiproof_and_helper_indices =
-        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
-            let header_leaves = block_header_to_leaves(header).unwrap();
-            let merkle_tree = merkle_tree(&header_leaves);
-            let helper_indices = get_helper_indices(gindices);
-            let proof = helper_indices
-                .iter()
-                .copied()
-                .map(|i| merkle_tree[i])
-                .collect_vec();
-            assert_eq!(proof.len(), helper_indices.len());
-            (proof, helper_indices)
-        };
-
     let (finalized_header_multiproof, finalized_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
             &mut sync_wit.attested_header.clone(),
@@ -270,20 +255,6 @@ fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
         .iter()
         .map(|b| b.deref().to_vec())
         .collect();
-
-    let beacon_header_multiproof_and_helper_indices =
-        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
-            let header_leaves = block_header_to_leaves(header).unwrap();
-            let merkle_tree = merkle_tree(&header_leaves);
-            let helper_indices = get_helper_indices(gindices);
-            let proof = helper_indices
-                .iter()
-                .copied()
-                .map(|i| merkle_tree[i])
-                .collect_vec();
-            assert_eq!(proof.len(), helper_indices.len());
-            (proof, helper_indices)
-        };
 
     // Proof length is 3
     let (attested_header_multiproof, attested_header_helper_indices) =

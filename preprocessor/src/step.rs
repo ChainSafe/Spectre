@@ -9,13 +9,9 @@ use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
 use ethereum_consensus_types::bls::BlsPublicKey;
 use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::{
-    BeaconBlockHeader, ForkData, LightClientBootstrap, LightClientFinalityUpdate,
-};
+use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
-use lightclient_circuits::witness::{
-    block_header_to_leaves, get_helper_indices, merkle_tree, SyncStepArgs,
-};
+use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
 
@@ -122,21 +118,6 @@ pub async fn step_args_from_finality_update<S: Spec>(
         .is_ok(),
         "Finality merkle proof verification failed"
     );
-
-    let beacon_header_multiproof_and_helper_indices =
-        |header: &mut BeaconBlockHeader, gindices: &[usize]| {
-            let header_leaves = block_header_to_leaves(header).unwrap();
-            let merkle_tree = merkle_tree(&header_leaves);
-            let helper_indices = get_helper_indices(gindices);
-            let proof = helper_indices
-                .iter()
-                .copied()
-                .map(|i| merkle_tree[i])
-                .collect_vec();
-            // println!("Proof length: {}", proof.len());
-            assert_eq!(proof.len(), helper_indices.len());
-            (proof, helper_indices)
-        };
 
     // Proof length is 3
     let (attested_header_multiproof, attested_header_helper_indices) =

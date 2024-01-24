@@ -198,3 +198,19 @@ pub fn block_header_to_leaves(
         header.body_root.hash_tree_root()?,
     ])
 }
+
+pub fn beacon_header_multiproof_and_helper_indices(
+    header: &mut BeaconBlockHeader,
+    gindices: &[usize],
+) -> (Vec<Node>, Vec<usize>) {
+    let header_leaves = block_header_to_leaves(header).unwrap();
+    let merkle_tree = merkle_tree(&header_leaves);
+    let helper_indices = get_helper_indices(gindices);
+    let proof = helper_indices
+        .iter()
+        .copied()
+        .map(|i| merkle_tree[i])
+        .collect::<Vec<_>>();
+    assert_eq!(proof.len(), helper_indices.len());
+    (proof, helper_indices)
+}
