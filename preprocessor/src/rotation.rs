@@ -125,28 +125,29 @@ mod tests {
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
-    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
-    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
-    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
     use lightclient_circuits::{
-        committee_update_circuit::CommitteeUpdateCircuit,
-        halo2_base::gates::circuit::CircuitBuilderStage,
-        util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
     use reqwest::Url;
-    use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]
-    async fn test_rotation_circuit_sepolia() {
+    async fn test_rotation_snark_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
-        const K: u32 = 21;
+        const K: u32 = 20;
+        let params = gen_srs(K);
+
+        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
+            &params,
+            "../build/sync_step_testnet.pkey",
+            CONFIG_PATH,
+            &CommitteeUpdateArgs::<Testnet>::default(),
+            None,
+        );
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
         let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
-        let params: ParamsKZG<Bn256> = gen_srs(K);
-
         let mut finalized_sync_committee_branch = {
             let block_root = client
                 .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
@@ -166,35 +167,6 @@ mod tests {
         finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
         finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
         witness.sync_committee_branch = finalized_sync_committee_branch;
-
-        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            Some(pinning),
-            &witness,
-            &params,
-        )
-        .unwrap();
-
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
-    }
-
-    #[tokio::test]
-    async fn test_rotation_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_18.json";
-        const K: u32 = 21;
-        let params = gen_srs(K);
-
-        let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
-            &params,
-            "../build/sync_step_21.pkey",
-            CONFIG_PATH,
-            &CommitteeUpdateArgs::<Testnet>::default(),
-            None,
-        );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

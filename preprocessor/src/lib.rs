@@ -194,13 +194,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_both_circuit_sepolia() {
-        const K: u32 = 21;
+        const K: u32 = 20;
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
 
         let block = get_block_header(&client, BlockId::Finalized).await.unwrap();
         let slot = block.slot;
         let period = slot / (32 * 256);
+        const ROTATE_CONFIG_PATH: &str =
+            "../lightclient-circuits/config/committee_update_testnet.json";
+        const STEP_CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_testnet.json";
 
         println!(
             "Fetching light client update at current Slot: {} at Period: {}",
@@ -265,10 +268,10 @@ mod tests {
         c.sync_committee_branch = finalized_sync_committee_branch;
 
         let params: ParamsKZG<Bn256> = gen_srs(K);
-
+        let pinning = Eth2ConfigPinning::from_path(STEP_CONFIG_PATH);
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            None,
+            Some(pinning),
             &s,
             &params,
         )
@@ -277,9 +280,7 @@ mod tests {
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
         prover.assert_satisfied_par();
 
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
-
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
+        let pinning = Eth2ConfigPinning::from_path(ROTATE_CONFIG_PATH);
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
             Some(pinning),

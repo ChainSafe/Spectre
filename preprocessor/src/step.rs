@@ -183,50 +183,23 @@ pub async fn step_args_from_finality_update<S: Spec>(
 #[cfg(test)]
 mod tests {
     use eth_types::Testnet;
-    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
-    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
-    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
-    use lightclient_circuits::{
-        halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
-        util::AppCircuit,
-    };
-    use snark_verifier_sdk::CircuitExt;
+    use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
+    use lightclient_circuits::{sync_step_circuit::StepCircuit, util::AppCircuit};
 
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use reqwest::Url;
 
     #[tokio::test]
-    async fn test_sync_circuit_sepolia() {
-        const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
-        let params: ParamsKZG<Bn256> = gen_srs(K);
-
-        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
-            CircuitBuilderStage::Mock,
-            None,
-            &witness,
-            &params,
-        )
-        .unwrap();
-
-        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
-    }
-
-    #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_21.json";
-        const K: u32 = 21;
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_testnet.json";
+        const K: u32 = 20;
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_21.pkey",
+            "../build/sync_step_testnet.pkey",
             CONFIG_PATH,
             &SyncStepArgs::<Testnet>::default(),
             None,

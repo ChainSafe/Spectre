@@ -92,6 +92,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
+
         verify_merkle_multiproof(
             builder,
             &sha256_chip,
