@@ -117,9 +117,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let attested_header_root = args
             .attested_header
             .clone()
-            // TODO: I really dont like how were doing hash_tree_root here
             .hash_tree_root()
-            .unwrap()
+            .map_err(|e| Error::Synthesis)?
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -152,9 +151,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let finalized_header_root = args
             .finalized_header
             .clone()
-            // TODO: I really dont like how were doing hash_tree_root here
             .hash_tree_root()
-            .unwrap()
+            .map_err(|e| Error::Synthesis)?
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
