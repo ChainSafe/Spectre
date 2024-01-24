@@ -118,7 +118,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .attested_header
             .clone()
             .hash_tree_root()
-            .map_err(|e| Error::Synthesis)?
+            .map_err(|_| Error::Synthesis)?
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -152,7 +152,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .finalized_header
             .clone()
             .hash_tree_root()
-            .map_err(|e| Error::Synthesis)?
+            .map_err(|_| Error::Synthesis)?
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
