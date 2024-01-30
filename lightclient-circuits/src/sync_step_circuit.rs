@@ -27,7 +27,7 @@ use halo2_base::{
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
-    utils::CurveAffineExt,
+    utils::{CurveAffineExt, ScalarField},
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{

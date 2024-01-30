@@ -4,9 +4,9 @@ members = [
     "prover",
     "preprocessor",
     "eth-types",
-    "contract-tests",
-    "test-utils",
-    "contracts",
+    # "contract-tests",
+    # "test-utils",
+    # "contracts",
 ]
 
 resolver = "2"
@@ -42,7 +42,7 @@ preprocessor = { path = "preprocessor" }
 
 # halo2
 halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
-    "halo2-pse",
+    "halo2-axiom",
     "display",
     "jemallocator",
 ] }
@@ -53,16 +53,16 @@ halo2curves = { package = "halo2curves-axiom", version = "0.5" }
 
 # verifier SDK
 snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+    "halo2-axiom",
     "display",
     "loader_halo2",
     "loader_evm",
-    "halo2-pse",
 ] }
 snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+    "halo2-axiom",
     "display",
     "loader_halo2",
     "loader_evm",
-    "halo2-pse",
 ] }
 
 # ethereum types
@@ -75,7 +75,7 @@ group = "0.13"
 num-bigint = { version = "0.4", features = ["rand"] }
 pasta_curves = "0.5.1"
 ff = "0.13"
-sha2 = { version = "0.9", features = ["compress"] }
+sha2 = { version = "0.10.8", features = ["compress"] }
 uint = "0.9.1"
 
 # misc
@@ -87,36 +87,29 @@ log = "0.4.14"
 hex = "0.4"
 ark-std = { version = "0.4.0", features = ["print-trace"] }
 
-
 [patch.crates-io]
-halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom",  branch = "support_bls12-381" }
 ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
-
+# halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+# zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+halo2-base = { path = "../halo2-lib/halo2-base" }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc" }
+zkevm-hashes = { path = "../halo2-lib/hashes/zkevm" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
-    "halo2-pse",
-    "display",
-    "jemallocator",
-] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
-    "halo2-pse",
-    "jemallocator",
-] }
-zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false }
-# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
-#     "halo2-pse",
-#     "display",
-# ] }
-# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
-#     "halo2-pse",
-# ] }
-# zkevm-hashes = { path = "../halo2-lib/hashes/zkevm", default-features = false }
+# halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+# halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+# zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+halo2-base = { path = "../halo2-lib/halo2-base" }
+halo2-ecc = { path = "../halo2-lib/halo2-ecc" }
+zkevm-hashes = { path = "../halo2-lib/hashes/zkevm" }
 
 
-[patch."https://github.com/axiom-crypto/snark-verifier.git"]
-snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
+# [patch."https://github.com/axiom-crypto/snark-verifier.git"]
+# snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen"  }
+# snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen" }
 # snark-verifier = { path = "../snark-verifier/snark-verifier" }
 # snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
 
+# [patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+# halo2_proofs = { path = "../halo2/halo2_proofs" }

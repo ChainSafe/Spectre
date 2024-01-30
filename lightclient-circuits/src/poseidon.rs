@@ -5,7 +5,7 @@
 use eth_types::{Field, LIMB_BITS};
 use halo2_base::{
     gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,
-    poseidon::hasher::PoseidonSponge, AssignedValue, Context, QuantumCell,
+    poseidon::hasher::PoseidonSponge, utils::ScalarField, AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{bigint::ProperCrtUint, bls12_381::FpChip, fields::FieldChip};
 use halo2curves::bls12_381::{self, Fq};

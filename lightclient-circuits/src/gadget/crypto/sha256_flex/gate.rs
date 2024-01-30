@@ -22,9 +22,6 @@ use super::SpreadConfig;
 
 pub const FIRST_PHASE: usize = 0;
 
-struct Dence;
-struct Spread;
-
 /// `ShaFlexGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `SpreadConfig`.
 /// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.
 #[derive(Clone, Debug, Default, CopyGetters)]
@@ -61,7 +58,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_dense.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Dence)>(),
+            "dence",
             thread_id,
             self.copy_manager.clone(),
         ));
@@ -73,7 +70,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_spread.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Spread)>(),
+            "spread",
             thread_id,
             self.copy_manager.clone(),
         ));
@@ -177,12 +174,11 @@ pub fn assign_threads_sha<F: Field>(
 
             let cell_dense = region
                 .assign_advice(
-                    || "dense",
+                    // || "dense",
                     spread.denses[column_idx],
                     row_offset,
-                    || value_dense,
+                    value_dense,
                 )
-                .unwrap()
                 .cell();
 
             if let Some(copy_manager) = copy_manager.as_mut() {
@@ -200,12 +196,11 @@ pub fn assign_threads_sha<F: Field>(
 
             let cell_spread = region
                 .assign_advice(
-                    || "spread",
+                    // || "spread",
                     spread.spreads[column_idx],
                     row_offset,
-                    || value_spread,
+                    value_spread,
                 )
-                .unwrap()
                 .cell();
 
             if let Some(copy_manager) = copy_manager.as_mut() {
