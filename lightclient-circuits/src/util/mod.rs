@@ -8,7 +8,7 @@ mod gates;
 pub use gates::*;
 
 mod conversion;
-pub(crate) use conversion::*;
+pub use conversion::*;
 
 mod circuit;
 pub use circuit::*;

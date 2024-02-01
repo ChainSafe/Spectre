@@ -37,4 +37,6 @@ pub trait CommonGateManager<F: Field>: VirtualRegionManager<F> + Clone {
     fn use_copy_manager(self, copy_manager: SharedCopyConstraintManager<F>) -> Self;
 
     fn unknown(self, use_unknown: bool) -> Self;
+
+    fn clear(&mut self);
 }

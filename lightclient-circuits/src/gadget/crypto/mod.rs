@@ -14,7 +14,7 @@ use halo2_ecc::{
     bls12_381::{Fp2Chip, Fp2Point, FpChip},
     ecc::{EcPoint, EccChip},
 };
-pub use sha256_flex::{Sha256Chip, ShaContexts, ShaFlexGateManager};
+pub use sha256_flex::{Sha256Chip, ShaContexts, ShaFlexGateManager, SpreadConfig};
 pub use sha256_wide::{Sha256ChipWide, ShaBitGateManager};
 
 pub use ecc::calculate_ysquared;

@@ -235,7 +235,8 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let mut builder = Eth2CircuitBuilder::<ShaBitGateManager<bn256::Fr>>::from_stage(stage)
             .use_k(k)
             .use_instance_columns(1);
-        let range = builder.range_chip(lookup_bits);
+        builder.set_lookup_bits(lookup_bits);
+        let range = builder.range_chip();
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
         let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;

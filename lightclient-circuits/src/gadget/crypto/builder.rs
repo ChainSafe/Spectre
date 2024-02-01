@@ -6,7 +6,7 @@ use std::env::set_var;
 
 use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, PinnableCircuit};
 use eth_types::Field;
-use getset::Getters;
+use getset::{Getters, MutGetters};
 use halo2_base::{
     gates::{
         circuit::{
@@ -44,7 +44,7 @@ impl<F: Field, GateConfig: GateBuilderConfig<F>> SHAConfig<F, GateConfig> {
     }
 }
 
-#[derive(Getters)]
+#[derive(Clone, Debug, Getters, MutGetters)]
 pub struct ShaCircuitBuilder<F: Field, ThreadBuilder: CommonGateManager<F>> {
     #[getset(get = "pub", get_mut = "pub")]
     pub(crate) sha: ThreadBuilder,
@@ -151,6 +151,10 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
         self
     }
 
+    pub fn break_points(&self) -> MultiPhaseThreadBreakPoints {
+        self.base.break_points()
+    }
+
     /// Sets the break points of the circuit.
     pub fn set_break_points(&mut self, break_points: MultiPhaseThreadBreakPoints) {
         self.base.set_break_points(break_points);
@@ -180,9 +184,13 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
         (self.base.main(0), self.sha.custom_context())
     }
 
-    pub fn range_chip(&mut self, lookup_bits: usize) -> RangeChip<F> {
-        self.base.set_lookup_bits(lookup_bits);
+    pub fn range_chip(&mut self) -> RangeChip<F> {
         self.base.range_chip()
+    }
+
+    pub fn clear(&mut self) {
+        self.base.clear();
+        self.sha.clear();
     }
 }
 

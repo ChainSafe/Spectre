@@ -20,7 +20,7 @@ pub mod committee_update_circuit;
 pub mod sync_step_circuit;
 
 pub mod poseidon;
-mod ssz_merkle;
+pub mod ssz_merkle;
 
 pub use halo2_base;
 pub use halo2_base::halo2_proofs;

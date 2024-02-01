@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::any::TypeId;
-
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
@@ -112,6 +110,11 @@ impl<F: Field> CommonGateManager<F> for ShaFlexGateManager<F> {
     fn unknown(mut self, use_unknown: bool) -> Self {
         self.use_unknown = use_unknown;
         self
+    }
+
+    fn clear(&mut self) {
+        self.threads_dense.clear();
+        self.threads_spread.clear();
     }
 }
 

@@ -69,6 +69,11 @@ impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
         self.use_unknown = use_unknown;
         self
     }
+
+    fn clear(&mut self) {
+        self.virtual_rows.clear();
+        self.loaded_blocks.clear();
+    }
 }
 
 impl<F: Field> VirtualRegionManager<F> for ShaBitGateManager<F> {

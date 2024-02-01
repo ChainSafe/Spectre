@@ -64,7 +64,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::SyncStepArgs<S>,
-    ) -> Result<Vec<AssignedValue<F>>, Error> {
+    ) -> Result<(Vec<AssignedValue<F>>, Vec<AssignedValue<F>>), Error> {
         assert!(!args.signature_compressed.is_empty(), "signature expected");
 
         let range = fp_chip.range();
@@ -76,8 +76,13 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let bls_chip = BlsSignatureChip::new(fp_chip, &pairing_chip);
         let h2c_chip = HashToCurveChip::new(&sha256_chip, &fp2_chip);
 
-        let execution_payload_root: HashInputChunk<QuantumCell<F>> =
-            args.execution_payload_root.clone().into_witness();
+        let execution_payload_root_bytes = args
+            .execution_payload_root
+            .clone()
+            .iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+        let execution_payload_root: HashInputChunk<_> = execution_payload_root_bytes.clone().into();
 
         let pubkey_affines = args
             .pubkeys_uncompressed
@@ -217,7 +222,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             truncate_sha256_into_single_elem(builder.main(), range, pub_inputs_bytes)
         };
 
-        Ok(vec![pub_inputs_commit, poseidon_commit])
+        Ok((
+            vec![pub_inputs_commit, poseidon_commit],
+            execution_payload_root_bytes,
+        ))
     }
 
     // Computes public inputs to `StepCircuit` matching the in-circuit logic from `synthesise` method.
@@ -409,10 +417,11 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let mut builder = Eth2CircuitBuilder::<ShaFlexGateManager<bn256::Fr>>::from_stage(stage)
             .use_k(k)
             .use_instance_columns(1);
-        let range = builder.range_chip(lookup_bits);
+        builder.set_lookup_bits(lookup_bits);
+        let range = builder.range_chip();
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
-        let assigned_instances = Self::synthesize(&mut builder, &fp_chip, args)?;
+        let (assigned_instances, _) = Self::synthesize(&mut builder, &fp_chip, args)?;
         builder.set_instances(0, assigned_instances);
 
         match stage {
