@@ -325,7 +325,7 @@ mod tests {
 
         let timer = start_timer!(|| "committee_update mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
         end_timer!(timer);
     }
 

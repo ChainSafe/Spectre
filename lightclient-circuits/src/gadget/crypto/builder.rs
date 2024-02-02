@@ -37,7 +37,9 @@ pub struct SHAConfig<F: Field, CustomConfig: GateBuilderConfig<F>> {
 
 impl<F: Field, GateConfig: GateBuilderConfig<F>> SHAConfig<F, GateConfig> {
     pub fn configure(meta: &mut ConstraintSystem<F>, params: BaseCircuitParams) -> Self {
-        let base = BaseConfig::configure(meta, params.clone());
+        let usable_rows = (1 << params.k) - meta.minimum_rows();
+        let mut base = BaseConfig::configure(meta, params.clone());
+        base.set_usable_rows(usable_rows);
         let compression = GateConfig::configure(meta, params);
 
         Self { base, compression }
