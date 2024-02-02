@@ -201,9 +201,8 @@ mod tests {
         let block = get_block_header(&client, BlockId::Finalized).await.unwrap();
         let slot = block.slot;
         let period = slot / (32 * 256);
-        const ROTATE_CONFIG_PATH: &str =
-            "../lightclient-circuits/config/committee_update_testnet.json";
-        const STEP_CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_testnet.json";
+        const ROTATE_CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_20.json";
+        const STEP_CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_20.json";
 
         println!(
             "Fetching light client update at current Slot: {} at Period: {}",
