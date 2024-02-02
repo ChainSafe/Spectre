@@ -4,13 +4,14 @@
 
 use eth_types::Spec;
 use ethereum_consensus_types::signing::compute_signing_root;
-use ethereum_consensus_types::BeaconBlockHeader;
+use ethereum_types::{BeaconBlockHeader, EthSpec, SigningData, SignedRoot};
 use halo2curves::bls12_381::hash_to_curve::ExpandMsgXmd;
 use halo2curves::bls12_381::{hash_to_curve, Fr, G1, G2};
 use halo2curves::group::Curve;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use ssz_rs::{Merkleized, Node};
+// use ssz_rs::{Merkleized, Node};
+use tree_hash::TreeHash;
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -71,31 +72,31 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         );
 
         let mut finalized_header = BeaconBlockHeader {
-            body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
+            body_root: beacon_block_body_root.try_into().unwrap(),
             ..Default::default()
         };
 
-        let finality_header_root = finalized_header.hash_tree_root().unwrap();
+        let finality_header_root = finalized_header.tree_hash_root();
 
         let finality_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
         let attested_state_root = mock_root(
-            finality_header_root.deref().to_vec(),
+            finality_header_root.0.to_vec(),
             &finality_branch,
             S::FINALIZED_HEADER_INDEX,
         );
 
         let mut attested_header = BeaconBlockHeader {
-            state_root: Node::try_from(attested_state_root.as_slice()).unwrap(),
+            state_root: attested_state_root.try_into().unwrap(),
             ..Default::default()
         };
 
-        let signing_root =
-            compute_signing_root(attested_header.hash_tree_root().unwrap(), DOMAIN).unwrap();
+
+        let signing_root = attested_header.tree_hash_root().signing_root(DOMAIN.try_into().unwrap());
 
         let sk = Fr::from_bytes(&[1; 32]).unwrap();
         let msg = <G2 as hash_to_curve::HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
-            signing_root.deref(),
+            &signing_root.0,
             S::DST,
         )
         .to_affine();
@@ -112,18 +113,18 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             .to_uncompressed_be()
             .to_vec();
 
-        // Proof length is 3
-        let (attested_header_multiproof, attested_header_helper_indices) =
-            beacon_header_multiproof_and_helper_indices(
-                &mut attested_header.clone(),
-                &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
-            );
-        // Proof length is 4
-        let (finalized_header_multiproof, finalized_header_helper_indices) =
-            beacon_header_multiproof_and_helper_indices(
-                &mut finalized_header.clone(),
-                &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
-            );
+        // // Proof length is 3
+        // let (attested_header_multiproof, attested_header_helper_indices) =
+        //     beacon_header_multiproof_and_helper_indices(
+        //         &mut attested_header.clone(),
+        //         &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+        //     );
+        // // Proof length is 4
+        // let (finalized_header_multiproof, finalized_header_helper_indices) =
+        //     beacon_header_multiproof_and_helper_indices(
+        //         &mut finalized_header.clone(),
+        //         &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+        //     );
 
         Self {
             signature_compressed,
@@ -139,10 +140,10 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             execution_payload_root: execution_root,
             _spec: PhantomData,
 
-            attested_header_multiproof,
-            attested_header_helper_indices,
-            finalized_header_multiproof,
-            finalized_header_helper_indices,
+            attested_header_multiproof: vec![],
+            attested_header_helper_indices: vec![],
+            finalized_header_multiproof: vec![],
+            finalized_header_helper_indices: vec![],
         }
     }
 }

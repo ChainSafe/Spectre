@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 use eth_types::Spec;
-use ethereum_consensus_types::BeaconBlockHeader;
+// use ethereum_consensus_types::BeaconBlockHeader;
+use ethereum_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -64,15 +65,15 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         );
         let finalized_header = BeaconBlockHeader {
-            state_root: state_root.as_slice().try_into().unwrap(),
+            state_root: state_root.try_into().unwrap(),
             ..Default::default()
         };
 
-        let (finalized_header_multiproof, finalized_header_helper_indices) =
-            beacon_header_multiproof_and_helper_indices(
-                &mut finalized_header.clone(),
-                &[S::HEADER_STATE_ROOT_INDEX],
-            );
+        // let (finalized_header_multiproof, finalized_header_helper_indices) =
+        //     beacon_header_multiproof_and_helper_indices(
+        //         &mut finalized_header.clone(),
+        //         &[S::HEADER_STATE_ROOT_INDEX],
+        //     );
 
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
@@ -81,13 +82,13 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             sync_committee_branch,
             finalized_header,
             _spec: PhantomData,
-            finalized_header_multiproof,
-            finalized_header_helper_indices,
+            finalized_header_multiproof: vec![],
+            finalized_header_helper_indices: vec![],
         }
     }
 }
 
-pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> Vec<u8> {
+pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> [u8;32] {
     let mut last_hash = leaf;
 
     for i in 0..branch.len() {
@@ -103,7 +104,7 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
         gindex /= 2;
     }
 
-    last_hash
+    last_hash.try_into().unwrap()
 }
 
 #[cfg(test)]

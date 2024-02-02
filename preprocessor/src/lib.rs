@@ -8,14 +8,15 @@
 mod rotation;
 mod step;
 
+use eth2::mixin::RequestAccept as _;
 use eth2::types::Accept;
 // use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
 use eth_types::Spec;
-use ethereum_consensus_types::bls::BlsSignature;
-use ethereum_consensus_types::{
-    BeaconBlockHeader, BlsPublicKey, ByteVector, LightClientBootstrap, LightClientFinalityUpdate,
-    LightClientUpdateCapella, Root,
-};
+// use ethereum_consensus_types::bls::BlsSignature;
+// use ethereum_consensus_types::{
+//     BeaconBlockHeader, BlsPublicKey, ByteVector, LightClientBootstrap, LightClientFinalityUpdate,
+//     LightClientUpdateCapella, Root,
+// };
 
 use eth2::{types::BlockId, BeaconNodeHttpClient, SensitiveUrl, Timeouts};
 use ethereum_types::{ForkVersionedResponse, LightClientUpdate};
@@ -23,18 +24,18 @@ use itertools::Itertools;
 use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 pub use rotation::*;
 use serde::{Deserialize, Serialize};
-use ssz_rs::{Node, Vector};
+// use ssz_rs::{Node, Vector};
+use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKey, PublicKeyBytes};
 pub use step::*;
 use url::Url;
-
-pub async fn get_light_client_update_at_period<S: Spec, T>(
+pub async fn get_light_client_update_at_period<S: Spec, T: EthSpec>(
     client: &BeaconNodeHttpClient,
     period: u64,
 ) -> eyre::Result<LightClientUpdate<T>> {
     let mut path = Url::parse(client.as_ref()).unwrap();
 
     path.path_segments_mut()
-        .map_err(|()| format!("Invalid URL: {}", client.as_ref()))?
+        .map_err(|()| eyre::eyre!("Invalid URL: {}", client.as_ref()))?
         .push("eth")
         .push("v1")
         .push("beacon")
@@ -42,17 +43,18 @@ pub async fn get_light_client_update_at_period<S: Spec, T>(
         .push("updates");
 
     path.query_pairs_mut()
-        .append_pair("start_period", period)
-        .append_pair("count", 1);
+        .append_pair("start_period", &period.to_string())
+        .append_pair("count", "1");
 
-    let updates: Vec<ForkVersionedResponse<LightClientUpdate>> = client
+    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<T>>> = client
         .get_response(path, |b| {
             b.accept(Accept::Json)
             // b.timeout(timeout).accept(Accept::Json)
         })
-        .await?
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?
         .json()
-        .await;
+        .await?;
 
     assert!(updates.len() == 1, "should only get one update");
     Ok(updates.pop().unwrap().data)
@@ -124,17 +126,9 @@ pub async fn get_light_client_update_at_period<S: Spec, T>(
 //     Ok(block.header.message)
 // }
 
-pub async fn light_client_update_to_args<S: Spec>(
-    update: &LightClientUpdateCapella<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_ROOT_INDEX },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::FINALIZED_HEADER_INDEX },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
-    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+pub async fn light_client_update_to_args<S: Spec, T: EthSpec>(
+    update: &LightClientUpdate<T>,
+    pubkeys_compressed: &FixedVector<PublicKeyBytes, T::SyncCommitteeSize>,
     domain: [u8; 32],
 ) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)>
 where
@@ -149,14 +143,7 @@ where
     let finality_update = LightClientFinalityUpdate {
         attested_header: update.attested_header.clone(),
         finalized_header: update.finalized_header.clone(),
-        finality_branch: Vector::try_from(
-            update
-                .finality_branch
-                .iter()
-                .map(|v| ByteVector(Vector::try_from(v.to_vec()).unwrap()))
-                .collect_vec(),
-        )
-        .unwrap(),
+        finality_branch: update.finality_branch.clone(),
         sync_aggregate: update.sync_aggregate.clone(),
         signature_slot: update.signature_slot,
     };

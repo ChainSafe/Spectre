@@ -42,6 +42,7 @@ use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use ssz_rs::Merkleized;
+use tree_hash::TreeHash;
 use std::{env::var, marker::PhantomData, vec};
 
 /// `StepCircuit` verifies that Beacon chain block header is attested by a lightclient sync committee via aggregated signature,
@@ -106,7 +107,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
-        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
+        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.as_u64().into_witness();
         let attested_header_state_root = args
             .attested_header
             .state_root
@@ -116,9 +117,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .collect_vec();
         let attested_header_root = args
             .attested_header
-            .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::Synthesis)?
+            .tree_hash_root()
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -146,13 +145,12 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|&b| builder.main().load_witness(F::from(b as u64)))
             .collect_vec();
-        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.as_u64().into_witness();
 
         let finalized_header_root = args
             .finalized_header
             .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::Synthesis)?
+            .tree_hash_root()
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -252,11 +250,11 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         const INPUT_SIZE: usize = 8 * 3 + 32 * 2;
         let mut input = [0; INPUT_SIZE];
 
-        let mut attested_slot_le = args.attested_header.slot.to_le_bytes().to_vec();
+        let mut attested_slot_le = args.attested_header.slot.as_u64().to_le_bytes().to_vec();
         attested_slot_le.resize(8, 0);
         input[..8].copy_from_slice(&attested_slot_le);
 
-        let mut finalized_slot_le = args.finalized_header.slot.to_le_bytes().to_vec();
+        let mut finalized_slot_le = args.finalized_header.slot.as_u64().to_le_bytes().to_vec();
         finalized_slot_le.resize(8, 0);
         input[8..16].copy_from_slice(&finalized_slot_le);
 
@@ -273,8 +271,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let finalized_header_root: [u8; 32] = args
             .finalized_header
             .clone()
-            .hash_tree_root()
-            .unwrap()
+            .tree_hash_root()
             .as_ref()
             .try_into()
             .unwrap();

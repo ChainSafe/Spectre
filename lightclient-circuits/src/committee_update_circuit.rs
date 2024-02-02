@@ -29,6 +29,7 @@ use halo2_ecc::{
 use halo2curves::bls12_381;
 use itertools::Itertools;
 use ssz_rs::{Merkleized, Vector};
+use tree_hash::TreeHash;
 use std::{env::var, iter, marker::PhantomData, vec};
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 ///
@@ -85,9 +86,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .collect_vec();
         let finalized_header_root = args
             .finalized_header
-            .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::InvalidInstances)?
+            .tree_hash_root()
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -211,7 +210,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let ssz_root = pk_vector.hash_tree_root().unwrap();
 
-        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
+        let finalized_header_root = args.finalized_header.tree_hash_root();
 
         let instance_vec = iter::once(poseidon_commitment)
             .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))

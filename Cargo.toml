@@ -72,6 +72,7 @@ ssz_rs = "0.9"
 
 merkle_proof = { git = "https://github.com/eserilev/lighthouse/", branch = "capella_deneb_light_client_types" }
 ethereum-types = { package = "types", git = "https://github.com/eserilev/lighthouse/", branch = "capella_deneb_light_client_types" }
+tree_hash = { version = "0.5"}
 eth2 = { package = "eth2", git = "https://github.com/eserilev/lighthouse/", branch = "capella_deneb_light_client_types" }
 # merkle_proof = { git = "https://github.com/sigp/lighthouse/", tag = "v4.6.0" }
 # ethereum-types = { package = "types", git = "https://github.com/sigp/lighthouse/", tag = "v4.6.0" }
