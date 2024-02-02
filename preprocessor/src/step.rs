@@ -4,22 +4,23 @@
 
 use std::marker::PhantomData;
 
-use beacon_api_client::Client;
-use beacon_api_client::{BlockId, ClientTypes, StateId};
+use eth2::types::StateId;
+use eth2::BeaconNodeHttpClient;
 use eth_types::Spec;
 use ethereum_consensus_types::bls::BlsPublicKey;
-use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
+// use ethereum_consensus_types::signing::{compute_domain, DomainType};
+// use ethereum_consensus_types::{ LightClientBootstrap, LightClientFinalityUpdate};
+use blst::min_pk as bls;
+use ethereum_types::Domain;
+use ethereum_types::ForkData;
+use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKey, PublicKeyBytes};
 use itertools::Itertools;
 use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
 use ssz_rs::Vector;
 use ssz_rs::{Merkleized, Node};
-
-use crate::{get_light_client_bootstrap, get_light_client_finality_update};
-
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
-pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
+pub async fn fetch_step_args<S: Spec, T: EthSpec>(
+    client: &BeaconNodeHttpClient,
 ) -> eyre::Result<SyncStepArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -28,50 +29,79 @@ where
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
-    let finality_update = get_light_client_finality_update(client).await?;
-    let block_root = client
-        .get_beacon_block_root(BlockId::Slot(finality_update.finalized_header.beacon.slot))
+    let finality_update = client
+        .get_beacon_light_client_finality_update()
         .await
-        .unwrap();
-    let bootstrap: LightClientBootstrap<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    > = get_light_client_bootstrap(client, block_root).await?;
+        .map_err(|e| eyre::eyre!("Failed to get finality update: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get finality update: None"))?
+        .data;
+
+    let block_root = finality_update.finalized_header.beacon.canonical_root();
+
+    let bootstrap = client
+        .get_light_client_bootstrap::<T>(block_root)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get bootstrap: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get bootstrap: None"))?
+        .data;
 
     let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
 
     let attested_state_id = finality_update.attested_header.beacon.state_root;
 
-    let fork_version = client
-        .get_fork(StateId::Root(attested_state_id))
-        .await?
-        .current_version;
-    let genesis_validators_root = client.get_genesis_details().await?.genesis_validators_root;
-    let fork_data = ForkData {
-        genesis_validators_root,
-        fork_version,
-    };
-    let domain = compute_domain(DomainType::SyncCommittee, &fork_data)?;
+    // let fork_version = client
+    //     .get_fork(StateId::Root(attested_state_id))
+    //     .await?
+    //     .current_version;
+    // let genesis_validators_root = client.get_genesis_details().await?.genesis_validators_root;
+    // let fork_data = ForkData {
+    //     genesis_validators_root,
+    //     fork_version,
+    // };
 
-    step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
+    let fork_version = client
+        .get_beacon_states_fork(StateId::Root(attested_state_id))
+        .await
+        .unwrap()
+        .unwrap()
+        .data
+        .current_version;
+
+    let genesis_validators_root = client
+        .get_beacon_genesis()
+        .await
+        .unwrap()
+        .data
+        .genesis_validators_root;
+
+    // let fork_data = ForkData {
+    //     genesis_validators_root,
+    //     current_version,
+    // };
+
+    let domain = T::default_spec().compute_domain(
+        Domain::SyncCommittee,
+        fork_version,
+        genesis_validators_root,
+    );
+
+    step_args_from_finality_update(finality_update, pubkeys_compressed, domain.into()).await
 }
 
 /// Converts a [`LightClientFinalityUpdate`] to a [`SyncStepArgs`] witness.
-pub async fn step_args_from_finality_update<S: Spec>(
-    finality_update: LightClientFinalityUpdate<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
-    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
+    finality_update: LightClientFinalityUpdate<T>,
+    pubkeys_compressed: FixedVector<PublicKeyBytes, T::SyncCommitteeSize>,
     domain: [u8; 32],
 ) -> eyre::Result<SyncStepArgs<S>> {
     let pubkeys_uncompressed = pubkeys_compressed
         .iter()
-        .map(|pk| pk.decompressed_bytes())
+        .map(|pk| {
+            bls::PublicKey::uncompress(&pk.serialize())
+                .unwrap()
+                .serialize()
+                .to_vec()
+        })
         .collect_vec();
 
     let execution_payload_root = finality_update

@@ -4,9 +4,11 @@
 
 use std::marker::PhantomData;
 
-use beacon_api_client::{BlockId, Client, ClientTypes};
+// use beacon_api_client::{BlockId, Client, ClientTypes};
+use eth2::{types::BlockId, BeaconNodeHttpClient};
 use eth_types::Spec;
 use ethereum_consensus_types::LightClientUpdateCapella;
+use ethereum_types::{EthSpec, LightClientUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::{
     beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
@@ -17,8 +19,8 @@ use ssz_rs::Merkleized;
 use crate::{get_block_header, get_light_client_update_at_period};
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
-pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
+pub async fn fetch_rotation_args<S: Spec>(
+    client: &BeaconNodeHttpClient,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -29,7 +31,15 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    let block = get_block_header(client, BlockId::Head).await?;
+    let block = client
+        .get_beacon_headers_block_id(BlockId::Head)
+        .await
+        .unwrap()
+        .unwrap()
+        .data
+        .header
+        .message;
+
     let slot = block.slot;
     let period = slot / (32 * 256);
     debug!(
@@ -42,16 +52,8 @@ where
 }
 
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
-pub async fn rotation_args_from_update<S: Spec>(
-    update: &LightClientUpdateCapella<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_ROOT_INDEX },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::FINALIZED_HEADER_INDEX },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
+pub async fn rotation_args_from_update<S: Spec, T: EthSpec>(
+    update: &LightClientUpdate<T>,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -80,26 +82,26 @@ where
             .unwrap(),
     );
 
-    assert!(
-        ssz_rs::is_valid_merkle_branch(
-            update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
-            &sync_committee_branch
-                .iter()
-                .map(|n| n.as_ref())
-                .collect_vec(),
-            S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
-            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-            update.attested_header.beacon.state_root,
-        )
-        .is_ok(),
-        "Execution payload merkle proof verification failed"
-    );
+    // assert!(
+    //     ssz_rs::is_valid_merkle_branch(
+    //         update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
+    //         &sync_committee_branch
+    //             .iter()
+    //             .map(|n| n.as_ref())
+    //             .collect_vec(),
+    //         S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
+    //         S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+    //         update.attested_header.beacon.state_root,
+    //     )
+    //     .is_ok(),
+    //     "Execution payload merkle proof verification failed"
+    // );
 
-    let (finalized_header_multiproof, finalized_header_helper_indices) =
-        beacon_header_multiproof_and_helper_indices(
-            &mut update.finalized_header.beacon.clone(),
-            &[S::HEADER_STATE_ROOT_INDEX],
-        );
+    // let (finalized_header_multiproof, finalized_header_helper_indices) =
+    //     beacon_header_multiproof_and_helper_indices(
+    //         &mut update.finalized_header.beacon.clone(),
+    //         &[S::HEADER_STATE_ROOT_INDEX],
+    //     );
 
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
@@ -109,8 +111,11 @@ where
             .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
-        finalized_header_multiproof,
-        finalized_header_helper_indices,
+        // finalized_header_multiproof,
+        // finalized_header_helper_indices,
+        finalized_header_multiproof: vec![],
+        finalized_header_helper_indices: vec![],
+
     };
     Ok(args)
 }
