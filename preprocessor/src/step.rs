@@ -167,15 +167,9 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .collect_vec(),
         domain,
         _spec: PhantomData,
-        attested_header_multiproof: attested_header_multiproof
-            .into_iter()
-            .map(|n| n.as_ref().to_vec())
-            .collect_vec(),
+        attested_header_multiproof,
         attested_header_helper_indices,
-        finalized_header_multiproof: finalized_header_multiproof
-            .into_iter()
-            .map(|n| n.as_ref().to_vec())
-            .collect_vec(),
+        finalized_header_multiproof,
         finalized_header_helper_indices,
     })
 }

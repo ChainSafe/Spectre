@@ -269,15 +269,9 @@ fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
             &[Minimal::HEADER_SLOT_INDEX, Minimal::HEADER_BODY_ROOT_INDEX],
         );
 
-    args.finalized_header_multiproof = finalized_header_multiproof
-        .into_iter()
-        .map(|n| n.to_vec())
-        .collect_vec();
+    args.finalized_header_multiproof = finalized_header_multiproof;
     args.finalized_header_helper_indices = finalized_header_helper_indices;
-    args.attested_header_multiproof = attested_header_multiproof
-        .into_iter()
-        .map(|n| n.to_vec())
-        .collect_vec();
+    args.attested_header_multiproof = attested_header_multiproof;
     args.attested_header_helper_indices = attested_header_helper_indices;
 
     args

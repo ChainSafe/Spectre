@@ -81,10 +81,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             sync_committee_branch,
             finalized_header,
             _spec: PhantomData,
-            finalized_header_multiproof: finalized_header_multiproof
-                .into_iter()
-                .map(|n| n.as_ref().to_vec())
-                .collect_vec(),
+            finalized_header_multiproof,
             finalized_header_helper_indices,
         }
     }

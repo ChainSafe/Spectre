@@ -109,10 +109,7 @@ where
             .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
-        finalized_header_multiproof: finalized_header_multiproof
-            .into_iter()
-            .map(|n| n.to_vec())
-            .collect_vec(),
+        finalized_header_multiproof,
         finalized_header_helper_indices,
     };
     Ok(args)
