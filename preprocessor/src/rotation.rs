@@ -115,7 +115,6 @@ where
         // finalized_header_helper_indices,
         finalized_header_multiproof: vec![],
         finalized_header_helper_indices: vec![],
-
     };
     Ok(args)
 }

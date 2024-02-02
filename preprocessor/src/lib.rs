@@ -275,10 +275,10 @@ mod tests {
                 .data
                 .merkle_proof();
 
-                // .current_sync_committee_branch
-                // .iter()
-                // .map(|n| n.to_vec())
-                // .collect_vec()
+            // .current_sync_committee_branch
+            // .iter()
+            // .map(|n| n.to_vec())
+            // .collect_vec()
         };
 
         // Magic swap of sync committee branch
