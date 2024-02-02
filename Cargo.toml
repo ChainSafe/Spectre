@@ -75,7 +75,7 @@ group = "0.13"
 num-bigint = { version = "0.4", features = ["rand"] }
 pasta_curves = "0.5.1"
 ff = "0.13"
-sha2 = { version = "0.9", features = ["compress"] }
+sha2 = { version = "0.10", features = ["compress"] }
 uint = "0.9.1"
 
 # misc
@@ -89,7 +89,6 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 
 
 [patch.crates-io]
-halo2curves = { git = "https://github.com/timoftime/halo2curves", package = "halo2curves-axiom",  branch = "support_bls12-381" }
 ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 
 

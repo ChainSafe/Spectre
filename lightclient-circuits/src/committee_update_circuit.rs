@@ -87,7 +87,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .finalized_header
             .clone()
             .hash_tree_root()
-            .map_err(|_| Error::Synthesis)?
+            .map_err(|_| Error::InvalidInstances)?
             .as_ref()
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
@@ -99,7 +99,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             args.finalized_header_multiproof
                 .iter()
                 .map(|w| w.clone().into_witness()),
-            vec![finalized_state_root.clone().into()],
+            [finalized_state_root.clone().into()],
             &finalized_header_root,
             [S::HEADER_STATE_ROOT_INDEX],
             args.finalized_header_helper_indices.clone(),

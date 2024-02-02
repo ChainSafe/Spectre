@@ -130,7 +130,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             args.attested_header_multiproof
                 .iter()
                 .map(|w| w.clone().into_witness()),
-            vec![
+            [
                 attested_slot_bytes.clone(),
                 attested_header_state_root.clone().into(),
             ],
@@ -164,7 +164,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             args.finalized_header_multiproof
                 .iter()
                 .map(|w| w.clone().into_witness()),
-            vec![
+            [
                 finalized_slot_bytes.clone(),
                 finalized_block_body_root.clone().into(),
             ],

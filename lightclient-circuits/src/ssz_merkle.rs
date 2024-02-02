@@ -96,7 +96,7 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     Ok(())
 }
 
-// Implemented following https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#merkle-multiproofs
+// Implements following https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#merkle-multiproofs
 pub fn verify_merkle_multiproof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     builder: &mut CircuitBuilder,
     hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
@@ -147,7 +147,6 @@ pub fn verify_merkle_multiproof<F: Field, CircuitBuilder: CommonCircuitBuilder<F
         builder.main().constrain_equal(&a, b);
     });
 
-    // Ok(())
     Ok(())
 }
 
