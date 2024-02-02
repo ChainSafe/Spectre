@@ -7,7 +7,6 @@ use std::marker::PhantomData;
 use eth2::types::StateId;
 use eth2::BeaconNodeHttpClient;
 use eth_types::Spec;
-use ethereum_consensus_types::bls::BlsPublicKey;
 // use ethereum_consensus_types::signing::{compute_domain, DomainType};
 // use ethereum_consensus_types::{ LightClientBootstrap, LightClientFinalityUpdate};
 use blst::min_pk as bls;
@@ -16,8 +15,6 @@ use ethereum_types::ForkData;
 use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKey, PublicKeyBytes};
 use itertools::Itertools;
 use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
-use ssz_rs::Vector;
-use ssz_rs::{Merkleized, Node};
 use tree_hash::TreeHash;
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.

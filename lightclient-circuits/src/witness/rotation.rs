@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{iter, marker::PhantomData};
 
-use crate::witness::beacon_header_multiproof_and_helper_indices;
+// use crate::witness::beacon_header_multiproof_and_helper_indices;
 
 /// Input datum for the `CommitteeUpdateCircuit` to map next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 ///
@@ -88,7 +88,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
     }
 }
 
-pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> [u8;32] {
+pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> [u8; 32] {
     let mut last_hash = leaf;
 
     for i in 0..branch.len() {

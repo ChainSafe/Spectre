@@ -29,8 +29,8 @@ use halo2_ecc::{
 use halo2curves::bls12_381;
 use itertools::Itertools;
 use ssz_rs::{Merkleized, Vector};
-use tree_hash::TreeHash;
 use std::{env::var, iter, marker::PhantomData, vec};
+use tree_hash::TreeHash;
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 ///
 /// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.

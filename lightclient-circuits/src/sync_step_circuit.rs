@@ -42,8 +42,8 @@ use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use ssz_rs::Merkleized;
-use tree_hash::TreeHash;
 use std::{env::var, marker::PhantomData, vec};
+use tree_hash::TreeHash;
 
 /// `StepCircuit` verifies that Beacon chain block header is attested by a lightclient sync committee via aggregated signature,
 /// and the execution (Eth1) payload via Merkle proof against the finalized block header.
@@ -107,7 +107,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             assigned_affines.iter().map(|p| &p.x),
         )?;
 
-        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.as_u64().into_witness();
+        let attested_slot_bytes: HashInputChunk<_> =
+            args.attested_header.slot.as_u64().into_witness();
         let attested_header_state_root = args
             .attested_header
             .state_root
@@ -145,7 +146,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|&b| builder.main().load_witness(F::from(b as u64)))
             .collect_vec();
-        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.as_u64().into_witness();
+        let finalized_slot_bytes: HashInputChunk<_> =
+            args.finalized_header.slot.as_u64().into_witness();
 
         let finalized_header_root = args
             .finalized_header

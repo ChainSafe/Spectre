@@ -14,7 +14,6 @@ required-features = ["test-gen"]
 
 
 [dependencies]
-ssz_rs.workspace = true
 halo2curves.workspace = true
 group.workspace = true
 # beacon-api-client.workspace = true
@@ -28,7 +27,6 @@ log.workspace = true
 itertools.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-ethereum-consensus-types.workspace = true
 sha2.workspace = true
 # local
 eth-types.workspace = true

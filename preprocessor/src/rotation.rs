@@ -7,14 +7,12 @@ use std::marker::PhantomData;
 // use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use eth_types::Spec;
-use ethereum_consensus_types::LightClientUpdateCapella;
 use ethereum_types::{EthSpec, LightClientUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::{
     beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
 };
 use log::debug;
-use ssz_rs::Merkleized;
 use tree_hash::TreeHash;
 
 use crate::get_light_client_update_at_period;
@@ -99,7 +97,8 @@ where
     //         &mut update.finalized_header.beacon.clone(),
     //         &[S::HEADER_STATE_ROOT_INDEX],
     //     );
-
+    let leaves = update.finalized_header.beacon().tree_hash_packed_encoding();
+   
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: update.finalized_header.beacon().clone(),

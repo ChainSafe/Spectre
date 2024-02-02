@@ -4,17 +4,17 @@
 
 use eth_types::Spec;
 use ethereum_consensus_types::signing::compute_signing_root;
-use ethereum_types::{BeaconBlockHeader, EthSpec, SigningData, SignedRoot};
+use ethereum_types::{BeaconBlockHeader, EthSpec, SignedRoot, SigningData};
 use halo2curves::bls12_381::hash_to_curve::ExpandMsgXmd;
 use halo2curves::bls12_381::{hash_to_curve, Fr, G1, G2};
 use halo2curves::group::Curve;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 // use ssz_rs::{Merkleized, Node};
-use tree_hash::TreeHash;
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::Deref;
+use tree_hash::TreeHash;
 
 use crate::witness::beacon_header_multiproof_and_helper_indices;
 
@@ -91,8 +91,9 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             ..Default::default()
         };
 
-
-        let signing_root = attested_header.tree_hash_root().signing_root(DOMAIN.try_into().unwrap());
+        let signing_root = attested_header
+            .tree_hash_root()
+            .signing_root(DOMAIN.try_into().unwrap());
 
         let sk = Fr::from_bytes(&[1; 32]).unwrap();
         let msg = <G2 as hash_to_curve::HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
