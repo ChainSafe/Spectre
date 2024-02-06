@@ -41,6 +41,7 @@ serde_json.workspace = true
 getset.workspace = true
 log.workspace = true
 url = "2"
+ruint = "=1.10"
 
 # ethereum
 ethers = { version = "2.0.7", default_features = false, features = [
