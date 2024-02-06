@@ -60,7 +60,7 @@ pub struct StepCircuit<S: Spec + ?Sized, F: Field> {
 }
 
 impl<S: Spec, F: Field> StepCircuit<S, F> {
-    pub fn synthesize(
+    pub fn virtual_assign(
         builder: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::SyncStepArgs<S>,
@@ -421,7 +421,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
         let range = builder.range_chip();
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
-        let (assigned_instances, _) = Self::synthesize(&mut builder, &fp_chip, args)?;
+        let (assigned_instances, _) = Self::virtual_assign(&mut builder, &fp_chip, args)?;
         builder.set_instances(0, assigned_instances);
 
         match stage {

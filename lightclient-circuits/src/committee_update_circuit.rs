@@ -13,13 +13,11 @@ use crate::{
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder},
-    halo2_proofs::{
+    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder}, halo2_proofs::{
         halo2curves::bn256::{self, Bn256},
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
-    },
-    AssignedValue, Context, QuantumCell,
+    }, utils::ScalarField, AssignedValue, Context, QuantumCell
 };
 use halo2_ecc::{
     bigint::{utils::decode_into_bn, ProperCrtUint},
@@ -46,7 +44,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    pub fn synthesize(
+    pub fn virtual_assign(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::CommitteeUpdateArgs<S>,
@@ -239,7 +237,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let range = builder.range_chip();
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
-        let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
+        let assigned_instances = Self::virtual_assign(&mut builder, &fp_chip, witness)?;
         builder.set_instances(0, assigned_instances);
 
         match stage {
