@@ -41,6 +41,7 @@ use halo2_ecc::{
 use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
 use num_bigint::BigUint;
+use snark_verifier::loader::halo2::EccInstructions;
 use ssz_rs::Merkleized;
 use std::{env::var, marker::PhantomData, vec};
 
@@ -84,7 +85,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .as_slice()
             .iter()
             .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked_be(&bytes.as_slice().try_into().unwrap())
+                G1Affine::from_uncompressed_be(&bytes.as_slice().try_into().unwrap())
                     .unwrap()
             })
             .collect_vec();
@@ -331,7 +332,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let sig_affine = G2Affine::from_compressed_be(&bytes_compressed.try_into().unwrap())
             .expect("correct signature");
 
-        g2_chip.load_private_unchecked(ctx, sig_affine.into_coordinates())
+        g2_chip.assign_point(ctx, sig_affine)
     }
 
     /// Takes a list of pubkeys and aggregates them.
