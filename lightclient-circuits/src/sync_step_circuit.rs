@@ -509,13 +509,13 @@ mod tests {
 
     #[test]
     fn test_step_proofgen() {
-        const K: u32 = 22;
+        const K: u32 = 20;
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_22.pkey",
-            "./config/sync_step_22.json",
+            "../build/sync_step_20.pkey",
+            "./config/sync_step_20.json",
             &SyncStepArgs::<Testnet>::default(),
             None,
         );
@@ -525,7 +525,7 @@ mod tests {
         let _ = StepCircuit::<Testnet, Fr>::gen_proof_shplonk(
             &params,
             &pk,
-            "./config/sync_step_22.json",
+            "./config/sync_step_20.json",
             &witness,
         )
         .expect("proof generation & verification should not fail");
@@ -533,20 +533,20 @@ mod tests {
 
     #[test]
     fn test_step_evm_verify() {
-        const K: u32 = 22;
+        const K: u32 = 20;
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_22.pkey",
-            "./config/sync_step_22.json",
+            "../build/sync_step_20.pkey",
+            "./config/sync_step_20.json",
             &SyncStepArgs::<Testnet>::default(),
             None,
         );
 
         let witness = load_circuit_args();
 
-        let pinning = Eth2ConfigPinning::from_path("./config/sync_step_22.json");
+        let pinning = Eth2ConfigPinning::from_path("./config/sync_step_20.json");
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Prover,

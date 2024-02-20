@@ -41,24 +41,24 @@ preprocessor = { path = "preprocessor" }
 
 
 # halo2
-halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false, features = [
+halo2-base = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.4.1", default-features = false, features = [
     "halo2-pse",
     "display",
     "jemallocator",
 ] }
-halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
-zkevm-hashes = { git = "https://github.com/axiom-crypto/halo2-lib", branch = "community-edition", default-features = false }
+halo2-ecc = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.4.1", default-features = false }
+zkevm-hashes = { git = "https://github.com/axiom-crypto/halo2-lib", tag = "v0.4.1", default-features = false }
 
-halo2curves = { package = "halo2curves-axiom", version = "0.5" }
+halo2curves = { package = "halo2curves-axiom", version = "=0.5.2" }
 
 # verifier SDK
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.6", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
     "halo2-pse",
 ] }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "community-edition", default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.1.6", default-features = false, features = [
     "display",
     "loader_halo2",
     "loader_evm",
@@ -98,32 +98,16 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 
 [patch.crates-io]
 ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
-
+halo2-base = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+halo2-ecc = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+zkevm-hashes = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
 
 [patch."https://github.com/axiom-crypto/halo2-lib"]
-halo2-base = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
-    "halo2-pse",
-    "display",
-    "jemallocator",
-] }
-halo2-ecc = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false, features = [
-    "halo2-pse",
-    "jemallocator",
-] }
-zkevm-hashes = { git = "https://github.com/timoftime/halo2-lib", branch = "feat/zkevm-sha256-builder", default-features = false }
-# halo2-base = { path = "../halo2-lib/halo2-base", default-features = false, features = [
-#     "halo2-pse",
-#     "display",
-# ] }
-# halo2-ecc = { path = "../halo2-lib/halo2-ecc", default-features = false, features = [
-#     "halo2-pse",
-# ] }
-# zkevm-hashes = { path = "../halo2-lib/hashes/zkevm", default-features = false }
+halo2-base = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+halo2-ecc = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
+zkevm-hashes = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/zkevm-sha256-builder" }
 
 
 [patch."https://github.com/axiom-crypto/snark-verifier.git"]
-snark-verifier = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/timoftime/snark-verifier", branch = "yul-codegen", default-features = false }
-# snark-verifier = { path = "../snark-verifier/snark-verifier" }
-# snark-verifier-sdk = { path = "../snark-verifier/snark-verifier-sdk" }
-
+snark-verifier = { git = "https://github.com/nulltea/snark-verifier", branch = "yul-codegen" }
+snark-verifier-sdk = { git = "https://github.com/nulltea/snark-verifier", branch = "yul-codegen" }
