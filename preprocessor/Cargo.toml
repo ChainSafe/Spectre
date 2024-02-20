@@ -33,8 +33,7 @@ eth-types.workspace = true
 lightclient-circuits.workspace = true
 reqwest = "0.11.22"
 
-ethereum-types.workspace = true
-merkle_proof.workspace = true
+ethereum-types = {workspace = true, default-features = false }
 eth2.workspace = true
 tree_hash.workspace = true
 

@@ -1,13 +1,10 @@
 // TODO: A lot if not all/most of this code is copy pasta from: https://github.com/ralexstokes/ssz-rs/pull/118 which is mostly implemented w.r.t. the spec
 // TODO: Remove this once the above PR lands in ssz-rs
 
-use ethereum_consensus_types::BeaconBlockHeader;
-use ethereum_types::Hash256;
+use ethereum_types::{BeaconBlockHeader, Hash256};
 use sha2::{Digest, Sha256};
-use tree_hash::TreeHash;
-// use ssz_rs::{MerkleizationError, Merkleized, Node};
 use std::collections::{HashMap, HashSet};
-
+use tree_hash::TreeHash;
 pub type GeneralizedIndex = usize;
 
 // From: https://users.rust-lang.org/t/logarithm-of-integers/8506/5
@@ -191,57 +188,30 @@ pub fn create_multiproof_from_tree(
         .collect()
 }
 
-/// Returns nodes representing the leaves a BeaconBlockHeader in merkleized representation.
-// pub fn block_header_to_leaves(
-//     header: &mut BeaconBlockHeader,
-// ) -> Result<[Node; 5], MerkleizationError> {
-//     Ok([
-//         header.slot.hash_tree_root()?,
-//         header.proposer_index.hash_tree_root()?,
-//         header.parent_root.hash_tree_root()?,
-//         header.state_root.hash_tree_root()?,
-//         header.body_root.hash_tree_root()?,
-//     ])
-// }
+// Returns nodes representing the leaves a BeaconBlockHeader in merkleized representation.
+pub fn block_header_to_leaves(header: &BeaconBlockHeader) -> [Hash256; 5] {
+    [
+        header.slot.tree_hash_root(),
+        header.proposer_index.tree_hash_root(),
+        header.parent_root.tree_hash_root(),
+        header.state_root.tree_hash_root(),
+        header.body_root.tree_hash_root(),
+    ]
+}
 
-pub fn create_multiproof<T: TreeHash>(
-    tree: &T,
+pub fn beacon_header_multiproof_and_helper_indices(
+    header: &BeaconBlockHeader,
     gindices: &[GeneralizedIndex],
-) -> (Vec<Vec<u8>>, Vec<usize>) {
-    let leaves = tree
-        .tree_hash_packed_encoding()
-        .into_iter()
-        .map(|x| Hash256::from_slice(&x))
-        .collect::<Vec<_>>();
-    let merkle_tree = merkle_tree(&leaves);
-    let helper_indices = get_helper_indices(gindices)
-        .into_iter()
-        .map(|i| merkle_tree[i])
-        .collect();
-
+) -> (Vec<Vec<u8>>, Vec<GeneralizedIndex>) {
+    let header_leaves = block_header_to_leaves(header);
+    let merkle_tree = merkle_tree(&header_leaves);
+    let helper_indices = get_helper_indices(gindices);
     let proof = helper_indices
         .iter()
         .copied()
         .map(|i| merkle_tree[i])
-        .map(|n| n.as_ref().to_vec())
+        .map(|n| n.0.to_vec())
         .collect::<Vec<_>>();
     assert_eq!(proof.len(), helper_indices.len());
     (proof, helper_indices)
 }
-
-// pub fn beacon_header_multiproof_and_helper_indices(
-//     header: &mut BeaconBlockHeader,
-//     gindices: &[usize],
-// ) -> (Vec<Vec<u8>>, Vec<usize>) {
-//     let header_leaves = block_header_to_leaves(header).unwrap();
-//     let merkle_tree = merkle_tree(&header_leaves);
-//     let helper_indices = get_helper_indices(gindices);
-//     let proof = helper_indices
-//         .iter()
-//         .copied()
-//         .map(|i| merkle_tree[i])
-//         .map(|n| n.as_ref().to_vec())
-//         .collect::<Vec<_>>();
-//     assert_eq!(proof.len(), helper_indices.len());
-//     (proof, helper_indices)
-// }

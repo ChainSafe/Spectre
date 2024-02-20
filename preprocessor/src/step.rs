@@ -14,7 +14,11 @@ use ethereum_types::Domain;
 use ethereum_types::ForkData;
 use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKey, PublicKeyBytes};
 use itertools::Itertools;
-use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
+use lightclient_circuits::witness::beacon_header_multiproof_and_helper_indices;
+use lightclient_circuits::witness::{
+    // beacon_header_multiproof_and_helper_indices,
+    SyncStepArgs,
+};
 use tree_hash::TreeHash;
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
@@ -89,14 +93,16 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
         })
         .collect_vec();
 
-    let execution_payload_root = finality_update
-        .finalized_header
-        // TODO: Fork handling
-        .execution_payload_header_capella()
-        .map_err(|_| eyre::eyre!("Failed to get execution payload header from finality update"))?
-        .tree_hash_root()
-        .0
-        .to_vec();
+    let execution_payload_root = match &finality_update.finalized_header {
+        ethereum_types::LightClientHeader::Altair(_) => unimplemented!(),
+        ethereum_types::LightClientHeader::Capella(header) => {
+            header.execution.tree_hash_root().0.to_vec()
+        }
+        ethereum_types::LightClientHeader::Deneb(header) => {
+            header.execution.tree_hash_root().0.to_vec()
+        }
+    };
+
     let execution_payload_branch = finality_update
         .finalized_header
         .execution_branch()
@@ -139,18 +145,18 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
     //     "Finality merkle proof verification failed"
     // );
 
-    // // Proof length is 3
-    // let (attested_header_multiproof, attested_header_helper_indices) =
-    //     beacon_header_multiproof_and_helper_indices(
-    //         &mut finality_update.attested_header.beacon.clone(),
-    //         &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
-    //     );
-    // // Proof length is 4
-    // let (finalized_header_multiproof, finalized_header_helper_indices) =
-    //     beacon_header_multiproof_and_helper_indices(
-    //         &mut finality_update.finalized_header.beacon.clone(),
-    //         &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
-    //     );
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            finality_update.attested_header.beacon(),
+            &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            finality_update.finalized_header.beacon(),
+            &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+        );
 
     Ok(SyncStepArgs {
         signature_compressed: finality_update
@@ -172,27 +178,18 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
             .iter()
             .map(|n| n.0.to_vec())
             .collect_vec(),
-        execution_payload_root: finality_update
-            .finalized_header
-            // TODO: Handle fork
-            .execution_payload_header_capella()
-            .unwrap()
-            .tree_hash_root()
-            .0
-            .to_vec(),
-        execution_payload_branch: finality_update
-            .finalized_header
-            .execution_branch()
-            .unwrap()
-            .iter()
-            .map(|n| n.0.to_vec())
-            .collect_vec(),
+        execution_payload_root,
+        execution_payload_branch,
         domain,
         _spec: PhantomData,
-        attested_header_multiproof: vec![],
-        attested_header_helper_indices: vec![],
-        finalized_header_multiproof: vec![],
-        finalized_header_helper_indices: vec![],
+        attested_header_multiproof,
+        attested_header_helper_indices,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
+        // attested_header_multiproof: vec![],
+        // attested_header_helper_indices: vec![],
+        // finalized_header_multiproof: vec![],
+        // finalized_header_helper_indices: vec![],
     })
 }
 
@@ -204,13 +201,19 @@ mod tests {
     use lightclient_circuits::{sync_step_circuit::StepCircuit, util::AppCircuit};
 
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
+    use eth2::BeaconNodeHttpClient;
+    use eth2::SensitiveUrl;
+    use eth2::Timeouts;
+    use ethereum_types::EthSpec;
+    use ethereum_types::MainnetEthSpec;
     use reqwest::Url;
-
+    use std::time::Duration;
     #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_20.json";
         const K: u32 = 20;
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(
@@ -220,9 +223,15 @@ mod tests {
             &SyncStepArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+
+        let witness = fetch_step_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

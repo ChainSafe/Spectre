@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{iter, marker::PhantomData};
 
+use crate::witness::beacon_header_multiproof_and_helper_indices;
+
 // use crate::witness::beacon_header_multiproof_and_helper_indices;
 
 /// Input datum for the `CommitteeUpdateCircuit` to map next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
@@ -69,11 +71,11 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             ..Default::default()
         };
 
-        // let (finalized_header_multiproof, finalized_header_helper_indices) =
-        //     beacon_header_multiproof_and_helper_indices(
-        //         &mut finalized_header.clone(),
-        //         &[S::HEADER_STATE_ROOT_INDEX],
-        //     );
+        let (finalized_header_multiproof, finalized_header_helper_indices) =
+            beacon_header_multiproof_and_helper_indices(
+                &mut finalized_header.clone(),
+                &[S::HEADER_STATE_ROOT_INDEX],
+            );
 
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
@@ -82,8 +84,8 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             sync_committee_branch,
             finalized_header,
             _spec: PhantomData,
-            finalized_header_multiproof: vec![],
-            finalized_header_helper_indices: vec![],
+            finalized_header_multiproof,
+            finalized_header_helper_indices,
         }
     }
 }

@@ -5,17 +5,18 @@
 use std::marker::PhantomData;
 
 // use beacon_api_client::{BlockId, Client, ClientTypes};
+use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use eth_types::Spec;
 use ethereum_types::{EthSpec, LightClientUpdate};
 use itertools::Itertools;
+use lightclient_circuits::witness::beacon_header_multiproof_and_helper_indices;
 use lightclient_circuits::witness::{
-    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
+    // beacon_header_multiproof_and_helper_indices,
+    CommitteeUpdateArgs,
 };
 use log::debug;
 use tree_hash::TreeHash;
-
-use crate::get_light_client_update_at_period;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, T: EthSpec>(
@@ -92,13 +93,13 @@ where
     //     "Execution payload merkle proof verification failed"
     // );
 
-    // let (finalized_header_multiproof, finalized_header_helper_indices) =
-    //     beacon_header_multiproof_and_helper_indices(
-    //         &mut update.finalized_header.beacon.clone(),
-    //         &[S::HEADER_STATE_ROOT_INDEX],
-    //     );
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut update.finalized_header.beacon(),
+            &[S::HEADER_STATE_ROOT_INDEX],
+        );
     let leaves = update.finalized_header.beacon().tree_hash_packed_encoding();
-   
+
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: update.finalized_header.beacon().clone(),
@@ -107,32 +108,40 @@ where
             .map(|n| n.0.to_vec())
             .collect_vec(),
         _spec: PhantomData,
-        // finalized_header_multiproof,
-        // finalized_header_helper_indices,
-        finalized_header_multiproof: vec![],
-        finalized_header_helper_indices: vec![],
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
+        // finalized_header_multiproof: vec![],
+        // finalized_header_helper_indices: vec![],
     };
     Ok(args)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::get_light_client_bootstrap;
 
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
+    use eth2::{BeaconNodeHttpClient, SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use ethereum_types::EthSpec;
+    use ethereum_types::MainnetEthSpec;
     use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
     use reqwest::Url;
-
+    use std::time::Duration;
     #[tokio::test]
     async fn test_rotation_snark_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_20.json";
         const K: u32 = 20;
+
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+
         let params = gen_srs(K);
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
@@ -142,21 +151,21 @@ mod tests {
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        let mut witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
         let mut finalized_sync_committee_branch = {
-            let block_root = client
-                .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
-                .await
-                .unwrap();
+            let block_root = witness.finalized_header.canonical_root();
 
-            get_light_client_bootstrap::<Testnet, _>(&client, block_root)
+            client
+                .get_light_client_bootstrap::<MainnetEthSpec>(block_root)
                 .await
                 .unwrap()
+                .unwrap()
+                .data
                 .current_sync_committee_branch
-                .iter()
-                .map(|n| n.to_vec())
+                .into_iter()
+                .map(|n| n.0.to_vec())
                 .collect_vec()
         };
 

@@ -28,8 +28,8 @@ pse-poseidon = { git = "https://github.com/axiom-crypto/pse-poseidon.git" }
 ssz_rs = { workspace = true, features = ["serde"] }
 ethereum-consensus-types ={ workspace = true, features = ["serde"] }
 
-ethereum-types.workspace = true
-merkle_proof.workspace = true
+ethereum-types = {workspace = true, default-features = false }
+# merkle_proof.workspace = true
 eth2.workspace = true
 tree_hash.workspace = true
 

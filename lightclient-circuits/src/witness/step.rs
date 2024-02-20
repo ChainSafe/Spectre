@@ -11,12 +11,11 @@ use halo2curves::group::Curve;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 // use ssz_rs::{Merkleized, Node};
+use crate::witness::beacon_header_multiproof_and_helper_indices;
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use tree_hash::TreeHash;
-
-use crate::witness::beacon_header_multiproof_and_helper_indices;
 
 use super::mock_root;
 
@@ -114,18 +113,18 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             .to_uncompressed_be()
             .to_vec();
 
-        // // Proof length is 3
-        // let (attested_header_multiproof, attested_header_helper_indices) =
-        //     beacon_header_multiproof_and_helper_indices(
-        //         &mut attested_header.clone(),
-        //         &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
-        //     );
-        // // Proof length is 4
-        // let (finalized_header_multiproof, finalized_header_helper_indices) =
-        //     beacon_header_multiproof_and_helper_indices(
-        //         &mut finalized_header.clone(),
-        //         &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
-        //     );
+        // Proof length is 3
+        let (attested_header_multiproof, attested_header_helper_indices) =
+            beacon_header_multiproof_and_helper_indices(
+                &mut attested_header.clone(),
+                &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+            );
+        // Proof length is 4
+        let (finalized_header_multiproof, finalized_header_helper_indices) =
+            beacon_header_multiproof_and_helper_indices(
+                &mut finalized_header.clone(),
+                &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+            );
 
         Self {
             signature_compressed,
@@ -141,10 +140,10 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             execution_payload_root: execution_root,
             _spec: PhantomData,
 
-            attested_header_multiproof: vec![],
-            attested_header_helper_indices: vec![],
-            finalized_header_multiproof: vec![],
-            finalized_header_helper_indices: vec![],
+            attested_header_multiproof,
+            attested_header_helper_indices,
+            finalized_header_multiproof,
+            finalized_header_helper_indices,
         }
     }
 }

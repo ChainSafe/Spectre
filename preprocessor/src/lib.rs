@@ -16,7 +16,6 @@ use eth_types::Spec;
 use eth2::{types::BlockId, BeaconNodeHttpClient, SensitiveUrl, Timeouts};
 use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKey, PublicKeyBytes};
 use ethereum_types::{ForkVersionedResponse, LightClientUpdate};
-use itertools::Itertools;
 use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 pub use rotation::*;
 pub use step::*;
@@ -39,13 +38,15 @@ pub async fn get_light_client_update_at_period<S: Spec, T: EthSpec>(
     path.query_pairs_mut()
         .append_pair("start_period", &period.to_string())
         .append_pair("count", "1");
-
-    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<T>>> = client
+    println!("Path: {:?}", path);
+    let mut resp = client
         .get_response(path, |b| b.accept(Accept::Json))
         .await
-        .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?
-        .json()
-        .await?;
+        .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?;
+    println!("resp: {:?}", resp);
+
+    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<T>>> = resp.json().await?;
+    println!("Updates: {:?}", updates);
 
     assert!(updates.len() == 1, "should only get one update");
     Ok(updates.pop().unwrap().data)
@@ -86,8 +87,6 @@ mod tests {
     use eth2::types::StateId;
     // use beacon_api_client::StateId;
     use eth_types::Testnet;
-    use ethereum_consensus_types::signing::{compute_domain, DomainType};
-    use ethereum_consensus_types::ForkData;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
@@ -102,16 +101,21 @@ mod tests {
 
     use super::*;
     use eth2::BeaconNodeHttpClient;
+    use ethereum_types::Domain;
     use ethereum_types::EthSpec;
+    use ethereum_types::ForkData;
     use ethereum_types::MainnetEthSpec;
     use reqwest::Url;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_both_circuit_sepolia() {
         const K: u32 = 20;
         const URL: &str = "https://lodestar-sepolia.chainsafe.io";
-        let client =
-            BeaconNodeHttpClient::new(SensitiveUrl::parse(URL).unwrap(), Timeouts::set_all(10));
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
 
         let block = client
             .get_beacon_headers_block_id(BlockId::Finalized)
@@ -133,9 +137,12 @@ mod tests {
 
         // Fetch light client update and create circuit arguments
         let (s, mut c) = {
-            let update = get_light_client_update_at_period(&client, period)
-                .await
-                .unwrap();
+            let update = get_light_client_update_at_period::<Testnet, MainnetEthSpec>(
+                &client,
+                period.into(),
+            )
+            .await
+            .unwrap();
 
             let block_root = block.canonical_root();
 
@@ -146,7 +153,7 @@ mod tests {
                 .unwrap()
                 .data;
 
-            let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
+            let pubkeys_compressed = &bootstrap.current_sync_committee.pubkeys;
 
             let fork_version = client
                 .get_beacon_states_fork(StateId::Head)
@@ -163,21 +170,23 @@ mod tests {
                 .data
                 .genesis_validators_root;
 
-            let fork_data = ForkData {
-                genesis_validators_root,
+            let domain = MainnetEthSpec::default_spec().compute_domain(
+                Domain::SyncCommittee,
                 fork_version,
-            };
-            let domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
-            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain)
-                .await
-                .unwrap()
+                genesis_validators_root,
+            );
+
+            light_client_update_to_args::<Testnet, MainnetEthSpec>(
+                &update,
+                pubkeys_compressed,
+                domain.into(),
+            )
+            .await
+            .unwrap()
         };
 
         let mut finalized_sync_committee_branch = {
-            let block_root = client
-                .get_beacon_block_root(BlockId::Slot(s.finalized_header.slot))
-                .await
-                .unwrap();
+            let block_root = s.finalized_header.canonical_root();
 
             let k = client
                 .get_light_client_bootstrap::<MainnetEthSpec>(block_root)
@@ -185,12 +194,11 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .data
-                .merkle_proof();
-
-            // .current_sync_committee_branch
-            // .iter()
-            // .map(|n| n.to_vec())
-            // .collect_vec()
+                .current_sync_committee_branch
+                .into_iter()
+                .map(|n| n.0.to_vec())
+                .collect_vec();
+            k
         };
 
         // Magic swap of sync committee branch
