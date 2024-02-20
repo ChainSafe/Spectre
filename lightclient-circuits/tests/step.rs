@@ -97,7 +97,7 @@
 //     let timer = start_timer!(|| "committee_update mock prover run");
 //     let prover =
 //         MockProver::<bn256::Fr>::run(K_ROTATION, &rotation_circuit, rotation_instance).unwrap();
-//     prover.assert_satisfied_par();
+//     prover.assert_satisfied();
 //     end_timer!(timer);
 
 //     let sync_circuit = mock_step_circuit(&sync_witness, K_SYNC, None);
@@ -106,7 +106,7 @@
 
 //     let timer = start_timer!(|| "sync_step mock prover run");
 //     let prover = MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, instance).unwrap();
-//     prover.assert_satisfied_par();
+//     prover.assert_satisfied();
 //     end_timer!(timer);
 // }
 

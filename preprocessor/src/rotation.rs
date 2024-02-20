@@ -141,7 +141,7 @@ mod tests {
         .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
     }
 
     #[tokio::test]
