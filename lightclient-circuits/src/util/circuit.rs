@@ -17,7 +17,7 @@ use halo2_base::halo2_proofs::{
 };
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::evm::{
-    encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk,
+    encode_calldata, evm_verify, gen_evm_proof_shplonk, gen_evm_verifier_shplonk
 };
 use snark_verifier_sdk::halo2::gen_proof_shplonk;
 use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};

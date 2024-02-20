@@ -61,7 +61,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_dense.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Dence)>(),
+            "dense",
             thread_id,
             self.copy_manager.clone(),
         ));
@@ -73,7 +73,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_spread.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Spread)>(),
+            "spead",
             thread_id,
             self.copy_manager.clone(),
         ));
