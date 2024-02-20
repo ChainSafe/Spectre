@@ -34,14 +34,14 @@ just download-spec-tests
 #### Step circuit
 
 ```shell
-cargo run -r -- circuit sync-step-compressed -k 20 -p ./build/sync_step_20.pkey -K 23 -P ./build/sync_step_verifier_23.pkey -L 19 setup
+cargo run -r -p spectre-prover -- circuit sync-step-compressed -k 20 -p ./build/sync_step_20.pkey -K 23 -P ./build/sync_step_verifier_23.pkey -L 19 setup
 ```
 Flags `-k` and `-K` are circuit degrees for first and aggregation (compression) stage respectively. `-L` is the number lookup bits used in aggregation stage.
 
 #### Committee update circuit
 
 ```shell
-cargo run -r -- circuit committee-update -k 20 -p ./build/committee_update_20.pkey -K 24 -P ./build/committee_update_verifier_20.pkey setup
+cargo run -r -p spectre-prover -- circuit committee-update -k 20 -p ./build/committee_update_20.pkey -K 24 -P ./build/committee_update_verifier_20.pkey setup
 ```
 
 Alternatively, you can use `just` recipes as shown below.
@@ -56,13 +56,13 @@ just setup-committee-update testnet
 #### Step proof
 
 ```shell
-cargo run -r -- circuit sync-step-compressed -p ./build/sync_step_20.pkey -P ./build/sync_step_verifier_23.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step_verifier.sol
+cargo run -r -p spectre-prover -- circuit sync-step-compressed -p ./build/sync_step_20.pkey -P ./build/sync_step_verifier_23.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step_verifier.sol
 ```
 
 #### Committee update proof
 
 ```shell
-cargo run -r -- circuit committee-update -p ./build/committee_update_20.pkey -P ./build/committee_update_verifier_24.pkey gen-verifier -o ./contracts/snark-verifiers/committee_update_verifier.sol
+cargo run -r -p spectre-prover -- circuit committee-update -p ./build/committee_update_20.pkey -P ./build/committee_update_verifier_24.pkey gen-verifier -o ./contracts/snark-verifiers/committee_update_verifier.sol
 ```
 
 Or use `just` recipes as shown below.
@@ -81,7 +81,7 @@ For either make a copy of the `.env.example` file called `.env`. Set the `INITIA
 To get the `INITIAL_COMMITTEE_POSEIDON` value, run:
 
 ```shell
-cargo run -r -- utils committee-poseidon --beacon-api https://lodestar-sepolia.chainsafe.io
+cargo run -r -p spectre-prover -- utils committee-poseidon --beacon-api https://lodestar-sepolia.chainsafe.io
 ```
 
 `--beacon-api` is a URL of the RPC of the targeted Beacon chain.
@@ -117,6 +117,6 @@ where `<NETWORK>` is one of `["GOERLI", "SEPOLIA", "MAINNET"]`.
 Prover is accessible via JSON RPC interface. To start it, run:
 
 ```shell
-cargo run -r -- rpc --port 3000 --spec testnet
+cargo run -r -p spectre-prover -- rpc --port 3000 --spec testnet
 ```
 where `--spec` is one of `["testnet", "mainnet"]`.
