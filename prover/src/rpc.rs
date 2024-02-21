@@ -15,6 +15,7 @@ use lightclient_circuits::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use lightclient_circuits::sync_step_circuit::StepCircuit;
 use lightclient_circuits::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
 use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
+use snark_verifier_sdk::evm::encode_calldata;
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use spectre_prover::prover::ProverState;
 use std::path::{Path, PathBuf};
@@ -99,23 +100,13 @@ where
     )
     .map_err(JsonRpcError::internal)?;
 
-    // Should be of length 77 initially then 12 after removing the last 65 elements which is the accumulator.
-    // 12 field elems pairing, 1 byte poseidon commitment, 32 bytes ssz commitment, 32 bytes finalized header root
-    let mut instances = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
+    let calldata = encode_calldata(&instances, &proof);
 
-    let public_inputs = instances.split_off(12);
-    let accumulator: [U256; 12] = instances.try_into().unwrap();
-
-    let committee_poseidon = public_inputs[0];
+    let committee_poseidon = U256::from_little_endian(&instances[0][12].to_bytes());
 
     Ok(CommitteeUpdateEvmProofResult {
-        proof,
-        accumulator,
+        proof: calldata,
         committee_poseidon,
-        public_inputs,
     })
 }
 
@@ -135,6 +126,7 @@ where
             e
         )));
     };
+
     let GenProofStepParams {
         light_client_finality_update,
         domain,
@@ -162,19 +154,9 @@ where
     )
     .map_err(JsonRpcError::internal)?;
 
-    let mut instances = instances[0]
-        .iter()
-        .map(|pi| U256::from_little_endian(&pi.to_bytes()))
-        .collect_vec();
+    let calldata = encode_calldata(&instances, &proof);
 
-    let public_inputs = instances.split_off(12);
-    let accumulator: [U256; 12] = instances.try_into().unwrap();
-
-    Ok(SyncStepCompressedEvmProofResult {
-        proof,
-        accumulator,
-        public_inputs,
-    })
+    Ok(SyncStepCompressedEvmProofResult { proof: calldata })
 }
 
 fn gen_uncompressed_snark<Circuit: AppCircuit>(

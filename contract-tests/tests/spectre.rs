@@ -10,9 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use contract_tests::make_client;
-use contracts::{
-    CommitteeUpdateMockVerifier, Spectre, SyncStepCompressedMockVerifier, SyncStepInput,
-};
+use contracts::{MockVerifier, Spectre};
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
 use rstest::rstest;
@@ -55,7 +53,7 @@ async fn test_contract_initialization_and_first_step(
     assert_eq!(contract.head().call().await?, U256::from(0));
 
     // call step with the input and proof
-    let step_input: SyncStepInput = witness.into();
+    let step_input: contracts::StepInput = witness.into();
     let step_call = contract.step(step_input.clone(), Vec::new().into());
     let _receipt = step_call.send().await?.confirmations(1).await?;
 
@@ -85,10 +83,10 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
     initial_sync_committee_poseidon: U256,
     slots_per_period: usize,
 ) -> anyhow::Result<Spectre<M>> {
-    let step_verifier = SyncStepCompressedMockVerifier::deploy(ethclient.clone(), ())?
+    let step_verifier = MockVerifier::deploy(ethclient.clone(), ())?
         .send()
         .await?;
-    let update_verifier = CommitteeUpdateMockVerifier::deploy(ethclient.clone(), ())?
+    let update_verifier = MockVerifier::deploy(ethclient.clone(), ())?
         .send()
         .await?;
     Ok(Spectre::deploy(

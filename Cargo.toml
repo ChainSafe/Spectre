@@ -4,7 +4,7 @@ members = [
     "prover",
     "preprocessor",
     "eth-types",
-    # "contract-tests",
+    "contract-tests",
     # "test-utils",
     # "contracts",
 ]
