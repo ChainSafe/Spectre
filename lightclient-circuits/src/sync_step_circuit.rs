@@ -475,8 +475,7 @@ mod tests {
         )
         .unwrap();
 
-        // let instance = StepCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
-        let instance = circuit.instances();
+        let instance = StepCircuit::<Testnet, Fr>::get_instances(&witness, LIMB_BITS);
 
         let timer = start_timer!(|| "sync_step mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
