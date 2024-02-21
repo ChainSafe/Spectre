@@ -67,7 +67,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 ] }
 
 # ethereum types
-ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "deneb" }
+ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
 beacon-api-client = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f" }
 ssz_rs = "0.9"
 

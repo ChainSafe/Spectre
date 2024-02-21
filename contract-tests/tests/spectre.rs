@@ -11,14 +11,18 @@ use std::sync::Arc;
 
 use contract_tests::make_client;
 use contracts::{MockVerifier, Spectre};
+use eth_types::{Minimal, LIMB_BITS};
 use ethers::core::types::U256;
 use ethers::providers::Middleware;
+use halo2_base::halo2_proofs::halo2curves::bn256::Fr;
+use lightclient_circuits::sync_step_circuit::StepCircuit;
 use rstest::rstest;
 use test_utils::{get_initial_sync_committee_poseidon, read_test_files_and_gen_witness};
 
 const SLOTS_PER_EPOCH: usize = 8;
 const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize = 8;
 const SLOTS_PER_SYNC_COMMITTEE_PERIOD: usize = EPOCHS_PER_SYNC_COMMITTEE_PERIOD * SLOTS_PER_EPOCH;
+const FINALITY_THRESHOLD: usize = 20; // ~ 2/3 of 32
 
 #[tokio::test]
 async fn test_deploy_spectre() -> anyhow::Result<()> {
@@ -52,9 +56,14 @@ async fn test_contract_initialization_and_first_step(
     // pre conditions
     assert_eq!(contract.head().call().await?, U256::from(0));
 
+    let instances = StepCircuit::<Minimal, Fr>::get_instances(&witness, LIMB_BITS);
+
     // call step with the input and proof
     let step_input: contracts::StepInput = witness.into();
-    let step_call = contract.step(step_input.clone(), Vec::new().into());
+    let mut proof = vec![0; 384];
+    proof.extend(instances[0][0].to_bytes().into_iter().rev());
+    proof.extend(instances[0][1].to_bytes().into_iter().rev());
+    let step_call = contract.step(step_input.clone(), proof.into());
     let _receipt = step_call.send().await?.confirmations(1).await?;
 
     // post conditions
@@ -93,6 +102,7 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
             U256::from(initial_sync_period),
             initial_sync_committee_poseidon,
             U256::from(slots_per_period),
+            U256::from(FINALITY_THRESHOLD)
         ),
     )?
     .send()
