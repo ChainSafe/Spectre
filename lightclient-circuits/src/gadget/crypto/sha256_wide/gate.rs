@@ -46,9 +46,6 @@ pub struct ShaBitGateManager<F: Field> {
 /// Witnesses of a sha256 which are necessary to be loaded into halo2-lib.
 #[derive(Clone, Copy, Debug, CopyGetters, Getters)]
 pub struct LoadedSha256<F: Field> {
-    /// bytes_left of the first row of the first round of this keccak_f. This could be used to determine the length of the input.
-    // #[getset(get_copy = "pub")]
-    // pub(crate) bytes_left: AssignedValue<F>,
 
     /// The output of this sha256. is_final/hash_lo/hash_hi come from the first row of the last round(NUM_ROUNDS).
     #[getset(get_copy = "pub")]
@@ -61,7 +58,6 @@ pub struct LoadedSha256<F: Field> {
     /// Input words (u64) of this keccak_f.
     #[getset(get = "pub")]
     pub word_values: [AssignedValue<F>; NUM_WORDS_TO_ABSORB],
-    // pub(crate) length: AssignedValue<F>,
 }
 
 impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
