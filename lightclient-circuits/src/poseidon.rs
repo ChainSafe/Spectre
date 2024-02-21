@@ -2,7 +2,7 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use eth_types::{Field, LIMB_BITS};
+use eth_types::{Field, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
     gates::GateInstructions, halo2_proofs::halo2curves::bn256, halo2_proofs::plonk::Error,
     poseidon::hasher::PoseidonSponge, AssignedValue, Context, QuantumCell,
@@ -48,7 +48,14 @@ pub fn fq_array_poseidon<'a, F: Field>(
         .into_iter()
         .flat_map(|f| {
             // Fold 4 limbs into 2 to reduce number of posedidon inputs in half.
-            f.limbs()
+            let (limbs, extra) = f.limbs().split_at(NUM_LIMBS - (NUM_LIMBS % 2));
+            assert!(extra.len() <= 1);
+            if let Some(extra) = extra.first() {
+                let zero = ctx.load_zero();
+                ctx.constrain_equal(extra, &zero);
+            }
+
+            limbs
                 .chunks(2)
                 .map(|limbs| gate.inner_product(ctx, limbs.to_vec(), limbs_bases.clone()))
                 .collect_vec()

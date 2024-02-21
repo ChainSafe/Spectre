@@ -32,7 +32,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
         let sync_committee_branch = vec![vec![0; 32]; S::SYNC_COMMITTEE_PUBKEYS_DEPTH];
 
         let hashed_pk = sha2::Sha256::digest(
-            &dummy_x_bytes
+            dummy_x_bytes
                 .iter()
                 .copied()
                 .pad_using(64, |_| 0)
@@ -48,7 +48,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             chunks = chunks
                 .into_iter()
                 .tuples()
-                .map(|(left, right)| sha2::Sha256::digest(&[left, right].concat()).to_vec())
+                .map(|(left, right)| sha2::Sha256::digest([left, right].concat()).to_vec())
                 .collect();
         }
 
@@ -124,6 +124,6 @@ mod tests {
         .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
     }
 }

@@ -4,7 +4,7 @@
 
 use crate::util::{CommonGateManager, GateBuilderConfig};
 use eth_types::Field;
-use getset::CopyGetters;
+use getset::{CopyGetters, Getters};
 use halo2_base::{
     gates::circuit::BaseCircuitParams,
     halo2_proofs::{
@@ -14,16 +14,14 @@ use halo2_base::{
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
     },
+    AssignedValue,
 };
 use itertools::Itertools;
 use zkevm_hashes::{
-    sha256::{
-        component::circuit::LoadedSha256,
-        vanilla::{
-            columns::Sha256CircuitConfig,
-            param::{NUM_START_ROWS, NUM_WORDS_TO_ABSORB, SHA256_NUM_ROWS},
-            witness::VirtualShaRow,
-        },
+    sha256::vanilla::{
+        columns::Sha256CircuitConfig,
+        param::{NUM_START_ROWS, NUM_WORDS_TO_ABSORB, SHA256_NUM_ROWS},
+        witness::VirtualShaRow,
     },
     util::word::Word,
 };
@@ -43,6 +41,23 @@ pub struct ShaBitGateManager<F: Field> {
     loaded_blocks: Vec<LoadedSha256<F>>,
 
     pub copy_manager: SharedCopyConstraintManager<F>,
+}
+
+/// Witnesses of a sha256 which are necessary to be loaded into halo2-lib.
+#[derive(Clone, Copy, Debug, CopyGetters, Getters)]
+pub struct LoadedSha256<F: Field> {
+
+    /// The output of this sha256. is_final/hash_lo/hash_hi come from the first row of the last round(NUM_ROUNDS).
+    #[getset(get_copy = "pub")]
+    pub is_final: AssignedValue<F>,
+
+    // Hash word consisting of two limbs - lower 16 bits and the high 16 bits, in big-endian.
+    #[getset(get = "pub")]
+    pub hash: Word<AssignedValue<F>>,
+
+    /// Input words (u64) of this keccak_f.
+    #[getset(get = "pub")]
+    pub word_values: [AssignedValue<F>; NUM_WORDS_TO_ABSORB],
 }
 
 impl<F: Field> CommonGateManager<F> for ShaBitGateManager<F> {
