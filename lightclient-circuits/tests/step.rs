@@ -49,7 +49,7 @@ pub(crate) fn mock_step_circuit<S: Spec>(
     let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
     let assigned_instances =
-        StepCircuit::<S, bn256::Fr>::synthesize(&mut builder, &fp_chip, args).unwrap();
+        StepCircuit::<S, bn256::Fr>::assign_virtual(&mut builder, &fp_chip, args).unwrap();
     builder.set_instances(0, assigned_instances);
 
     builder.calculate_params(Some(
@@ -75,7 +75,7 @@ pub(crate) fn mock_committee_update_circuit<S: Spec>(
     let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
     let assigned_instances =
-        CommitteeUpdateCircuit::<S, bn256::Fr>::synthesize(&mut builder, &fp_chip, witness)
+        CommitteeUpdateCircuit::<S, bn256::Fr>::assign_virtual(&mut builder, &fp_chip, witness)
             .unwrap();
     builder.set_instances(0, assigned_instances);
     builder.calculate_params(Some(

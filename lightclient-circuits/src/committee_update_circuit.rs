@@ -47,7 +47,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    pub fn synthesize(
+    pub fn assign_virtual(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::CommitteeUpdateArgs<S>,
@@ -235,7 +235,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let range = builder.range_chip(lookup_bits);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
-        let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
+        let assigned_instances = Self::assign_virtual(&mut builder, &fp_chip, witness)?;
         builder.set_instances(0, assigned_instances);
 
         match stage {
