@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::any::TypeId;
-
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
@@ -21,9 +19,6 @@ use crate::util::{CommonGateManager, GateBuilderConfig};
 use super::SpreadConfig;
 
 pub const FIRST_PHASE: usize = 0;
-
-struct Dence;
-struct Spread;
 
 /// `ShaFlexGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `SpreadConfig`.
 /// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.

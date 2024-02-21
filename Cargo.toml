@@ -5,8 +5,8 @@ members = [
     "preprocessor",
     "eth-types",
     "contract-tests",
-    # "test-utils",
-    # "contracts",
+    "test-utils",
+    "contracts",
 ]
 
 resolver = "2"

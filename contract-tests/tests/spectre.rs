@@ -83,12 +83,8 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
     initial_sync_committee_poseidon: U256,
     slots_per_period: usize,
 ) -> anyhow::Result<Spectre<M>> {
-    let step_verifier = MockVerifier::deploy(ethclient.clone(), ())?
-        .send()
-        .await?;
-    let update_verifier = MockVerifier::deploy(ethclient.clone(), ())?
-        .send()
-        .await?;
+    let step_verifier = MockVerifier::deploy(ethclient.clone(), ())?.send().await?;
+    let update_verifier = MockVerifier::deploy(ethclient.clone(), ())?.send().await?;
     Ok(Spectre::deploy(
         ethclient,
         (

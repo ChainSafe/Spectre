@@ -54,10 +54,9 @@ pub fn fq_array_poseidon<'a, F: Field>(
                 let zero = ctx.load_zero();
                 ctx.constrain_equal(extra, &zero);
             }
-            
+
             limbs
                 .chunks(2)
-                .into_iter()
                 .map(|limbs| gate.inner_product(ctx, limbs.to_vec(), limbs_bases.clone()))
                 .collect_vec()
         })

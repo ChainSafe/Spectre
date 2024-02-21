@@ -1,4 +1,7 @@
-use halo2_base::{gates::GateInstructions, safe_types::SafeByte, utils::BigPrimeField, AssignedValue, Context, QuantumCell};
+use halo2_base::{
+    gates::GateInstructions, safe_types::SafeByte, utils::BigPrimeField, AssignedValue, Context,
+    QuantumCell,
+};
 use itertools::Itertools;
 
 pub fn bytes_be_to_u128<F: BigPrimeField>(
@@ -23,7 +26,8 @@ pub(crate) fn limbs_be_to_u128<F: BigPrimeField>(
             gate.inner_product(
                 ctx,
                 chunk.iter().rev().map(|a| *a.as_ref()),
-                (0..chunk.len()).map(|idx| QuantumCell::Constant(gate.pow_of_two()[limb_bits * idx])),
+                (0..chunk.len())
+                    .map(|idx| QuantumCell::Constant(gate.pow_of_two()[limb_bits * idx])),
             )
         })
         .collect_vec()

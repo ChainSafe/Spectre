@@ -59,15 +59,16 @@ async fn test_step_instance_commitment_evm_equivalence(
     use contract_tests::decode_solidity_u256_array;
 
     let (witness, _) = read_test_files_and_gen_witness(&path);
-    let instance = lightclient_circuits::sync_step_circuit::StepCircuit:: <Minimal,bn256::Fr> ::get_instances(&witness, LIMB_BITS);
+    let instance =
+        lightclient_circuits::sync_step_circuit::StepCircuit::<Minimal, bn256::Fr>::get_instances(
+            &witness, LIMB_BITS,
+        );
 
     let (_anvil_instance, ethclient) = make_client();
     let contract = StepExternal::deploy(ethclient, ())?.send().await?;
 
     let result = contract
-        .to_public_inputs_commitment(
-            StepInput::from(witness),
-        )
+        .to_public_inputs_commitment(StepInput::from(witness))
         .call()
         .await?;
     let result_decoded = decode_solidity_u256_array(&[result]);

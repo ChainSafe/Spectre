@@ -13,7 +13,8 @@ use halo2_base::{
     },
     virtual_region::{
         copy_constraints::SharedCopyConstraintManager, manager::VirtualRegionManager,
-    }, AssignedValue,
+    },
+    AssignedValue,
 };
 use itertools::Itertools;
 use zkevm_hashes::{

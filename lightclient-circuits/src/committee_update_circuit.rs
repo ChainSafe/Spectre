@@ -109,8 +109,6 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         )?;
 
-        println!("ffinalized_header_root: {:?}", finalized_header_root.iter().map(|v| v.value()).collect_vec());
-
         let finalized_header_root_lo_hi = bytes_be_to_u128(
             builder.main(),
             &range.gate,
