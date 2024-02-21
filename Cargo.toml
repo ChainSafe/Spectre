@@ -6,7 +6,7 @@ members = [
     "eth-types",
     # "contract-tests",
     # "test-utils",
-    "contracts",
+    # "contracts",
 ]
 
 resolver = "2"
