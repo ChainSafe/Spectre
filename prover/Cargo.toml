@@ -25,7 +25,6 @@ halo2curves.workspace = true
 # verifier SDK 
 snark-verifier.workspace = true
 snark-verifier-sdk.workspace = true
-halo2_solidity_verifier = { git = "https://github.com/ChainSafe/halo2-solidity-verifier", branch = "yul-to-solidity-parser", optional = true }
 halo2_solidity_verifier_new = {  git = "https://github.com/ChainSafe/halo2-solidity-verifier", branch = "bump-halo2proofs", package = "halo2_solidity_verifier", features = ["evm"], optional = true }
 
 # local
@@ -55,5 +54,5 @@ futures = "0.3.29"
 ssz_rs.workspace = true
 
 [features]
-default = ["halo2_solidity_verifier"]
+default = []
 experimental = ["halo2_solidity_verifier_new"]
