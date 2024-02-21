@@ -202,8 +202,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
 
         let finalized_header_root_hilo = {
             let bytes = finalized_header_root.as_ref();
-            let hash_lo = u128::from_le_bytes(bytes[16..].try_into().unwrap());
-            let hash_hi = u128::from_le_bytes(bytes[..16].try_into().unwrap());
+            let hash_lo = u128::from_be_bytes(bytes[16..].try_into().unwrap());
+            let hash_hi = u128::from_be_bytes(bytes[..16].try_into().unwrap());
             [hash_lo, hash_hi].map(bn256::Fr::from_u128)
         };
 
