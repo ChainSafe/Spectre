@@ -7,7 +7,7 @@ use crate::{
     poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     sync_step_circuit::clear_3_bits,
-    util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
+    util::{bytes_be_to_u128, AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
     Eth2CircuitBuilder,
 };
@@ -19,6 +19,7 @@ use halo2_base::{
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
+    safe_types::SafeTypeChip,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -28,7 +29,7 @@ use halo2_ecc::{
 };
 use halo2curves::bls12_381;
 use itertools::Itertools;
-use ssz_rs::{Merkleized, Vector};
+use ssz_rs::Merkleized;
 use std::{env::var, iter, marker::PhantomData, vec};
 
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
@@ -108,9 +109,16 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         )?;
 
+        println!("ffinalized_header_root: {:?}", finalized_header_root.iter().map(|v| v.value()).collect_vec());
+
+        let finalized_header_root_lo_hi = bytes_be_to_u128(
+            builder.main(),
+            &range.gate,
+            SafeTypeChip::unsafe_to_fix_len_bytes_vec(finalized_header_root.clone(), 32).bytes(),
+        );
+
         let public_inputs = iter::once(poseidon_commit)
-            .chain(committee_root_ssz)
-            .chain(finalized_header_root)
+            .chain(finalized_header_root_lo_hi.into_iter().rev()) // as hi/lo
             .collect();
 
         Ok(public_inputs)
@@ -189,29 +197,20 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 .expect("bad bls12_381::Fq encoding")
         });
 
-        let poseidon_commitment = poseidon_hash_fq_array::<bn256::Fr>(pubkeys_x, limb_bits);
-
-        let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
-            .pubkeys_compressed
-            .as_slice()
-            .iter()
-            .map(|v| v.as_slice().try_into().unwrap())
-            .collect_vec()
-            .try_into()
-            .unwrap();
-
-        let ssz_root = pk_vector.hash_tree_root().unwrap();
+        let poseidon_commitment =
+            poseidon_hash_fq_array::<bn256::Fr>(pubkeys_x, limb_bits - (limb_bits % 2));
 
         let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
 
+        let finalized_header_root_hilo = {
+            let bytes = finalized_header_root.as_ref();
+            let hash_lo = u128::from_le_bytes(bytes[16..].try_into().unwrap());
+            let hash_hi = u128::from_le_bytes(bytes[..16].try_into().unwrap());
+            [hash_lo, hash_hi].map(bn256::Fr::from_u128)
+        };
+
         let instance_vec = iter::once(poseidon_commitment)
-            .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
-            .chain(
-                finalized_header_root
-                    .as_ref()
-                    .iter()
-                    .map(|b| bn256::Fr::from(*b as u64)),
-            )
+            .chain(finalized_header_root_hilo)
             .collect();
 
         vec![instance_vec]
