@@ -10,7 +10,7 @@ mod test_types;
 
 use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{ByteVector, TestMeta, TestStep};
-use eth_types::Minimal;
+use eth_types::{Minimal, LIMB_BITS};
 use ethereum_consensus_types::presets::minimal::{
     LightClientBootstrap, LightClientUpdateCapella, BYTES_PER_LOGS_BLOOM, MAX_EXTRA_DATA_BYTES,
 };
@@ -40,7 +40,7 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
         .iter()
         .map(|pk| pk.decompressed_bytes())
         .collect_vec();
-    let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed);
+    let committee_poseidon = poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed, LIMB_BITS);
     let committee_poseidon =
         ethers::prelude::U256::from_little_endian(&committee_poseidon.to_bytes());
     let sync_period = (bootstrap.header.beacon.slot as usize) / EPOCHS_PER_SYNC_COMMITTEE_PERIOD;
