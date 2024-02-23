@@ -5,16 +5,15 @@
 use eth_types::{Field, NUM_LIMBS};
 use halo2_base::{
     gates::GateInstructions,
-    halo2_proofs::{
-        halo2curves::bn256::{self},
-        plonk::Error,
-    },
+    halo2_proofs::{halo2curves::bn256, plonk::Error},
     poseidon::hasher::PoseidonSponge,
+    utils::modulus,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{bigint::ProperCrtUint, bls12_381::FpChip, fields::FieldChip};
 use halo2curves::bls12_381::{self, Fq, G1Affine};
 use itertools::Itertools;
+use num_bigint::BigUint;
 use pse_poseidon::Poseidon as PoseidonNative;
 
 // Using recommended parameters from whitepaper https://eprint.iacr.org/2019/458.pdf (table 2, table 8)
@@ -149,7 +148,11 @@ pub fn poseidon_committee_commitment_from_uncompressed(
         .iter()
         .cloned()
         .map(|bytes| G1Affine::from_uncompressed_be(&bytes.as_slice().try_into().unwrap()).unwrap())
-        .map(|p| (p.x, (p.y.to_bytes()[0] & 1) == 1))
+        .map(|p| {
+            let y = BigUint::from_bytes_le(p.y.to_repr().as_ref()) * BigUint::from(2u64);
+            let sign = y > modulus::<halo2curves::bls12_381::Fq>();
+            (p.x, sign)
+        })
         .unzip();
 
     poseidon_hash_g1_array::<bn256::Fr>(x_coords, y_signs, limb_bits)

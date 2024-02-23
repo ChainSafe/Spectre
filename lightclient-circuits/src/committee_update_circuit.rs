@@ -141,13 +141,13 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
                 assert_eq!(assigned_bytes.len(), 48);
                 // masked byte from compressed representation
-                let masked_byte = &assigned_bytes[48 - 1];
+                let masked_byte = &assigned_bytes[47];
                 // clear the flag bits from a last byte of compressed pubkey.
                 // we are using [`clear_3_bits`] function which appears to be just as useful here as for public input commitment.
                 let (cleared_byte, y_sign) = {
                     let bits = gate.num_to_bits(ctx, *masked_byte, 8);
                     let cleared = gate.bits_to_num(ctx, &bits[..5]);
-                    (cleared, bits[5]) // 3 MSB bits are cleared, 3th bit is a sign bit
+                    (cleared, bits[5]) // 3 MSB bits are cleared, 3-rd of those is a sign bit
                 };
                 // Use the cleared byte to construct the x coordinate
                 let assigned_x_bytes_cleared =

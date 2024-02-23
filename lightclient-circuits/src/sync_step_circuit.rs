@@ -27,18 +27,21 @@ use halo2_base::{
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
+    utils::modulus,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
+    bigint::big_less_than,
     bls12_381::{bls_signature::BlsSignatureChip, pairing::PairingChip, Fp2Chip, Fp2Point, FpChip},
     ecc::{
         hash_to_curve::{ExpandMsgXmd, HashToCurveChip},
         EcPoint, EccChip,
     },
-    fields::{FieldChip, FieldChipExt},
+    fields::FieldChip,
 };
 use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
+use num_bigint::BigUint;
 use ssz_rs::Merkleized;
 use std::{env::var, marker::PhantomData, vec};
 
@@ -336,7 +339,20 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
             let assigned_affine = g1_chip.assign_point(ctx, pk);
 
-            let y_sign = fp_chip.sgn0(ctx, assigned_affine.y());
+            let half_p = fp_chip.load_constant_uint(
+                ctx,
+                modulus::<halo2curves::bls12_381::Fq>() / BigUint::from(2u64),
+            );
+            // y_sign = pk.y * 2 > p
+            // due to the limiation of halo2lib api we perform an equivalent operation: y_sign = pk.y < p/2
+            let y_sign = big_less_than::assign(
+                fp_chip.range(),
+                ctx,
+                half_p,
+                assigned_affine.y().clone(),
+                fp_chip.limb_bits,
+                fp_chip.limb_bases[1],
+            );
 
             assigned_pubkeys.push(assigned_affine);
             participation_bits.push(participation_bit);
