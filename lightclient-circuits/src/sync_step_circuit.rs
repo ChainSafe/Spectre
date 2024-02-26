@@ -382,7 +382,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .copied()
             .zip(assigned_affines.iter_mut())
         {
-            let sum = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
+            let is_equal = g1_chip.is_equal(ctx, acc.clone(), point.clone());
+            let add = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
+            let doub = g1_chip.double(ctx, acc.clone());
+            let sum = g1_chip.select(ctx, doub, add, is_equal);
             acc = g1_chip.select(ctx, sum, acc, bit);
         }
         let agg_pubkey = g1_chip.sub_unequal(ctx, acc, rand_point, false);
