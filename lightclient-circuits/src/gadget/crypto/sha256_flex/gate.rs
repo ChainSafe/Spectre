@@ -145,7 +145,6 @@ impl<F: Field> VirtualRegionManager<F> for ShaFlexGateManager<F> {
 
 /// Pure advice witness assignment in a single phase. Uses preprocessed `break_points` to determine when
 /// to split a thread into a new column.
-#[allow(clippy::type_complexity)]
 pub fn assign_threads_sha<F: Field>(
     threads_dense: &[Context<F>],
     threads_spread: &[Context<F>],
