@@ -375,20 +375,24 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             participation_bits.push(participation_bit);
         }
 
-        let rand_point = g1_chip.load_random_point::<G1Affine>(ctx);
-        let mut acc = rand_point.clone();
+        let mut acc = {
+            let x = fp_chip.load_constant(ctx, G1Affine::identity().x);
+            let y = fp_chip.load_constant(ctx, G1Affine::identity().y);
+            G1Point::new(x, y) // identity
+        };
+        acc = g1_chip.select(ctx, assigned_affines[0].clone(), acc, participation_bits[0]);
         for (bit, point) in participation_bits
             .iter()
             .copied()
             .zip(assigned_affines.iter_mut())
+            .skip(1)
         {
             let sum = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
             acc = g1_chip.select(ctx, sum, acc, bit);
         }
-        let agg_pubkey = g1_chip.sub_unequal(ctx, acc, rand_point, false);
         let participation_sum = gate.sum(ctx, participation_bits);
 
-        (agg_pubkey, participation_sum)
+        (acc, participation_sum)
     }
 }
 
