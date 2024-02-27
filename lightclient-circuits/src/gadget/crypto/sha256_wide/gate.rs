@@ -46,7 +46,6 @@ pub struct ShaBitGateManager<F: Field> {
 /// Witnesses of a sha256 which are necessary to be loaded into halo2-lib.
 #[derive(Clone, Copy, Debug, CopyGetters, Getters)]
 pub struct LoadedSha256<F: Field> {
-
     /// The output of this sha256. is_final/hash_lo/hash_hi come from the first row of the last round(NUM_ROUNDS).
     #[getset(get_copy = "pub")]
     pub is_final: AssignedValue<F>,
