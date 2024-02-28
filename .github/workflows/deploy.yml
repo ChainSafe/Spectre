@@ -1,0 +1,30 @@
+name: Spectre Deploy
+on:
+  push:
+    branches:
+    - devops
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: checkout contracts repo
+      run: |
+         ls -a
+      uses: actions/checkout@v3
+      with:
+        repository: ChainSafe/spectre-contracts
+    - name: create directory
+      run: |
+          mkdir -m a=rwx contracts
+
+    - name: rsync deployments
+      uses: burnett01/rsync-deployments@6.0.0
+      with:
+        switches: -avzr --delete
+        path: src/
+        remote_path: /var/www/html/
+        remote_host: example.com
+        remote_user: debian
+        remote_key: ${{ secrets.DEPLOY_KEY }}
