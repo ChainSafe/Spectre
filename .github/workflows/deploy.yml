@@ -8,16 +8,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: checkout contracts repo
-      run: |
-         ls contracts
-    - uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ChainSafe/spectre-contracts
-    - name: create directory
+        path: contracts
+    - name: check what is inside contracts
       run: |
-          mkdir -m a=rwx contracts
+          ls contracts
 
     - name: rsync deployments
       uses: burnett01/rsync-deployments@6.0.0
