@@ -14,16 +14,22 @@ jobs:
       with:
         repository: ChainSafe/spectre-contracts
         path: contracts
-    - name: check what is inside contracts
-      run: |
-          ls contracts
 
-    - name: rsync deployments
+    - name: deployments
       uses: burnett01/rsync-deployments@6.0.0
       with:
-        switches: -avzr --delete
-        path: src/
-        remote_path: /var/www/html/
-        remote_host: example.com
-        remote_user: debian
-        remote_key: ${{ secrets.DEPLOY_KEY }}
+        switches: -avzr --delete --exclude '.git'
+        path: ./
+        remote_path: /Spectre
+        remote_host: ${{ secrets.ACTIONS_HOST }}
+        remote_user: ${{ secrets.ACTIONS_USER }}
+        remote_key: ${{ secrets.ACTIONS_CONNECTIONS }}
+
+    - name: slack notify
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author,action,job,eventName,ref,workflow # selectable (default: repo,message)
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+      if: always()
