@@ -20,7 +20,7 @@ jobs:
       with:
         switches: -avzr --delete --exclude '.git'
         path: ./
-        remote_path: /Spectre
+        remote_path: /home/ubuntu/Spectre
         remote_host: ${{ secrets.ACTIONS_HOST }}
         remote_user: ${{ secrets.ACTIONS_USER }}
         remote_key: ${{ secrets.ACTIONS_CONNECTIONS }}
