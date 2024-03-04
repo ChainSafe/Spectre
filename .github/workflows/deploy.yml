@@ -9,11 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    
     - name: checkout contracts repo
       uses: actions/checkout@v4
       with:
         repository: ChainSafe/spectre-contracts
         path: contracts
+
+    - name: checkout foundry
+      uses: actions/checkout@v4
+      with:
+        repository: foundry-rs/forge-std
+        path: contracts/lib/forge-std
 
     - name: deployments
       uses: burnett01/rsync-deployments@6.0.0
