@@ -344,7 +344,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
                 modulus::<halo2curves::bls12_381::Fq>() / BigUint::from(2u64),
             );
             // y_sign = pk.y * 2 > p
-            // due to the limiation of halo2lib api we perform an equivalent operation: y_sign = pk.y < p/2
+            // becasue of halo2lib doesn't allow to double without carry mod checking 2*y > p gives inconsistent results
+            // so instead we perform an equivalent operation: y_sign = pk.y < p/2
             let y_sign = big_less_than::assign(
                 fp_chip.range(),
                 ctx,
