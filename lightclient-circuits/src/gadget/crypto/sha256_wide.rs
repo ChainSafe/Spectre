@@ -82,7 +82,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         for r in 0..num_input_rounds {
             let remaining_words = num_input_words - r * NUM_WORDS_TO_ABSORB;
 
-            for w in 0..std::cmp::min(remaining_words, NUM_WORDS_TO_ABSORB){
+            for w in 0..std::cmp::min(remaining_words, NUM_WORDS_TO_ABSORB) {
                 let i = (r * NUM_WORDS_TO_ABSORB + w) * 4;
                 let checksum = gate.inner_product(
                     builder.main(),
@@ -127,4 +127,3 @@ pub fn word_to_bytes_le<F: Field>(
         .chain(to_bytes_le::<_, 16>(&word.hi(), gate, ctx))
         .collect()
 }
-
