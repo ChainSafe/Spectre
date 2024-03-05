@@ -102,7 +102,7 @@ async fn deploy_spectre_mock_verifiers<M: Middleware + 'static>(
             U256::from(initial_sync_period),
             initial_sync_committee_poseidon,
             U256::from(slots_per_period),
-            U256::from(FINALITY_THRESHOLD)
+            U256::from(FINALITY_THRESHOLD),
         ),
     )?
     .send()

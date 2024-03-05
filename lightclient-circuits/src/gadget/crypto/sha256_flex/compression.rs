@@ -558,7 +558,6 @@ fn sigma_lower1<'a, 'b: 'a, F: Field>(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 fn sigma_generic<'a, 'b: 'a, F: Field>(
     thread_pool: &mut ShaCircuitBuilder<F, ShaFlexGateManager<F>>,
     spread_chip: &SpreadChip<'a, F>,

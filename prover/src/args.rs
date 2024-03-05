@@ -30,7 +30,6 @@ pub struct BaseArgs {
 }
 
 #[derive(Clone, clap::Parser)]
-#[allow(clippy::large_enum_variant)]
 pub enum BaseCmd {
     /// Deploy prover RPC server.
     Rpc {

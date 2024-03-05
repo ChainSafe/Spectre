@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 #![allow(incomplete_features)]
-#![feature(associated_type_bounds)]
 #![feature(generic_const_exprs)]
 mod cli;
 mod rpc;

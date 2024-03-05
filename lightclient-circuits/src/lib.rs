@@ -3,12 +3,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 #![allow(incomplete_features)]
-#![feature(int_roundings)]
-#![feature(associated_type_bounds)]
 #![feature(generic_const_exprs)]
-#![feature(stmt_expr_attributes)]
-#![feature(trait_alias)]
-#![feature(generic_arg_infer)]
 #![allow(clippy::needless_range_loop)]
 
 pub mod gadget;
