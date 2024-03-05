@@ -319,7 +319,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         fp_chip: &FpChip<'_, F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
-        assigned_pubkeys: &mut Vec<G1Point<F>>,
+        assigned_affines: &mut Vec<G1Point<F>>,
         y_signs_packed: &mut Vec<AssignedValue<F>>,
     ) -> (G1Point<F>, AssignedValue<F>) {
         let gate = fp_chip.gate();
@@ -355,7 +355,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
                 fp_chip.limb_bases[1],
             );
 
-            assigned_pubkeys.push(assigned_affine);
+            assigned_affines.push(assigned_affine);
             participation_bits.push(participation_bit);
             y_signs.push(y_sign);
         }
@@ -379,6 +379,11 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             acc = g1_chip.select(ctx, sum, acc, bit);
         }
         let participation_sum = gate.sum(ctx, participation_bits);
+
+        *y_signs_packed = y_signs
+            .chunks(F::CAPACITY as usize - 1)
+            .map(|chunk| gate.bits_to_num(ctx, chunk))
+            .collect_vec();
 
         (acc, participation_sum)
     }
