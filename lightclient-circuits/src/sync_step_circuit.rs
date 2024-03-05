@@ -319,7 +319,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         fp_chip: &FpChip<'_, F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
-        assigned_pubkeys: &mut Vec<G1Point<F>>,
+        assigned_affines: &mut Vec<G1Point<F>>,
         y_signs_packed: &mut Vec<AssignedValue<F>>,
     ) -> (G1Point<F>, AssignedValue<F>) {
         let gate = fp_chip.gate();
@@ -355,17 +355,22 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
                 fp_chip.limb_bases[1],
             );
 
-            assigned_pubkeys.push(assigned_affine);
+            assigned_affines.push(assigned_affine);
             participation_bits.push(participation_bit);
             y_signs.push(y_sign);
         }
 
-        let rand_point = g1_chip.load_random_point::<G1Affine>(ctx);
-        let mut acc = rand_point.clone();
+        let mut acc = {
+            let x = fp_chip.load_constant(ctx, G1Affine::identity().x);
+            let y = fp_chip.load_constant(ctx, G1Affine::identity().y);
+            G1Point::new(x, y) // identity
+        };
+        acc = g1_chip.select(ctx, assigned_affines[0].clone(), acc, participation_bits[0]);
         for (bit, point) in participation_bits
             .iter()
             .copied()
-            .zip(assigned_pubkeys.iter_mut())
+            .zip(assigned_affines.iter_mut())
+            .skip(1)
         {
             let is_equal = g1_chip.is_equal(ctx, acc.clone(), point.clone());
             let add = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
@@ -373,7 +378,6 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             let sum = g1_chip.select(ctx, doub, add, is_equal);
             acc = g1_chip.select(ctx, sum, acc, bit);
         }
-        let agg_pubkey = g1_chip.sub_unequal(ctx, acc, rand_point, false);
         let participation_sum = gate.sum(ctx, participation_bits);
 
         *y_signs_packed = y_signs
@@ -381,7 +385,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .map(|chunk| gate.bits_to_num(ctx, chunk))
             .collect_vec();
 
-        (agg_pubkey, participation_sum)
+        (acc, participation_sum)
     }
 }
 
