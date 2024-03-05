@@ -10,7 +10,7 @@ use crate::{
         },
         to_bytes_le,
     },
-    poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
+    poseidon::{g1_array_poseidon, poseidon_committee_commitment_from_uncompressed},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
     util::{AppCircuit, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk, SyncStepArgs},
@@ -27,10 +27,11 @@ use halo2_base::{
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
-    utils::CurveAffineExt,
+    utils::modulus,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
+    bigint::big_less_than,
     bls12_381::{bls_signature::BlsSignatureChip, pairing::PairingChip, Fp2Chip, Fp2Point, FpChip},
     ecc::{
         hash_to_curve::{ExpandMsgXmd, HashToCurveChip},
@@ -84,26 +85,28 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .as_slice()
             .iter()
             .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked_be(&bytes.as_slice().try_into().unwrap())
-                    .unwrap()
+                G1Affine::from_uncompressed_be(&bytes.as_slice().try_into().unwrap()).unwrap()
             })
             .collect_vec();
 
         let mut assigned_affines = vec![];
+        let mut y_signs_packed = vec![];
         let (agg_pubkey, participation_sum) = Self::aggregate_pubkeys(
             builder.main(),
             fp_chip,
             &pubkey_affines,
             &args.pariticipation_bits,
             &mut assigned_affines,
+            &mut y_signs_packed,
         );
 
         // Commit to the pubkeys using Poseidon hash. This constraints prover to use the pubkeys of the current sync committee,
         // because the same commitment is computed in `CommitteeUpdateCircuit` and stored in the contract at the begining of the period.
-        let poseidon_commit = fq_array_poseidon(
+        let poseidon_commit = g1_array_poseidon(
             builder.main(),
             fp_chip,
-            assigned_affines.iter().map(|p| &p.x),
+            assigned_affines.into_iter().map(|p| p.x),
+            y_signs_packed,
         )?;
 
         // Compute attested header root
@@ -214,7 +217,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
                 .try_into()
                 .unwrap();
 
-            truncate_sha256_into_single_elem(builder.main(), range, pub_inputs_bytes)
+            truncate_sha256_into_single_elem(builder.main(), gate, pub_inputs_bytes)
         };
 
         Ok(vec![pub_inputs_commit, poseidon_commit])
@@ -259,17 +262,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let execution_payload_root = &args.execution_payload_root;
         input[56..88].copy_from_slice(execution_payload_root);
 
-        let pubkey_affines = args
-            .pubkeys_uncompressed
-            .as_slice()
-            .iter()
-            .map(|bytes| {
-                G1Affine::from_uncompressed_unchecked_be(&bytes.as_slice().try_into().unwrap())
-                    .unwrap()
-            })
-            .collect_vec();
         let poseidon_commitment =
-            poseidon_hash_fq_array::<bn256::Fr>(pubkey_affines.iter().map(|p| p.x), limb_bits);
+            poseidon_committee_commitment_from_uncompressed(&args.pubkeys_uncompressed, limb_bits);
 
         let mut public_input_commitment = sha2::Sha256::digest(input).to_vec();
         // Truncate to 253 bits
@@ -285,40 +279,24 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 // Truncate the SHA256 digest to 253 bits and convert to one field element.
 pub fn truncate_sha256_into_single_elem<F: Field>(
     ctx: &mut Context<F>,
-    range: &impl RangeInstructions<F>,
+    gate: &impl GateInstructions<F>,
     hash_bytes: [AssignedValue<F>; 32],
 ) -> AssignedValue<F> {
     let public_input_commitment_bytes = {
         let mut truncated_hash = hash_bytes;
-        let cleared_byte = clear_3_bits(ctx, range, &truncated_hash[31]);
+        let cleared_byte = {
+            let bits = gate.num_to_bits(ctx, truncated_hash[31], 8);
+            gate.bits_to_num(ctx, &bits[..5])
+        };
         truncated_hash[31] = cleared_byte;
         truncated_hash
     };
 
     let byte_bases = (0..32)
-        .map(|i| QuantumCell::Constant(range.gate().pow_of_two()[i * 8]))
+        .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
         .collect_vec();
 
-    range
-        .gate()
-        .inner_product(ctx, public_input_commitment_bytes, byte_bases)
-}
-
-/// Clears the 3 first least significat bits.
-/// This function emulates bitwise and on 00011111 (0x1F): `b & 0b00011111` = c
-pub fn clear_3_bits<F: Field>(
-    ctx: &mut Context<F>,
-    range: &impl RangeInstructions<F>,
-    b: &AssignedValue<F>,
-) -> AssignedValue<F> {
-    let gate = range.gate();
-    // Shift `a` three bits to the left (equivalent to a << 3 mod 256)
-    let b_shifted = gate.mul(ctx, *b, QuantumCell::Constant(F::from(8)));
-    // since b_shifted can at max be 255*8=2^4 we use 16 bits for modulo division.
-    let b_shifted = range.div_mod(ctx, b_shifted, BigUint::from(256u64), 16).1;
-
-    // Shift `s` three bits to the right (equivalent to s >> 3) to zeroing the first three bits (MSB) of `a`.
-    range.div_mod(ctx, b_shifted, BigUint::from(8u64), 8).0
+    gate.inner_product(ctx, public_input_commitment_bytes, byte_bases)
 }
 
 impl<S: Spec, F: Field> StepCircuit<S, F> {
@@ -331,7 +309,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         let sig_affine = G2Affine::from_compressed_be(&bytes_compressed.try_into().unwrap())
             .expect("correct signature");
 
-        g2_chip.load_private_unchecked(ctx, sig_affine.into_coordinates())
+        g2_chip.assign_point(ctx, sig_affine)
     }
 
     /// Takes a list of pubkeys and aggregates them.
@@ -341,13 +319,15 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         fp_chip: &FpChip<'_, F>,
         pubkey_affines: &[G1Affine],
         pariticipation_bits: &[bool],
-        assigned_affines: &mut Vec<G1Point<F>>,
+        assigned_pubkeys: &mut Vec<G1Point<F>>,
+        y_signs_packed: &mut Vec<AssignedValue<F>>,
     ) -> (G1Point<F>, AssignedValue<F>) {
         let gate = fp_chip.gate();
 
         let g1_chip = G1Chip::<F>::new(fp_chip);
 
         let mut participation_bits = vec![];
+        let mut y_signs = vec![];
 
         assert_eq!(pubkey_affines.len(), S::SYNC_COMMITTEE_SIZE);
 
@@ -357,22 +337,27 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             let participation_bit = ctx.load_witness(F::from(is_attested as u64));
             gate.assert_bit(ctx, participation_bit);
 
-            let assigned_pk = g1_chip.assign_point_unchecked(ctx, pk);
+            let assigned_affine = g1_chip.assign_point(ctx, pk);
 
-            // *Note:* normally, we would need to take into account the sign of the y coordinate, but
-            // because we are concerned only with signature forgery, if this is the wrong
-            // sign, the signature will be invalid anyway and thus verification fails.
-            /*
-            // Square y coordinate
-            let ysq = fp_chip.mul(ctx, assigned_pk.y.clone(), assigned_pk.y.clone());
-            // Calculate y^2 using the elliptic curve equation
-            let ysq_calc = calculate_ysquared::<F>(ctx, fp_chip, assigned_pk.x.clone());
-            // Constrain witness y^2 to be equal to calculated y^2
-            fp_chip.assert_equal(ctx, ysq, ysq_calc);
-            */
+            let half_p = fp_chip.load_constant_uint(
+                ctx,
+                modulus::<halo2curves::bls12_381::Fq>() / BigUint::from(2u64),
+            );
+            // y_sign = pk.y * 2 > p
+            // becasue of halo2lib doesn't allow to double without carry mod checking 2*y > p gives inconsistent results
+            // so instead we perform an equivalent operation: y_sign = pk.y < p/2
+            let y_sign = big_less_than::assign(
+                fp_chip.range(),
+                ctx,
+                half_p,
+                assigned_affine.y().clone(),
+                fp_chip.limb_bits,
+                fp_chip.limb_bases[1],
+            );
 
-            assigned_affines.push(assigned_pk);
+            assigned_pubkeys.push(assigned_affine);
             participation_bits.push(participation_bit);
+            y_signs.push(y_sign);
         }
 
         let mut acc = {
@@ -387,7 +372,10 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .zip(assigned_affines.iter_mut())
             .skip(1)
         {
-            let sum = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
+            let is_equal = g1_chip.is_equal(ctx, acc.clone(), point.clone());
+            let add = g1_chip.add_unequal(ctx, acc.clone(), point.clone(), true);
+            let doub = g1_chip.double(ctx, acc.clone());
+            let sum = g1_chip.select(ctx, doub, add, is_equal);
             acc = g1_chip.select(ctx, sum, acc, bit);
         }
         let participation_sum = gate.sum(ctx, participation_bits);

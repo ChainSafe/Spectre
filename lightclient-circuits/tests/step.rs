@@ -108,6 +108,9 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     let prover = MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, instance).unwrap();
     prover.assert_satisfied();
     end_timer!(timer);
+
+    // check that sync committee poseidon commits match in both circuits
+    assert_eq!(sync_circuit.instances()[0][1], rotation_circuit.instances()[0][0]);
 }
 
 #[rstest]
