@@ -79,7 +79,7 @@ impl Halo2ConfigPinning for Eth2ConfigPinning {
     }
 
     fn degree(&self) -> u32 {
-        self.params.k as u32
+        u32::try_from(self.params.k).expect("k is too large for u32")
     }
 }
 

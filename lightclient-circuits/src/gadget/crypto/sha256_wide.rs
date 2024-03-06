@@ -51,7 +51,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         let binary_input: HashInput<u8> = HashInput::Single(
             assigned_bytes
                 .iter()
-                .map(|av| av.value().get_lower_32() as u8)
+                .map(|av| u8::try_from(av.value().get_lower_32()).expect("truncated"))
                 .collect_vec()
                 .into(),
         );
