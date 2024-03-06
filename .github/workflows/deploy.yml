@@ -29,11 +29,9 @@ jobs:
         host: ${{ secrets.ACTIONS_HOST }}
         username: ${{ secrets.ACTIONS_USER }}
         key: ${{ secrets.ACTIONS_CONNECTIONS }}
-        #port: ${{ secrets.PORT }}
         script: |
           sudo systemctl daemon-reload
           sudo systemctl restart spectre
-          sudo systemctl status spectre
       
     - name: slack notify
       uses: 8398a7/action-slack@v3
