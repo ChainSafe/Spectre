@@ -23,7 +23,7 @@ jobs:
         remote_user: ${{ secrets.ACTIONS_USER }}
         remote_key: ${{ secrets.ACTIONS_CONNECTIONS }}
 
-    - name: multiple command
+    - name: Spectre
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.ACTIONS_HOST }}
@@ -31,7 +31,7 @@ jobs:
         key: ${{ secrets.ACTIONS_CONNECTIONS }}
         #port: ${{ secrets.PORT }}
         script: |
-          sudo systemctl enable daemon-reload
+          sudo systemctl daemon-reload
           sudo systemctl restart spectre
           sudo systemctl status spectre
       
