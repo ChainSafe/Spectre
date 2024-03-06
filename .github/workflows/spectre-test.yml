@@ -1,0 +1,43 @@
+name: Spectre Deploy
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: initialize all submodules
+      run: git submodule update --init --recursive
+      
+    - name: deployments
+      uses: burnett01/rsync-deployments@6.0.0
+      with:
+        switches: -avzr --delete --exclude '.git'
+        path: ./
+        remote_path: /home/ubuntu/Spectre
+        remote_host: ${{ secrets.ACTIONS_HOST }}
+        remote_user: ${{ secrets.ACTIONS_USER }}
+        remote_key: ${{ secrets.ACTIONS_CONNECTIONS }}
+
+    - name: Spectre
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.ACTIONS_HOST }}
+        username: ${{ secrets.ACTIONS_USER }}
+        key: ${{ secrets.ACTIONS_CONNECTIONS }}
+        script: |
+          sudo systemctl daemon-reload
+          sudo systemctl restart spectre
+      
+    - name: slack notify
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author,action,job,eventName,ref,workflow 
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      if: always()
