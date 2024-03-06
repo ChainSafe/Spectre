@@ -4,7 +4,7 @@
 
 use std::env::set_var;
 
-use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, PinnableCircuit};
+use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, Halo2ConfigPinning, PinnableCircuit};
 use eth_types::Field;
 use getset::Getters;
 use halo2_base::{
@@ -280,7 +280,7 @@ where
 {
     type Pinning = Eth2ConfigPinning;
 
-    fn break_points(&self) -> MultiPhaseThreadBreakPoints {
-        self.base.break_points()
+    fn pinning(&self) -> Self::Pinning {
+        Eth2ConfigPinning::new(self.params(), self.base.break_points())
     }
 }
