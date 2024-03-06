@@ -13,21 +13,6 @@ jobs:
     - name: initialize all submodules
       run: git submodule update --init --recursive
       
-
-    # - name: checkout contracts repo
-    #   uses: actions/checkout@v4
-    #   with:
-    #     repository: ChainSafe/spectre-contracts
-    #     path: contracts
-
-    # - name: checkout foundry
-    #   uses: actions/checkout@v4
-    #   with:
-    #     repository: foundry-rs/forge-std
-    #     path: contracts/lib/forge-std
-    - name: debug 
-      run: tree
-      
     - name: deployments
       uses: burnett01/rsync-deployments@6.0.0
       with:
@@ -38,6 +23,18 @@ jobs:
         remote_user: ${{ secrets.ACTIONS_USER }}
         remote_key: ${{ secrets.ACTIONS_CONNECTIONS }}
 
+    - name: multiple command
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.ACTIONS_HOST }}
+        username: ${{ secrets.ACTIONS_USER }}
+        key: ${{ secrets.ACTIONS_CONNECTIONS }}
+        #port: ${{ secrets.PORT }}
+        script: |
+          sudo systemctl enable daemon-reload
+          sudo systemctl restart spectre
+          sudo systemctl status spectre
+      
     - name: slack notify
       uses: 8398a7/action-slack@v3
       with:
