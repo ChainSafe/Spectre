@@ -274,32 +274,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             poseidon_commitment,
         ]]
     }
-}
 
-// Truncate the SHA256 digest to 253 bits and convert to one field element.
-pub fn truncate_sha256_into_single_elem<F: Field>(
-    ctx: &mut Context<F>,
-    gate: &impl GateInstructions<F>,
-    hash_bytes: [AssignedValue<F>; 32],
-) -> AssignedValue<F> {
-    let public_input_commitment_bytes = {
-        let mut truncated_hash = hash_bytes;
-        let cleared_byte = {
-            let bits = gate.num_to_bits(ctx, truncated_hash[31], 8);
-            gate.bits_to_num(ctx, &bits[..5])
-        };
-        truncated_hash[31] = cleared_byte;
-        truncated_hash
-    };
-
-    let byte_bases = (0..32)
-        .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
-        .collect_vec();
-
-    gate.inner_product(ctx, public_input_commitment_bytes, byte_bases)
-}
-
-impl<S: Spec, F: Field> StepCircuit<S, F> {
     /// Decompresses siganure from bytes and assigns it to the circuit.
     fn assign_signature(
         ctx: &mut Context<F>,
@@ -387,6 +362,29 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         (acc, participation_sum)
     }
+}
+
+// Truncate the SHA256 digest to 253 bits and convert to one field element.
+pub fn truncate_sha256_into_single_elem<F: Field>(
+    ctx: &mut Context<F>,
+    gate: &impl GateInstructions<F>,
+    hash_bytes: [AssignedValue<F>; 32],
+) -> AssignedValue<F> {
+    let public_input_commitment_bytes = {
+        let mut truncated_hash = hash_bytes;
+        let cleared_byte = {
+            let bits = gate.num_to_bits(ctx, truncated_hash[31], 8);
+            gate.bits_to_num(ctx, &bits[..5])
+        };
+        truncated_hash[31] = cleared_byte;
+        truncated_hash
+    };
+
+    let byte_bases = (0..32)
+        .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
+        .collect_vec();
+
+    gate.inner_product(ctx, public_input_commitment_bytes, byte_bases)
 }
 
 impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
