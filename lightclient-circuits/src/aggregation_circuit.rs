@@ -7,7 +7,7 @@ use halo2_base::{
     gates::{circuit::CircuitBuilderStage, flex_gate::MultiPhaseThreadBreakPoints},
     halo2_proofs::{
         halo2curves::bn256::{Bn256, Fr},
-        plonk::Error,
+        plonk::{Circuit, Error},
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
 };
@@ -16,11 +16,7 @@ use snark_verifier_sdk::{
     halo2::aggregation::{AggregationCircuit, AggregationConfigParams},
     Snark, SHPLONK,
 };
-use std::{
-    env::{set_var, var},
-    fs::File,
-    path::Path,
-};
+use std::{fs::File, path::Path};
 
 /// Configuration for the aggregation circuit.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -43,37 +39,26 @@ impl AggregationConfigPinning {
 }
 
 impl Halo2ConfigPinning for AggregationConfigPinning {
+    type CircuitParams = AggregationConfigParams;
     type BreakPoints = MultiPhaseThreadBreakPoints;
 
-    fn from_path<P: AsRef<Path>>(path: P) -> Self {
-        let pinning: Self = serde_json::from_reader(
-            File::open(&path)
-                .unwrap_or_else(|e| panic!("{:?} does not exist: {e:?}", path.as_ref())),
-        )
-        .unwrap();
-        pinning.set_var();
-        pinning
-    }
-
-    fn set_var(&self) {
-        set_var(
-            "AGG_CONFIG_PARAMS",
-            serde_json::to_string(&self.params).unwrap(),
-        );
-        set_var("LOOKUP_BITS", (self.params.degree - 1).to_string());
-    }
-
-    fn break_points(self) -> MultiPhaseThreadBreakPoints {
-        self.break_points
-    }
-
-    fn from_var(break_points: MultiPhaseThreadBreakPoints) -> Self {
-        let params: AggregationConfigParams =
-            serde_json::from_str(&var("AGG_CONFIG_PARAMS").unwrap()).unwrap();
+    fn new(params: Self::CircuitParams, break_points: Self::BreakPoints) -> Self {
         Self {
             params,
             break_points,
         }
+    }
+
+    fn from_path<P: AsRef<Path>>(path: P) -> Self {
+        serde_json::from_reader(
+            File::open(&path)
+                .unwrap_or_else(|e| panic!("{:?} does not exist: {e:?}", path.as_ref())),
+        )
+        .unwrap()
+    }
+
+    fn break_points(self) -> MultiPhaseThreadBreakPoints {
+        self.break_points
     }
 
     fn degree(&self) -> u32 {
@@ -84,8 +69,8 @@ impl Halo2ConfigPinning for AggregationConfigPinning {
 impl PinnableCircuit<Fr> for AggregationCircuit {
     type Pinning = AggregationConfigPinning;
 
-    fn break_points(&self) -> MultiPhaseThreadBreakPoints {
-        AggregationCircuit::break_points(self)
+    fn pinning(&self) -> Self::Pinning {
+        <AggregationConfigPinning as Halo2ConfigPinning>::new(self.params(), self.break_points())
     }
 }
 
@@ -119,17 +104,9 @@ impl AppCircuit for AggregationCircuit {
         // We assume that `AggregationCircuit` will only be used for a single aggregation/compression layer.
         circuit.expose_previous_instances(false);
 
-        match stage {
-            CircuitBuilderStage::Prover => {
-                circuit.set_params(circuit_params);
-                circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
-            }
-            _ => {
-                set_var(
-                    "AGG_CONFIG_PARAMS",
-                    serde_json::to_string(&circuit.calculate_params(Some(10))).unwrap(),
-                );
-            }
+        if matches!(stage, CircuitBuilderStage::Prover) {
+            circuit.set_params(circuit_params);
+            circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
         };
 
         Ok(circuit)
