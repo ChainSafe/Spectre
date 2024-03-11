@@ -37,8 +37,12 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         MAX_INPUT_LEAFS_NOT_POW2
     );
 
-    let len_even = chunks.len() + chunks.len() % 2;
-    let height = (len_even as f64).log2().ceil() as usize;
+    let height = if chunks.len() == 1 {
+        1
+    } else {
+        chunks.len().next_power_of_two().ilog2() as usize
+    };
+    
     for depth in 0..height {
         // Pad to even length using 32 zero bytes assigned as constants.
         let len_even = chunks.len() + chunks.len() % 2;
