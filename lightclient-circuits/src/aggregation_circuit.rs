@@ -16,7 +16,7 @@ use snark_verifier_sdk::{
     halo2::aggregation::{AggregationCircuit, AggregationConfigParams},
     Snark, SHPLONK,
 };
-use std::{env::set_var, fs::File, path::Path};
+use std::{fs::File, path::Path};
 
 /// Configuration for the aggregation circuit.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -104,17 +104,9 @@ impl AppCircuit for AggregationCircuit {
         // We assume that `AggregationCircuit` will only be used for a single aggregation/compression layer.
         circuit.expose_previous_instances(false);
 
-        match stage {
-            CircuitBuilderStage::Prover => {
-                circuit.set_params(circuit_params);
-                circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
-            }
-            _ => {
-                set_var(
-                    "AGG_CONFIG_PARAMS",
-                    serde_json::to_string(&circuit.calculate_params(Some(10))).unwrap(),
-                );
-            }
+        if matches!(stage, CircuitBuilderStage::Prover) {
+            circuit.set_params(circuit_params);
+            circuit.set_break_points(pinning.map_or(vec![], |p| p.break_points));
         };
 
         Ok(circuit)

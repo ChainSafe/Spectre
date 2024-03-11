@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::env::set_var;
-
 use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, Halo2ConfigPinning, PinnableCircuit};
 use eth_types::Field;
 use getset::Getters;
@@ -168,12 +166,7 @@ impl<F: Field, GateManager: CommonGateManager<F>> ShaCircuitBuilder<F, GateManag
     }
 
     pub fn calculate_params(&mut self, minimum_rows: Option<usize>) -> BaseCircuitParams {
-        let params = self.base.calculate_params(minimum_rows);
-        set_var(
-            "GATE_CONFIG_PARAMS",
-            serde_json::to_string(&params).unwrap(),
-        );
-        params
+        self.base.calculate_params(minimum_rows)
     }
 
     pub fn sha_contexts_pair(&mut self) -> (&mut Context<F>, GateManager::CustomContext<'_>) {
