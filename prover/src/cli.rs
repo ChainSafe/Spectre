@@ -6,7 +6,6 @@ use crate::args::BaseArgs;
 use crate::args::{OperationCmd, ProofCmd};
 use ark_std::{end_timer, start_timer};
 use lightclient_circuits::aggregation_circuit::AggregationConfigPinning;
-use lightclient_circuits::halo2_base::gates::circuit::CircuitBuilderStage;
 use lightclient_circuits::halo2_base::utils::fs::gen_srs;
 use lightclient_circuits::{
     committee_update_circuit::CommitteeUpdateCircuit,
@@ -16,9 +15,7 @@ use lightclient_circuits::{
 };
 use snark_verifier::loader::halo2::halo2_ecc::halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use snark_verifier_sdk::halo2::aggregation::AggregationCircuit;
-use snark_verifier_sdk::CircuitExt;
-use std::path::PathBuf;
-use std::{fs::File, io::Write, path::Path};
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "experimental")]
 use halo2_solidity_verifier_new::{
@@ -248,31 +245,16 @@ fn gen_evm_verifier<Circuit: AppCircuit>(
     params: &ParamsKZG<Bn256>,
     pk_path: &Path,
     cfg_path: &Path,
-    mut path_out: PathBuf,
+    path_out: PathBuf,
     estimate_gas: bool,
     default_witness: Circuit::Witness,
 ) -> eyre::Result<()> {
     let pk = Circuit::read_pk(params, pk_path, cfg_path, &default_witness);
 
-    let num_instances = {
-        let circuit =
-            Circuit::create_circuit(CircuitBuilderStage::Keygen, None, &default_witness, params)
-                .unwrap();
-        circuit.num_instance().first().map_or(0, |x| *x as u32)
-    };
-
-    path_out.set_extension("yul");
     let deplyment_code =
         Circuit::gen_evm_verifier_shplonk(params, &pk, Some(path_out.clone()), &default_witness)
             .map_err(|e| eyre::eyre!("Failed to EVM verifier: {}", e))?;
-    println!("yul size: {}", deplyment_code.len());
-
-    let sol_contract = halo2_solidity_verifier::fix_verifier_sol(path_out.clone(), num_instances)
-        .map_err(|e| eyre::eyre!("Failed to generate Solidity verifier: {}", e))?;
-    path_out.set_extension("sol");
-    let mut f = File::create(path_out).unwrap();
-    f.write(sol_contract.as_bytes())
-        .map_err(|e| eyre::eyre!("Failed to write Solidity verifier: {}", e))?;
+    println!("sol size: {}", deplyment_code.len());
 
     if estimate_gas {
         let _ = Circuit::gen_evm_proof_shplonk(

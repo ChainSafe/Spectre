@@ -15,6 +15,12 @@ use halo2_base::{
     QuantumCell,
 };
 use itertools::Itertools;
+use lazy_static::lazy_static;
+use sha2::Digest;
+
+// Maximum number of input leafs that are not a power of two because the zero hashes are only precomputed for the first two levels.
+// In practice, the maximum number of input leafs that is not a power of two used in this project is 5.
+const MAX_INPUT_LEAFS_NOT_POW2: usize = 7;
 
 /// Computes Merkle root of a list of SSZ chunks.
 ///
@@ -26,6 +32,13 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     chunks: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
 ) -> Result<Vec<AssignedValue<F>>, Error> {
     let mut chunks = chunks.into_iter().collect_vec();
+
+    assert!(
+        chunks.len() < MAX_INPUT_LEAFS_NOT_POW2 || chunks.len().is_power_of_two(),
+        "merkleize_chunks: expected number of chunks to be a power of two or less than {}",
+        MAX_INPUT_LEAFS_NOT_POW2
+    );
+
     let len_even = chunks.len() + chunks.len() % 2;
     let height = (len_even as f64).log2().ceil() as usize;
     for depth in 0..height {
@@ -150,10 +163,16 @@ pub fn verify_merkle_multiproof<F: Field, CircuitBuilder: CommonCircuitBuilder<F
     Ok(())
 }
 
-pub const ZERO_HASHES: [[u8; 32]; 2] = [
-    [0; 32],
-    [
-        245, 165, 253, 66, 209, 106, 32, 48, 39, 152, 239, 110, 211, 9, 151, 155, 67, 0, 61, 35,
-        32, 217, 240, 232, 234, 152, 49, 169, 39, 89, 251, 75,
-    ],
-];
+lazy_static! {
+    // Calculates padding Merkle notes for the 2 first levels of the Merkle tree.
+    // Used to pad the input to a power of two. Only 2 levels are precomputed because the number of not even inputs is limited.
+    static ref ZERO_HASHES: [[u8; 32]; 2] = {
+        std::iter::successors(Some([0; 32]), |&prev| {
+            Some(sha2::Sha256::digest([prev, prev].concat()).to_vec().try_into().unwrap())
+        })
+        .take(2)
+        .collect_vec()
+        .try_into()
+        .unwrap()
+    };
+}

@@ -277,7 +277,7 @@ mod tests {
         .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
 
         let pinning = Eth2ConfigPinning::from_path(ROTATE_CONFIG_PATH);
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
@@ -289,6 +289,6 @@ mod tests {
         .unwrap();
 
         let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
     }
 }

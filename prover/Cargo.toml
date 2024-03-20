@@ -13,7 +13,6 @@ clap = { version = "4.2", features = ["derive"] }
 strum = { version = "=0.25", features = ["derive"] }
 hex = "0.4"
 eyre = "0.6"
-anstyle = "1.0.0"
 axum = { version = "0.7", features = ["tracing", "tower-log"] }
 tokio = { version = "1.32", features = ["macros"] }
 jsonrpc-v2 = { version = "0.13", default-features = false, features = ["easy-errors", "macros", "bytes-v10", "hyper-integration"] }
@@ -25,7 +24,6 @@ halo2curves.workspace = true
 # verifier SDK 
 snark-verifier.workspace = true
 snark-verifier-sdk.workspace = true
-halo2_solidity_verifier = { git = "https://github.com/ChainSafe/halo2-solidity-verifier", branch = "yul-to-solidity-parser", optional = true }
 halo2_solidity_verifier_new = {  git = "https://github.com/ChainSafe/halo2-solidity-verifier", branch = "bump-halo2proofs", package = "halo2_solidity_verifier", features = ["evm"], optional = true }
 
 # local
@@ -51,9 +49,8 @@ primitive-types = "0.12.2"
 reqwest = "0.11.22"
 beacon-api-client.workspace = true
 ethereum-consensus-types.workspace = true
-futures = "0.3.29"
 ssz_rs.workspace = true
 
 [features]
-default = ["halo2_solidity_verifier"]
+default = []
 experimental = ["halo2_solidity_verifier_new"]

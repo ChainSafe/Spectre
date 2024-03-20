@@ -12,3 +12,6 @@ pub(crate) use conversion::*;
 
 mod circuit;
 pub use circuit::*;
+
+mod bytes;
+pub use bytes::*;

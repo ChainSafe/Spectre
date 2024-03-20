@@ -40,12 +40,14 @@ jobs:
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
 
+    - name: init submodules
+      uses: snickerbockers/submodules-init@v4
+
     - name: Build contracts
       run: just build-contracts   
 
     # skip this in favour of compiling in the `Test` action.
     # - name: Check
     #   run: cargo check --all
-    
     - name: Test
       run: RUST_LOG="lightclient-circuits=debug" PARAMS_DIR="./test_data" cargo test --release test_eth2_spec_mock_1 -- --nocapture

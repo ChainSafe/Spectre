@@ -130,9 +130,31 @@ mod tests {
     use reqwest::Url;
 
     #[tokio::test]
-    async fn test_rotation_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_20.json";
-        const K: u32 = 20;
+    async fn test_rotation_circuit_sepolia() {
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
+        const K: u32 = 21;
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
+        let params: ParamsKZG<Bn256> = gen_srs(K);
+
+        let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            Some(pinning),
+            &witness,
+            &params,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[tokio::test]
+    async fn test_rotation_step_snark_sepolia() {
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_18.json";
+        const K: u32 = 21;
         let params = gen_srs(K);
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(

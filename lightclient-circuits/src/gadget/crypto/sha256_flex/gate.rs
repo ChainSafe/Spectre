@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::any::TypeId;
-
 use eth_types::Field;
 use getset::CopyGetters;
 use halo2_base::{
@@ -21,9 +19,6 @@ use crate::util::{CommonGateManager, GateBuilderConfig};
 use super::SpreadConfig;
 
 pub const FIRST_PHASE: usize = 0;
-
-struct Dence;
-struct Spread;
 
 /// `ShaFlexGateManager` keeps track of halo2-lib virtual cells and assigns them to the region corresponding to the `SpreadConfig`.
 /// It also loads of the copy (permutation) constraints between halo2-lib and vanilla cells in Plonk table.
@@ -61,7 +56,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_dense.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Dence)>(),
+            "dense",
             thread_id,
             self.copy_manager.clone(),
         ));
@@ -73,7 +68,7 @@ impl<F: Field> ShaFlexGateManager<F> {
         self.threads_spread.push(Context::new(
             self.witness_gen_only(),
             FIRST_PHASE,
-            TypeId::of::<(Self, Spread)>(),
+            "spead",
             thread_id,
             self.copy_manager.clone(),
         ));
@@ -150,7 +145,6 @@ impl<F: Field> VirtualRegionManager<F> for ShaFlexGateManager<F> {
 
 /// Pure advice witness assignment in a single phase. Uses preprocessed `break_points` to determine when
 /// to split a thread into a new column.
-#[allow(clippy::type_complexity)]
 pub fn assign_threads_sha<F: Field>(
     threads_dense: &[Context<F>],
     threads_spread: &[Context<F>],
