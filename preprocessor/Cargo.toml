@@ -47,5 +47,4 @@ snark-verifier-sdk.workspace = true
 ark-std.workspace = true
 
 [features]
-# test-gen = ["ethereum-consensus", "blst"]
 test-gen = []

@@ -115,12 +115,9 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
-    use reqwest::Url;
 
-    use eth2::{BeaconNodeHttpClient, SensitiveUrl, Timeouts};
+    use eth2::{SensitiveUrl, Timeouts};
     use ethereum_types::Domain;
-    use ethereum_types::EthSpec;
-    use ethereum_types::ForkData;
     use ethereum_types::MainnetEthSpec;
     use std::time::Duration;
 

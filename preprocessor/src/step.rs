@@ -216,7 +216,6 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
-    use reqwest::Url;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
