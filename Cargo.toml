@@ -75,6 +75,7 @@ ssz_rs = "0.9"
 ethereum-types = { package = "types", git = "https://github.com/eserilev/lighthouse/", branch = "capella_deneb_light_client_types", default-features = false}
 tree_hash = { version = "0.5" }
 eth2 = { package = "eth2", git = "https://github.com/eserilev/lighthouse/", branch = "capella_deneb_light_client_types" }
+ethereum_ssz = "0.5.3"
 
 # crypto
 group = "0.13"
