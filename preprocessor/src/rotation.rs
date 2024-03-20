@@ -112,9 +112,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
+    use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use ethereum_types::MainnetEthSpec;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
@@ -124,16 +127,20 @@ mod tests {
         halo2_base::gates::circuit::CircuitBuilderStage,
         util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
-    use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
         const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
@@ -162,9 +169,14 @@ mod tests {
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

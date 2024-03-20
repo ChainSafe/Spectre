@@ -200,7 +200,11 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use ethereum_types::MainnetEthSpec;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
@@ -212,16 +216,19 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
     use reqwest::Url;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_step_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -249,9 +256,14 @@ mod tests {
             &SyncStepArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_step_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

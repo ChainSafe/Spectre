@@ -99,11 +99,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use eth2::types::StateId;
+    use eth2::types::{BlockId, StateId};
     use eth_types::Testnet;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
+    use itertools::Itertools;
     use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning};
@@ -116,7 +117,7 @@ mod tests {
     use super::*;
     use reqwest::Url;
 
-    use eth2::BeaconNodeHttpClient;
+    use eth2::{BeaconNodeHttpClient, SensitiveUrl, Timeouts};
     use ethereum_types::Domain;
     use ethereum_types::EthSpec;
     use ethereum_types::ForkData;
@@ -166,7 +167,7 @@ mod tests {
                 .unwrap()
                 .data;
 
-            let pubkeys_compressed = &bootstrap.current_sync_committee.pubkeys;
+            let pubkeys_compressed = &bootstrap.current_sync_committee().pubkeys;
 
             let fork_version = client
                 .get_beacon_states_fork(StateId::Head)
@@ -207,7 +208,7 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .data
-                .current_sync_committee_branch
+                .current_sync_committee_branch()
                 .into_iter()
                 .map(|n| n.0.to_vec())
                 .collect_vec();
