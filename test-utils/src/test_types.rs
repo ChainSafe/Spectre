@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use ssz_rs::prelude::*;
-
 #[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 pub struct TestMeta {

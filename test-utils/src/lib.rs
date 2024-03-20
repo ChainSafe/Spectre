@@ -5,22 +5,15 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
-// mod execution_payload_header;
 mod test_types;
-// use crate::execution_payload_header::ExecutionPayloadHeader;
 use crate::test_types::{TestMeta, TestStep};
 use blst::min_pk as bls;
 use eth_types::{Minimal, LIMB_BITS};
-// use ethereum_consensus_types::presets::minimal::{
-//     LightClientBootstrap, LightClientUpdateCapella, BYTES_PER_LOGS_BLOOM, MAX_EXTRA_DATA_BYTES,
-// };
-
 use ethereum_types::{
-    BeaconBlockHeader, EthSpec, FixedVector, ForkData, Hash256, LightClientBootstrap,
-    LightClientBootstrapCapella, LightClientFinalityUpdate, LightClientFinalityUpdateCapella,
-    LightClientFinalityUpdateDeneb, LightClientUpdateCapella, MinimalEthSpec, PublicKeyBytes,
-    SyncCommittee,
+    BeaconBlockHeader, Domain, EthSpec, ExecutionPayloadHeader, ForkData, Hash256,
+    LightClientBootstrapCapella, LightClientUpdateCapella, MinimalEthSpec, SyncCommittee,
 };
+use ethers::types::H256;
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
@@ -31,9 +24,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-// use test_utils::{load_snappy_ssz, load_yaml};
-
-pub(crate) const U256_BYTE_COUNT: usize = 32;
 
 // loads the boostrap on the path and return the initial sync committee poseidon and sync period
 pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIOD: usize>(
@@ -61,14 +51,14 @@ pub fn get_initial_sync_committee_poseidon<const EPOCHS_PER_SYNC_COMMITTEE_PERIO
     Ok((sync_period, committee_poseidon))
 }
 
-pub fn validators_root_from_test_path(path: &Path) -> Hash256 {
+pub fn validators_root_from_test_path(path: &Path) -> H256 {
     let meta: TestMeta = load_yaml(path.join("meta.yaml").to_str().unwrap());
-    Hash256::try_from(
+    H256(
         hex::decode(meta.genesis_validators_root.trim_start_matches("0x"))
             .unwrap()
-            .as_slice(),
+            .try_into()
+            .unwrap(),
     )
-    .unwrap()
 }
 
 // Load the updates for a given test and only includes the first sequence of steps that Spectre can perform
@@ -181,7 +171,7 @@ pub fn read_test_files_and_gen_witness(
     (sync_wit, rotation_wit)
 }
 
-fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
+fn to_sync_ciruit_witness(
     committee: Arc<SyncCommittee<MinimalEthSpec>>,
     light_client_update: &LightClientUpdateCapella<MinimalEthSpec>,
     genesis_validators_root: Hash256,
@@ -230,8 +220,13 @@ fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
         current_version: [3, 0, 0, 1],
         genesis_validators_root,
     };
-    let signing_domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
-    args.domain = signing_domain;
+
+    let domain = MinimalEthSpec::default_spec().compute_domain(
+        Domain::SyncCommittee,
+        [3, 0, 0, 1],
+        genesis_validators_root,
+    );
+    args.domain = domain.into();
     args.execution_payload_branch = light_client_update
         .finalized_header
         .execution_branch
@@ -239,20 +234,14 @@ fn to_sync_ciruit_witness<const SYNC_COMMITTEE_SIZE: usize>(
         .map(|b| b.0.as_ref().to_vec())
         .collect();
     args.execution_payload_root = {
-        let mut execution_payload_header: ExecutionPayloadHeader<
-            BYTES_PER_LOGS_BLOOM,
-            MAX_EXTRA_DATA_BYTES,
-        > = light_client_update
-            .finalized_header
-            .execution
-            .clone()
-            .into();
+        let mut execution_payload_header: ExecutionPayloadHeader<MinimalEthSpec> =
+            light_client_update
+                .finalized_header
+                .execution
+                .clone()
+                .into();
 
-        execution_payload_header
-            .hash_tree_root()
-            .unwrap()
-            .deref()
-            .to_vec()
+        execution_payload_header.tree_hash_root().0.to_vec()
     };
     args.finality_branch = light_client_update
         .finality_branch
