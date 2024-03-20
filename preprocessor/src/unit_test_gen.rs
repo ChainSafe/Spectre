@@ -9,7 +9,8 @@ use ethereum_consensus::signing::compute_signing_root;
 use ethereum_consensus::state_transition::Context;
 use itertools::Itertools as _;
 use lightclient_circuits::witness::{
-    get_helper_indices, merkle_tree, parent, CommitteeUpdateArgs, SyncStepArgs,
+    beacon_header_multiproof_and_helper_indices, get_helper_indices, merkle_tree, parent,
+    CommitteeUpdateArgs, SyncStepArgs,
 };
 use ssz_rs::{MerkleizationError, Merkleized, Node};
 use std::fs::File;
@@ -155,6 +156,19 @@ fn main() {
         body_root: finalized_block.body_root,
     };
 
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut finalized_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_BODY_ROOT_INDEX],
+        );
+
     let sync_args: SyncStepArgs<Mainnet> = SyncStepArgs {
         signature_compressed: {
             ethereum_consensus_types::BlsSignature::try_from(hex::encode(agg_sig.deref()))
@@ -185,7 +199,21 @@ fn main() {
             .collect_vec(),
         domain,
         _spec: std::marker::PhantomData,
+
+        attested_header_multiproof: attested_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        attested_header_helper_indices,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
     };
+
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
 
     let rotation_args: CommitteeUpdateArgs<Mainnet> = CommitteeUpdateArgs {
         pubkeys_compressed: pubkeys.iter().map(|x| x.deref().to_vec()).collect_vec(),
@@ -195,6 +223,8 @@ fn main() {
             .map(|x| x.to_vec())
             .collect_vec(),
         _spec: std::marker::PhantomData,
+        finalized_header_multiproof,
+        finalized_header_helper_indices: attested_header_helper_indices,
     };
 
     std::fs::write(

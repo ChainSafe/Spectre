@@ -8,7 +8,9 @@ use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
 use ethereum_consensus_types::LightClientUpdateCapella;
 use itertools::Itertools;
-use lightclient_circuits::witness::CommitteeUpdateArgs;
+use lightclient_circuits::witness::{
+    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
+};
 use log::debug;
 use ssz_rs::Merkleized;
 
@@ -93,6 +95,12 @@ where
         "Execution payload merkle proof verification failed"
     );
 
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut update.finalized_header.beacon.clone(),
+            &[S::HEADER_STATE_ROOT_INDEX],
+        );
+
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: update.finalized_header.beacon.clone(),
@@ -101,26 +109,25 @@ where
             .map(|n| n.to_vec())
             .collect_vec(),
         _spec: PhantomData,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
     };
     Ok(args)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::get_light_client_bootstrap;
+
     use super::*;
     use beacon_api_client::mainnet::Client as MainnetClient;
     use eth_types::Testnet;
-    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
-    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
-    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
     use lightclient_circuits::{
-        committee_update_circuit::CommitteeUpdateCircuit,
-        halo2_base::gates::circuit::CircuitBuilderStage,
-        util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
     use reqwest::Url;
-    use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
@@ -152,14 +159,33 @@ mod tests {
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_21.pkey",
+            "../build/sync_step_20.pkey",
             CONFIG_PATH,
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
         );
         let client =
             MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        let mut finalized_sync_committee_branch = {
+            let block_root = client
+                .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
+                .await
+                .unwrap();
+
+            get_light_client_bootstrap::<Testnet, _>(&client, block_root)
+                .await
+                .unwrap()
+                .current_sync_committee_branch
+                .iter()
+                .map(|n| n.to_vec())
+                .collect_vec()
+        };
+
+        // Magic swap of sync committee branch
+        finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
+        finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
+        witness.sync_committee_branch = finalized_sync_committee_branch;
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

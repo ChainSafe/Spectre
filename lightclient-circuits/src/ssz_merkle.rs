@@ -2,6 +2,8 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
+use std::collections::HashMap;
+
 use crate::{
     gadget::crypto::HashInstructions,
     util::IntoConstant,
@@ -103,6 +105,60 @@ pub fn verify_merkle_proof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
         QuantumCell::Existing(av) => av,
         _ => unreachable!(),
     });
+
+    computed_root.zip(root.iter()).for_each(|(a, b)| {
+        builder.main().constrain_equal(&a, b);
+    });
+
+    Ok(())
+}
+
+// Implements following https://github.com/ethereum/consensus-specs/blob/dev/ssz/merkle-proofs.md#merkle-multiproofs
+pub fn verify_merkle_multiproof<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
+    builder: &mut CircuitBuilder,
+    hasher: &impl HashInstructions<F, CircuitBuilder = CircuitBuilder>,
+    branch: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+    leaves: impl IntoIterator<Item = HashInputChunk<QuantumCell<F>>>,
+    root: &[AssignedValue<F>],
+    gindices: impl IntoIterator<Item = usize>,
+    helper_indices: impl IntoIterator<Item = usize>,
+) -> Result<(), Error> {
+    let mut objects: HashMap<usize, _> = gindices
+        .into_iter()
+        .zip(leaves)
+        .chain(helper_indices.into_iter().zip(branch))
+        .collect();
+    let mut keys = objects.keys().copied().collect_vec();
+    keys.sort_by(|a, b| b.cmp(a));
+
+    let mut pos = 0;
+    while pos < keys.len() {
+        let k = keys[pos];
+        // if the sibling exists AND the parent does NOT, we hash
+        if objects.contains_key(&k)
+            && objects.contains_key(&(k ^ 1))
+            && !objects.contains_key(&(k / 2))
+        {
+            let left = objects[&((k | 1) ^ 1)].clone();
+            let right = objects[&(k | 1)].clone();
+            let computed_hash = hasher
+                .digest(builder, HashInput::TwoToOne(left, right))?
+                .into();
+            objects.insert(k / 2, computed_hash);
+            keys.push(k / 2);
+        }
+        pos += 1;
+    }
+
+    let computed_root = objects
+        .get(&1)
+        .unwrap()
+        .clone()
+        .into_iter()
+        .map(|b| match b {
+            QuantumCell::Existing(av) => av,
+            _ => unreachable!(),
+        });
 
     computed_root.zip(root.iter()).for_each(|(a, b)| {
         builder.main().constrain_equal(&a, b);
