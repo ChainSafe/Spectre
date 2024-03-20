@@ -2,7 +2,9 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use crate::util::{CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, Halo2ConfigPinning, PinnableCircuit};
+use crate::util::{
+    CommonGateManager, Eth2ConfigPinning, GateBuilderConfig, Halo2ConfigPinning, PinnableCircuit,
+};
 use eth_types::Field;
 use getset::Getters;
 use halo2_base::{

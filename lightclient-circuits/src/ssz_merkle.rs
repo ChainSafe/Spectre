@@ -42,7 +42,7 @@ pub fn ssz_merkleize_chunks<F: Field, CircuitBuilder: CommonCircuitBuilder<F>>(
     } else {
         chunks.len().next_power_of_two().ilog2() as usize
     };
-    
+
     for depth in 0..height {
         // Pad to even length using 32 zero bytes assigned as constants.
         let len_even = chunks.len() + chunks.len() % 2;
