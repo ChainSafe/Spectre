@@ -84,48 +84,6 @@ pub fn valid_updates_from_test_path(path: &Path) -> Vec<LightClientUpdateCapella
     updates
 }
 
-pub fn load_yaml<T: for<'de> Deserialize<'de>>(path: &str) -> T {
-    let mut file = File::open(path).unwrap_or_else(|_| {
-        panic!(
-            "File {} does not exist from dir {:?}",
-            path,
-            std::env::current_dir().unwrap()
-        )
-    });
-    let deserializer = serde_yaml::Deserializer::from_reader(&mut file);
-    let test_case: Result<T, _> =
-        serde_yaml::with::singleton_map_recursive::deserialize(deserializer);
-    match test_case {
-        Ok(test_case) => test_case,
-        Err(err) => {
-            let content = std::fs::read_to_string(path).unwrap();
-            panic!("{err} from {content} at {path:?}")
-        }
-    }
-}
-
-pub fn load_snappy_ssz_bytes(path: &Path) -> Vec<u8> {
-    let mut file = File::open(path).unwrap();
-    let mut data = vec![];
-    file.read_to_end(&mut data).unwrap();
-
-    let mut decoder = snap::raw::Decoder::new();
-    decoder.decompress_vec(&data).unwrap()
-}
-
-pub fn load_snappy_ssz<T: ssz::Decode>(path: &str) -> Option<T> {
-    let path = Path::new(path);
-    if !path.exists() {
-        // panic!("Path to snappy_ssz file does not exist: {:?} from dir {:?}", path, std::env::current_dir());
-        return None;
-    }
-    let buffer = load_snappy_ssz_bytes(path);
-
-    let result = <T as ssz::Decode>::from_ssz_bytes(&buffer).unwrap();
-
-    Some(result)
-}
-
 pub fn read_test_files_and_gen_witness(
     path: &Path,
 ) -> (SyncStepArgs<Minimal>, CommitteeUpdateArgs<Minimal>) {
@@ -249,4 +207,46 @@ fn to_sync_ciruit_witness(
         .map(|b| b.0.to_vec())
         .collect();
     args
+}
+
+pub fn load_yaml<T: for<'de> Deserialize<'de>>(path: &str) -> T {
+    let mut file = File::open(path).unwrap_or_else(|_| {
+        panic!(
+            "File {} does not exist from dir {:?}",
+            path,
+            std::env::current_dir().unwrap()
+        )
+    });
+    let deserializer = serde_yaml::Deserializer::from_reader(&mut file);
+    let test_case: Result<T, _> =
+        serde_yaml::with::singleton_map_recursive::deserialize(deserializer);
+    match test_case {
+        Ok(test_case) => test_case,
+        Err(err) => {
+            let content = std::fs::read_to_string(path).unwrap();
+            panic!("{err} from {content} at {path:?}")
+        }
+    }
+}
+
+pub fn load_snappy_ssz_bytes(path: &Path) -> Vec<u8> {
+    let mut file = File::open(path).unwrap();
+    let mut data = vec![];
+    file.read_to_end(&mut data).unwrap();
+
+    let mut decoder = snap::raw::Decoder::new();
+    decoder.decompress_vec(&data).unwrap()
+}
+
+pub fn load_snappy_ssz<T: ssz::Decode>(path: &str) -> Option<T> {
+    let path = Path::new(path);
+    if !path.exists() {
+        // panic!("Path to snappy_ssz file does not exist: {:?} from dir {:?}", path, std::env::current_dir());
+        return None;
+    }
+    let buffer = load_snappy_ssz_bytes(path);
+
+    let result = <T as ssz::Decode>::from_ssz_bytes(&buffer).unwrap();
+
+    Some(result)
 }
