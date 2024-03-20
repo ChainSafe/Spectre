@@ -5,6 +5,7 @@
 use std::{ops::Deref, sync::Arc};
 
 use beacon_api_client::{BlockId, VersionedValue};
+use eth_types::NUM_LIMBS;
 use ethereum_consensus_types::LightClientBootstrap;
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
@@ -55,7 +56,8 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
             println!("SSZ root: {:?}", hex::encode(ssz_root.deref()));
 
             let mut committee_poseidon =
-                poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed).to_bytes();
+                poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed, NUM_LIMBS)
+                    .to_bytes();
             committee_poseidon.reverse();
             println!("Poseidon commitment: {}", hex::encode(committee_poseidon));
 

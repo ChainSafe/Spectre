@@ -4,21 +4,23 @@
 
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
-    poseidon::{fq_array_poseidon, poseidon_hash_fq_array},
+    poseidon::{g1_array_poseidon, poseidon_committee_commitment_from_compressed},
     ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multiproof, verify_merkle_proof},
-    sync_step_circuit::clear_3_bits,
-    util::{AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
+    util::{bytes_be_to_u128, AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
     Eth2CircuitBuilder,
 };
 use eth_types::{Field, Spec, LIMB_BITS, NUM_LIMBS};
 use halo2_base::{
-    gates::{circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder},
+    gates::{
+        circuit::CircuitBuilderStage, flex_gate::threads::CommonCircuitBuilder, GateInstructions,
+    },
     halo2_proofs::{
         halo2curves::bn256::{self, Bn256},
         plonk::Error,
         poly::{commitment::Params, kzg::commitment::ParamsKZG},
     },
+    safe_types::SafeTypeChip,
     AssignedValue, Context, QuantumCell,
 };
 use halo2_ecc::{
@@ -26,9 +28,8 @@ use halo2_ecc::{
     bls12_381::FpChip,
     fields::FieldChip,
 };
-use halo2curves::bls12_381;
 use itertools::Itertools;
-use ssz_rs::{Merkleized, Vector};
+use ssz_rs::Merkleized;
 use std::{env::var, iter, marker::PhantomData, vec};
 use tree_hash::TreeHash;
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
@@ -46,7 +47,7 @@ pub struct CommitteeUpdateCircuit<S: Spec, F: Field> {
 }
 
 impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
-    pub fn synthesize(
+    pub fn assign_virtual(
         builder: &mut ShaCircuitBuilder<F, ShaBitGateManager<F>>,
         fp_chip: &FpChip<F>,
         args: &witness::CommitteeUpdateArgs<S>,
@@ -72,8 +73,9 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             Self::sync_committee_root_ssz(builder, &sha256_chip, compressed_encodings.clone())?;
 
         let poseidon_commit = {
-            let pubkeys_x = Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
-            fq_array_poseidon(builder.main(), fp_chip, &pubkeys_x)?
+            let (pubkeys_x, y_signs_packed) =
+                Self::decode_pubkeys_x(builder.main(), fp_chip, compressed_encodings);
+            g1_array_poseidon(builder.main(), fp_chip, pubkeys_x, y_signs_packed)?
         };
 
         // Finalized header
@@ -116,9 +118,14 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         )?;
 
+        let finalized_header_root_lo_hi = bytes_be_to_u128(
+            builder.main(),
+            &range.gate,
+            SafeTypeChip::unsafe_to_fix_len_bytes_vec(finalized_header_root.clone(), 32).bytes(),
+        );
+
         let public_inputs = iter::once(poseidon_commit)
-            .chain(committee_root_ssz)
-            .chain(finalized_header_root)
+            .chain(finalized_header_root_lo_hi.into_iter().rev()) // as hi/lo
             .collect();
 
         Ok(public_inputs)
@@ -131,11 +138,10 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
         ctx: &mut Context<F>,
         fp_chip: &FpChip<'_, F>,
         compressed_encodings: impl IntoIterator<Item = Vec<AssignedValue<F>>>,
-    ) -> Vec<ProperCrtUint<F>> {
-        let range = fp_chip.range();
+    ) -> (Vec<ProperCrtUint<F>>, Vec<AssignedValue<F>>) {
         let gate = fp_chip.gate();
 
-        compressed_encodings
+        let (x_bigints, y_signs): (Vec<_>, Vec<_>) = compressed_encodings
             .into_iter()
             .map(|mut assigned_bytes| {
                 // following logic is for little endian decoding but input bytes are in BE, therefore we reverse them.
@@ -143,23 +149,36 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
                 // assertion check for assigned_uncompressed vector to be equal to S::PubKeyCurve::BYTES_COMPRESSED from specification
                 assert_eq!(assigned_bytes.len(), 48);
                 // masked byte from compressed representation
-                let masked_byte = &assigned_bytes[48 - 1];
+                let masked_byte = &assigned_bytes[47];
                 // clear the flag bits from a last byte of compressed pubkey.
                 // we are using [`clear_3_bits`] function which appears to be just as useful here as for public input commitment.
-                let cleared_byte = clear_3_bits(ctx, range, masked_byte);
+                let (cleared_byte, y_sign) = {
+                    let bits = gate.num_to_bits(ctx, *masked_byte, 8);
+                    let cleared = gate.bits_to_num(ctx, &bits[..5]);
+                    (cleared, bits[5]) // 3 MSB bits are cleared, 3-rd of those is a sign bit
+                };
                 // Use the cleared byte to construct the x coordinate
                 let assigned_x_bytes_cleared =
                     [&assigned_bytes.as_slice()[..48 - 1], &[cleared_byte]].concat();
 
-                decode_into_bn::<F>(
+                let x = decode_into_bn::<F>(
                     ctx,
                     gate,
                     assigned_x_bytes_cleared,
                     &fp_chip.limb_bases,
                     fp_chip.limb_bits(),
-                )
+                );
+
+                (x, y_sign)
             })
-            .collect()
+            .unzip();
+
+        let signs_packed = y_signs
+            .chunks(F::CAPACITY as usize - 1)
+            .map(|chunk| gate.bits_to_num(ctx, chunk))
+            .collect_vec();
+
+        (x_bigints, signs_packed)
     }
 
     fn sync_committee_root_ssz<GateManager: CommonGateManager<F>>(
@@ -191,35 +210,20 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     where
         [(); S::SYNC_COMMITTEE_SIZE]:,
     {
-        let pubkeys_x = args.pubkeys_compressed.iter().cloned().map(|mut bytes| {
-            bytes[0] &= 0b00011111;
-            bls12_381::Fq::from_bytes_be(&bytes.try_into().unwrap())
-                .expect("bad bls12_381::Fq encoding")
-        });
-
-        let poseidon_commitment = poseidon_hash_fq_array::<bn256::Fr>(pubkeys_x, limb_bits);
-
-        let mut pk_vector: Vector<Vector<u8, 48>, { S::SYNC_COMMITTEE_SIZE }> = args
-            .pubkeys_compressed
-            .as_slice()
-            .iter()
-            .map(|v| v.as_slice().try_into().unwrap())
-            .collect_vec()
-            .try_into()
-            .unwrap();
-
-        let ssz_root = pk_vector.hash_tree_root().unwrap();
+        let poseidon_commitment =
+            poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed, limb_bits);
 
         let finalized_header_root = args.finalized_header.tree_hash_root();
 
+        let finalized_header_root_hilo = {
+            let bytes = finalized_header_root.as_ref();
+            let hash_lo = u128::from_be_bytes(bytes[16..].try_into().unwrap());
+            let hash_hi = u128::from_be_bytes(bytes[..16].try_into().unwrap());
+            [hash_lo, hash_hi].map(bn256::Fr::from_u128)
+        };
+
         let instance_vec = iter::once(poseidon_commitment)
-            .chain(ssz_root.as_ref().iter().map(|b| bn256::Fr::from(*b as u64)))
-            .chain(
-                finalized_header_root
-                    .as_ref()
-                    .iter()
-                    .map(|b| bn256::Fr::from(*b as u64)),
-            )
+            .chain(finalized_header_root_hilo)
             .collect();
 
         vec![instance_vec]
@@ -246,7 +250,7 @@ impl<S: Spec> AppCircuit for CommitteeUpdateCircuit<S, bn256::Fr> {
         let range = builder.range_chip(lookup_bits);
         let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
-        let assigned_instances = Self::synthesize(&mut builder, &fp_chip, witness)?;
+        let assigned_instances = Self::assign_virtual(&mut builder, &fp_chip, witness)?;
         builder.set_instances(0, assigned_instances);
 
         match stage {
@@ -332,7 +336,7 @@ mod tests {
 
         let timer = start_timer!(|| "committee_update mock prover");
         let prover = MockProver::<Fr>::run(K, &circuit, instance).unwrap();
-        prover.assert_satisfied_par();
+        prover.assert_satisfied();
         end_timer!(timer);
     }
 

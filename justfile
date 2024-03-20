@@ -17,7 +17,7 @@ setup-step network *k='22':
     cargo run -r -p spectre-prover -- circuit sync-step -p ./build/sync_step_$1.pkey -k $2 setup
 
 setup-step-compressed network *k='23':
-    cargo run -r -p spectre-prover -- circuit sync-step-compressed -k 20 -p ./build/sync_step_$1.pkey  \
+    cargo run -r -p spectre-prover -- circuit sync-step-compressed -k 21 -p ./build/sync_step_$1.pkey  \
          -K $2 -P ./build/sync_step_verifier_$1.pkey -L 19 setup
 
 setup-committee-update network *k='24':

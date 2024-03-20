@@ -31,6 +31,8 @@ pub use self::spread::SpreadChip;
 
 use super::{HashInstructions, ShaCircuitBuilder};
 
+const SHA256_INPUT_LEN_PADDING_LEN: usize = 9;
+
 /// [`Sha256Chip`] provides functions to compute SHA256 hash [`SpreadConfig`] gates.
 /// This is version of SHA256 chip is flexible by allowing do distribute advice cells into multiple sets of columns (`dense`, `spread`).
 /// It also heavily benefits from lookup tables (bigger `num_bits_lookup` is better).
@@ -53,7 +55,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
         max_len: usize,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
         let max_processed_bytes = {
-            let mut max_bytes = max_len + 9;
+            let mut max_bytes = max_len + SHA256_INPUT_LEN_PADDING_LEN;
             let remainder = max_bytes % 64;
             if remainder != 0 {
                 max_bytes += 64 - remainder;
@@ -72,7 +74,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256Chip<'a, F> {
             .collect_vec();
 
         let input_byte_size = assigned_input_bytes.len();
-        let input_byte_size_with_9 = input_byte_size + 9;
+        let input_byte_size_with_9 = input_byte_size + SHA256_INPUT_LEN_PADDING_LEN;
         let range = self.spread.range();
         let gate = &range.gate;
 

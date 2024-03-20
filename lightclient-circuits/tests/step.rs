@@ -49,7 +49,7 @@ pub(crate) fn mock_step_circuit<S: Spec>(
     let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
     let assigned_instances =
-        StepCircuit::<S, bn256::Fr>::synthesize(&mut builder, &fp_chip, args).unwrap();
+        StepCircuit::<S, bn256::Fr>::assign_virtual(&mut builder, &fp_chip, args).unwrap();
     builder.set_instances(0, assigned_instances);
 
     builder.calculate_params(Some(
@@ -75,7 +75,7 @@ pub(crate) fn mock_committee_update_circuit<S: Spec>(
     let fp_chip = FpChip::new(&range, LIMB_BITS, NUM_LIMBS);
 
     let assigned_instances =
-        CommitteeUpdateCircuit::<S, bn256::Fr>::synthesize(&mut builder, &fp_chip, witness)
+        CommitteeUpdateCircuit::<S, bn256::Fr>::assign_virtual(&mut builder, &fp_chip, witness)
             .unwrap();
     builder.set_instances(0, assigned_instances);
     builder.calculate_params(Some(
@@ -97,7 +97,7 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
     let timer = start_timer!(|| "committee_update mock prover run");
     let prover =
         MockProver::<bn256::Fr>::run(K_ROTATION, &rotation_circuit, rotation_instance).unwrap();
-    prover.assert_satisfied_par();
+    prover.assert_satisfied();
     end_timer!(timer);
 
     let sync_circuit = mock_step_circuit(&sync_witness, K_SYNC, None);
@@ -106,8 +106,11 @@ fn run_test_eth2_spec_mock<const K_ROTATION: u32, const K_SYNC: u32>(path: PathB
 
     let timer = start_timer!(|| "sync_step mock prover run");
     let prover = MockProver::<bn256::Fr>::run(K_SYNC, &sync_circuit, instance).unwrap();
-    prover.assert_satisfied_par();
+    prover.assert_satisfied();
     end_timer!(timer);
+
+    // check that sync committee poseidon commits match in both circuits
+    assert_eq!(sync_circuit.instances()[0][1], rotation_circuit.instances()[0][0]);
 }
 
 #[rstest]

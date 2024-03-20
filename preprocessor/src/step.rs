@@ -209,6 +209,27 @@ mod tests {
     use reqwest::Url;
     use std::time::Duration;
     #[tokio::test]
+    async fn test_sync_circuit_sepolia() {
+        const K: u32 = 21;
+        let client =
+            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+
+        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        let params: ParamsKZG<Bn256> = gen_srs(K);
+
+        let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+            &params,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(K, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied();
+    }
+
+    #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_20.json";
         const K: u32 = 20;

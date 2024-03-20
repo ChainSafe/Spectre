@@ -38,7 +38,7 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
         builder: &mut Self::CircuitBuilder,
         input: impl IntoIterator<Item = QuantumCell<F>>,
     ) -> Result<Vec<AssignedValue<F>>, Error> {
-        let assigned_bytes = input
+        let mut assigned_bytes = input
             .into_iter()
             .map(|cell| match cell {
                 QuantumCell::Existing(v) => v,
@@ -75,8 +75,14 @@ impl<'a, F: Field> HashInstructions<F> for Sha256ChipWide<'a, F> {
             .map(|i| QuantumCell::Constant(gate.pow_of_two()[i * 8]))
             .collect_vec();
 
+        // Following code will check the consitency of halo2-lib input bytes with their word representation in halo2 vanilla
+        // Since words are 4 bytes each, we extend the input bytes to be a multiple of 4 with zero bytes in a same way as it's done in vanilla during witness assignment.
+        assigned_bytes.resize_with(num_input_words * 4, || builder.main().load_zero());
+
         for r in 0..num_input_rounds {
-            for w in 0..(num_input_words - r * NUM_WORDS_TO_ABSORB) {
+            let remaining_words = num_input_words - r * NUM_WORDS_TO_ABSORB;
+
+            for w in 0..std::cmp::min(remaining_words, NUM_WORDS_TO_ABSORB){
                 let i = (r * NUM_WORDS_TO_ABSORB + w) * 4;
                 let checksum = gate.inner_product(
                     builder.main(),
@@ -121,3 +127,4 @@ pub fn word_to_bytes_le<F: Field>(
         .chain(to_bytes_le::<_, 16>(&word.hi(), gate, ctx))
         .collect()
 }
+
