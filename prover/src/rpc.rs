@@ -4,6 +4,7 @@
 
 use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
+use ethereum_types::{EthSpec, LightClientUpdate};
 use ethers::prelude::*;
 use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
@@ -27,7 +28,7 @@ use crate::rpc_api::{
     RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
-pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
+pub(crate) fn jsonrpc_server<S: eth_types::Spec, T: EthSpec>(
     state: ProverState,
 ) -> JsonRpcServer<JsonRpcMapRouter>
 where
@@ -43,7 +44,7 @@ where
         .with_data(Data::new(state))
         .with_method(
             RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
-            gen_evm_proof_committee_update_handler::<S>,
+            gen_evm_proof_committee_update_handler::<S, T>,
         )
         .with_method(
             RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
@@ -52,7 +53,7 @@ where
         .finish_unwrapped()
 }
 
-pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
+pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec, T: EthSpec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
 ) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
@@ -78,7 +79,7 @@ where
         light_client_update,
     } = params;
 
-    let update = ssz_rs::deserialize(&light_client_update)?;
+    let update = LightClientUpdate::from_ssz_bytes(&light_client_update)?;
     let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
