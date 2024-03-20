@@ -36,7 +36,9 @@ const R_F: usize = 8;
 ///
 /// Each Poseidon sponge absorbs `POSEIDON_SIZE`-2 elements and previos sponge output if it's not the first batch, ie. onion commitment.
 ///
-/// Assumes that LIMB_BITS * 2 < 254 (BN254).
+/// Assumes that:
+/// - `LIMB_BITS` * 2 < 254 (BN254)
+/// - `x_coords` and `y_signs_packed` are not zero length
 pub fn g1_array_poseidon<F: Field>(
     ctx: &mut Context<F>,
     fp_chip: &FpChip<F>,
@@ -68,6 +70,8 @@ pub fn g1_array_poseidon<F: Field>(
                 .collect_vec()
         })
         .collect_vec();
+
+    assert!(!limbs.is_empty(), "No G1 affines to hash");
 
     let mut poseidon = PoseidonSponge::<F, T, POSEIDON_SIZE>::new::<R_F, R_P, 0>(ctx);
 

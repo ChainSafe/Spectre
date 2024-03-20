@@ -5,13 +5,14 @@
 use eth_types::Spec;
 use ethereum_consensus_types::signing::compute_signing_root;
 use ethereum_consensus_types::BeaconBlockHeader;
+use ff::Field;
 use halo2curves::bls12_381::hash_to_curve::ExpandMsgXmd;
 use halo2curves::bls12_381::{hash_to_curve, Fr, G1, G2};
 use halo2curves::group::Curve;
 use itertools::Itertools;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use ssz_rs::{Merkleized, Node};
-use std::iter;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -93,24 +94,34 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         let signing_root =
             compute_signing_root(attested_header.hash_tree_root().unwrap(), DOMAIN).unwrap();
 
-        let sk = Fr::from_bytes(&[1; 32]).unwrap();
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
+
+        let sks = (0..S::SYNC_COMMITTEE_SIZE)
+            .map(|_| Fr::random(&mut rng))
+            .collect_vec();
         let msg = <G2 as hash_to_curve::HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
             signing_root.deref(),
             S::DST,
         )
         .to_affine();
 
-        let aggregated_signature = vec![msg * sk; S::SYNC_COMMITTEE_SIZE]
-            .into_iter()
+        let aggregated_signature = sks
+            .iter()
+            .map(|sk| msg * sk)
             .fold(G2::identity(), |acc, x| acc + x)
             .to_affine();
 
         let signature_compressed = aggregated_signature.to_compressed_be().to_vec();
 
-        let pubkey_uncompressed = (G1::generator() * sk)
-            .to_affine()
-            .to_uncompressed_be()
-            .to_vec();
+        let pubkeys_uncompressed = sks
+            .iter()
+            .map(|sk| {
+                (G1::generator() * sk)
+                    .to_affine()
+                    .to_uncompressed_be()
+                    .to_vec()
+            })
+            .collect_vec();
 
         // Proof length is 3
         let (attested_header_multiproof, attested_header_helper_indices) =
@@ -127,9 +138,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
 
         Self {
             signature_compressed,
-            pubkeys_uncompressed: iter::repeat(pubkey_uncompressed)
-                .take(S::SYNC_COMMITTEE_SIZE)
-                .collect_vec(),
+            pubkeys_uncompressed,
             pariticipation_bits: vec![true; S::SYNC_COMMITTEE_SIZE],
             domain: DOMAIN,
             attested_header,

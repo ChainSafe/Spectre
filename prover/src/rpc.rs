@@ -65,12 +65,14 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    if let Err(e) = state.concurrency.clone().acquire_owned().await {
-        return Err(JsonRpcError::internal(format!(
-            "Failed to acquire concurrency lock: {}",
-            e
-        )));
-    };
+    let _permit = state
+        .concurrency
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| {
+            JsonRpcError::internal(format!("Failed to acquire concurrency lock: {}", e))
+        })?;
 
     let GenProofCommitteeUpdateParams {
         light_client_update,
@@ -119,12 +121,14 @@ where
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
-    if let Err(e) = state.concurrency.clone().acquire_owned().await {
-        return Err(JsonRpcError::internal(format!(
-            "Failed to acquire concurrency lock: {}",
-            e
-        )));
-    };
+    let _permit = state
+        .concurrency
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| {
+            JsonRpcError::internal(format!("Failed to acquire concurrency lock: {}", e))
+        })?;
 
     let GenProofStepParams {
         light_client_finality_update,

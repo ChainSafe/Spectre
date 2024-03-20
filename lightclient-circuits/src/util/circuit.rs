@@ -2,7 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::env::{set_var, var};
 use std::fs;
 use std::{fs::File, path::Path};
 
@@ -24,18 +23,32 @@ use snark_verifier_sdk::{gen_pk, halo2::gen_snark_shplonk, read_pk};
 use snark_verifier_sdk::{CircuitExt, Snark};
 
 /// Halo2 circuit configuration parameters.
-pub trait Halo2ConfigPinning: Serialize {
+pub trait Halo2ConfigPinning: Serialize + Sized + for<'de> Deserialize<'de> {
+    type CircuitParams;
+
     type BreakPoints;
-    /// Loads configuration parameters from a file and sets environmental variables.
-    fn from_path<P: AsRef<Path>>(path: P) -> Self;
-    /// Loads configuration parameters into environment variables.
-    fn set_var(&self);
+
+    fn new(params: Self::CircuitParams, break_points: Self::BreakPoints) -> Self;
     /// Returns break points
     fn break_points(self) -> Self::BreakPoints;
-    /// Constructs `Self` from environmental variables and break points
-    fn from_var(break_points: Self::BreakPoints) -> Self;
+
     /// Degree of the circuit, log_2(number of rows)
     fn degree(&self) -> u32;
+
+    /// Loads configuration parameters from a file and sets environmental variables.
+    fn from_path<P: AsRef<Path>>(path: P) -> Self {
+        serde_json::from_reader(
+            File::open(&path)
+                .unwrap_or_else(|e| panic!("{:?} does not exist: {e:?}", path.as_ref())),
+        )
+        .unwrap()
+    }
+
+    /// Writes to file
+    fn write<P: AsRef<Path>>(&self, path: P) {
+        serde_json::to_writer_pretty(File::create(path).unwrap(), self)
+            .expect("failed to serialize to file");
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -45,54 +58,29 @@ pub struct Eth2ConfigPinning {
 }
 
 impl Halo2ConfigPinning for Eth2ConfigPinning {
+    type CircuitParams = BaseCircuitParams;
     type BreakPoints = MultiPhaseThreadBreakPoints;
 
-    fn from_path<P: AsRef<Path>>(path: P) -> Self {
-        let pinning: Self = serde_json::from_reader(
-            File::open(&path)
-                .unwrap_or_else(|e| panic!("{:?} does not exist: {e:?}", path.as_ref())),
-        )
-        .unwrap();
-        pinning.set_var();
-        pinning
-    }
-
-    fn set_var(&self) {
-        set_var(
-            "GATE_CONFIG_PARAMS",
-            serde_json::to_string(&self.params).unwrap(),
-        );
-        set_var("LOOKUP_BITS", (self.params.k - 1).to_string());
-    }
-
-    fn break_points(self) -> MultiPhaseThreadBreakPoints {
-        self.break_points
-    }
-
-    fn from_var(break_points: MultiPhaseThreadBreakPoints) -> Self {
-        let params: BaseCircuitParams =
-            serde_json::from_str(&var("GATE_CONFIG_PARAMS").unwrap()).unwrap();
+    fn new(params: Self::CircuitParams, break_points: Self::BreakPoints) -> Self {
         Self {
             params,
             break_points,
         }
     }
 
+    fn break_points(self) -> MultiPhaseThreadBreakPoints {
+        self.break_points
+    }
+
     fn degree(&self) -> u32 {
-        self.params.k as u32
+        u32::try_from(self.params.k).expect("k is too large for u32")
     }
 }
 
 pub trait PinnableCircuit<F: Field>: CircuitExt<F> {
     type Pinning: Halo2ConfigPinning;
 
-    fn break_points(&self) -> <Self::Pinning as Halo2ConfigPinning>::BreakPoints;
-
-    fn write_pinning(&self, path: impl AsRef<Path>) {
-        let break_points = self.break_points();
-        let pinning: Self::Pinning = Halo2ConfigPinning::from_var(break_points);
-        serde_json::to_writer_pretty(File::create(path).unwrap(), &pinning).unwrap();
-    }
+    fn pinning(&self) -> Self::Pinning;
 }
 
 pub trait AppCircuit {
@@ -143,7 +131,7 @@ pub trait AppCircuit {
         let pk = gen_pk(params, &circuit, Some(pk_path.as_ref()));
         if !pk_exists {
             // should only write pinning data if we created a new pkey
-            circuit.write_pinning(pinning_path);
+            circuit.pinning().write(pinning_path);
         }
         pk
     }
