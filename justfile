@@ -25,15 +25,15 @@ setup-committee-update network *k='24':
          -K $2 -P ./build/committee_update_verifier_$1.pkey setup
 
 gen-verifier-step network:
-    cargo run -r -p spectre-prover -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/snark-verifiers/sync_step.sol
+    cargo run -r -p spectre-prover -- circuit sync-step -p ./build/sync_step_$1.pkey gen-verifier -o ./contracts/$1/snark-verifiers/sync_step.sol
 
 gen-verifier-step-compressed network:
     cargo run -r -p spectre-prover -- circuit sync-step-compressed -p ./build/sync_step_$1.pkey -P ./build/sync_step_verifier_$1.pkey \
-        gen-verifier -o ./contracts/snark-verifiers/sync_step_verifier.sol
+        gen-verifier -o ./contracts/$1/snark-verifiers/sync_step_verifier.sol
 
 gen-verifier-committee-update network:
     cargo run -r -p spectre-prover -- circuit committee-update -p ./build/committee_update_$1.pkey -P ./build/committee_update_verifier_$1.pkey \
-        gen-verifier -o ./contracts/snark-verifiers/committee_update_verifier.sol
+        gen-verifier -o ./contracts/$1/snark-verifiers/committee_update_verifier.sol
 
 build-contracts:
     cd contracts && forge build
