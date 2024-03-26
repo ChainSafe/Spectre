@@ -38,15 +38,12 @@ pub async fn get_light_client_update_at_period<S: Spec, T: EthSpec>(
     path.query_pairs_mut()
         .append_pair("start_period", &period.to_string())
         .append_pair("count", "1");
-    println!("Path: {:?}", path);
     let resp = client
         .get_response(path, |b| b.accept(Accept::Json))
         .await
         .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?;
-    println!("resp: {:?}", resp);
 
     let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<T>>> = resp.json().await?;
-    println!("Updates: {:?}", updates);
 
     assert!(updates.len() == 1, "should only get one update");
     Ok(updates.pop().unwrap().data)
