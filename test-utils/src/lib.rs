@@ -10,7 +10,7 @@ use crate::test_types::{TestMeta, TestStep};
 use blst::min_pk as bls;
 use eth_types::{Minimal, LIMB_BITS};
 use ethereum_types::{
-    BeaconBlockHeader, Domain, EthSpec, ExecutionPayloadHeader, ForkData, Hash256,
+    BeaconBlockHeader, Domain, EthSpec, ExecutionPayloadHeader, Hash256,
     LightClientBootstrapCapella, LightClientUpdateCapella, MinimalEthSpec, SyncCommittee,
 };
 use ethers::types::H256;
@@ -174,11 +174,6 @@ fn to_sync_ciruit_witness(
         state_root: light_client_update.finalized_header.beacon.state_root,
         body_root: light_client_update.finalized_header.beacon.body_root,
     };
-    let fork_data = ForkData {
-        current_version: [3, 0, 0, 1],
-        genesis_validators_root,
-    };
-
     let domain = MinimalEthSpec::default_spec().compute_domain(
         Domain::SyncCommittee,
         [3, 0, 0, 1],
@@ -192,12 +187,11 @@ fn to_sync_ciruit_witness(
         .map(|b| b.0.as_ref().to_vec())
         .collect();
     args.execution_payload_root = {
-        let mut execution_payload_header: ExecutionPayloadHeader<MinimalEthSpec> =
-            light_client_update
-                .finalized_header
-                .execution
-                .clone()
-                .into();
+        let execution_payload_header: ExecutionPayloadHeader<MinimalEthSpec> = light_client_update
+            .finalized_header
+            .execution
+            .clone()
+            .into();
 
         execution_payload_header.tree_hash_root().0.to_vec()
     };

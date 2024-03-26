@@ -16,7 +16,8 @@ itertools = "0.11.0"
 test-utils = { workspace = true }
 halo2curves = { workspace = true }
 eth-types = { workspace = true }
-ssz_rs = { workspace = true }
 halo2-base = { workspace = true }
 snark-verifier-sdk = { workspace = true }
 contracts = { workspace = true }
+
+tree_hash.workspace = true
