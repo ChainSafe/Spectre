@@ -2,22 +2,20 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use std::{ops::Deref, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
+use crate::args::UtilsCmd;
+use blst::min_pk as bls;
 use eth2::{types::BlockId, BeaconNodeHttpClient, SensitiveUrl, Timeouts};
 use eth_types::LIMB_BITS;
 use ethereum_types::{LightClientBootstrap, MainnetEthSpec};
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
 use tree_hash::TreeHash;
-use url::Url;
-
-use crate::args::UtilsCmd;
 
 pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
     match method {
         UtilsCmd::CommitteePoseidon { beacon_api } => {
-            let reqwest_client = reqwest::Client::new();
             let beacon_client = Arc::new(BeaconNodeHttpClient::new(
                 SensitiveUrl::parse(&beacon_api).unwrap(),
                 Timeouts::set_all(Duration::from_secs(10)),
@@ -40,17 +38,30 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
 
             let sync_period = match bootstrap {
                 LightClientBootstrap::Altair(_) => unimplemented!("Altair not implemented"),
-                LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon.slot,
-                LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon.slot,
+                LightClientBootstrap::Capella(ref bootstrap) => bootstrap.header.beacon.slot,
+                LightClientBootstrap::Deneb(ref bootstrap) => bootstrap.header.beacon.slot,
             } / (32 * 256);
 
             println!("Sync period: {}", sync_period);
+
             let pubkeys_uncompressed = bootstrap
                 .current_sync_committee()
                 .pubkeys
                 .iter()
-                .map(|pk| pk.decompressed_bytes())
+                .map(|pk| {
+                    bls::PublicKey::uncompress(&pk.serialize())
+                        .unwrap()
+                        .serialize()
+                        .to_vec()
+                })
                 .collect_vec();
+
+            // let pubkeys_uncompressed = bootstrap
+            //     .current_sync_committee()
+            //     .pubkeys
+            //     .iter()
+            //     .map(|pk| pk.decompressed_bytes())
+            //     .collect_vec();
 
             let ssz_root = bootstrap.current_sync_committee().pubkeys.tree_hash_root();
 

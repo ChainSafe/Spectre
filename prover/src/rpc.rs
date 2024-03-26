@@ -4,7 +4,9 @@
 
 use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
-use ethereum_types::{EthSpec, LightClientUpdate};
+use ethereum_types::{
+    EthSpec, FixedVector, ForkName, LightClientFinalityUpdate, LightClientUpdate, PublicKeyBytes,
+};
 use ethers::prelude::*;
 use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
@@ -18,7 +20,9 @@ use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::evm::encode_calldata;
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use spectre_prover::prover::ProverState;
+use ssz::Decode;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
@@ -48,7 +52,7 @@ where
         )
         .with_method(
             RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
-            gen_evm_proof_sync_step_compressed_handler::<S>,
+            gen_evm_proof_sync_step_compressed_handler::<S, T>,
         )
         .finish_unwrapped()
 }
@@ -77,9 +81,19 @@ where
 
     let GenProofCommitteeUpdateParams {
         light_client_update,
+        fork_name,
     } = params;
 
-    let update = LightClientUpdate::from_ssz_bytes(&light_client_update)?;
+    let fork_name = ForkName::from_str(&fork_name)
+        .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
+
+    let update =
+        LightClientUpdate::<T>::from_ssz_bytes(&light_client_update, fork_name).map_err(|e| {
+            JsonRpcError::internal(format!(
+                "Failed to deserialize light client update: {:?}",
+                e
+            ))
+        })?;
     let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
@@ -112,7 +126,7 @@ where
     })
 }
 
-pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
+pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec, T: EthSpec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofStepParams>,
 ) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError>
@@ -135,11 +149,23 @@ where
         light_client_finality_update,
         domain,
         pubkeys,
+        fork_name,
     } = params;
 
-    let update = ssz_rs::deserialize(&light_client_finality_update)?;
-    let pubkeys = ssz_rs::deserialize(&pubkeys)?;
-    let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+    let fork_name = ForkName::from_str(&fork_name)
+        .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
+
+    let update =
+        LightClientFinalityUpdate::<T>::from_ssz_bytes(&light_client_finality_update, fork_name)
+            .map_err(|e| {
+                JsonRpcError::internal(format!(
+                    "Failed to deserialize light client finality update: {:?}",
+                    e
+                ))
+            })?;
+    let pubkeys = FixedVector::<PublicKeyBytes, T::SyncCommitteeSize>::from_ssz_bytes(&pubkeys)
+        .map_err(|e| JsonRpcError::internal(format!("Failed to deserialize pubkeys: {:?}", e)))?;
+    let witness = step_args_from_finality_update(update, &pubkeys, domain).await?;
     let params = state.params.get(state.step.degree()).unwrap();
 
     let snark = gen_uncompressed_snark::<StepCircuit<S, Fr>>(
