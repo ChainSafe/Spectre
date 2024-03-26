@@ -2,8 +2,6 @@
 // Code: https://github.com/ChainSafe/Spectre
 // SPDX-License-Identifier: LGPL-3.0-only
 
-use ssz_rs::prelude::*;
-
 #[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 pub struct TestMeta {
@@ -43,10 +41,3 @@ pub struct RootAtSlot {
     pub beacon_root: String,
     pub execution_root: String,
 }
-
-// TODO: remove this once we have a better way to handle the `ssz_rs` dependency
-#[derive(Debug, Default, Clone, PartialEq, SimpleSerialize, Eq)]
-pub struct ByteVector<const N: usize>(pub Vector<u8, N>);
-#[derive(Default, Debug, Clone, PartialEq, Eq, SimpleSerialize)]
-pub struct ByteList<const N: usize>(pub List<u8, N>);
-pub type ExecutionAddress = ByteVector<20>;

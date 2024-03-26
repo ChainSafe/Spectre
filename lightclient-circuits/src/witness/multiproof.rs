@@ -1,8 +1,8 @@
 // TODO: A lot if not all/most of this code is copy pasta from: https://github.com/ralexstokes/ssz-rs/pull/118 which is mostly implemented w.r.t. the spec
 // TODO: Remove this once the above PR lands in ssz-rs
 
+use ethereum_types::Hash256;
 use sha2::{Digest, Sha256};
-use ssz_rs::Node;
 use std::collections::{HashMap, HashSet};
 
 pub type GeneralizedIndex = usize;
@@ -93,7 +93,7 @@ pub fn get_helper_indices(indices: &[GeneralizedIndex]) -> Vec<GeneralizedIndex>
     all_branch_indices
 }
 
-pub fn calculate_merkle_root(leaf: Node, proof: &[Node], index: GeneralizedIndex) -> Node {
+pub fn calculate_merkle_root(leaf: Hash256, proof: &[Hash256], index: GeneralizedIndex) -> Hash256 {
     debug_assert_eq!(proof.len(), get_path_length(index));
     let mut result = leaf;
 
@@ -114,15 +114,15 @@ pub fn calculate_merkle_root(leaf: Node, proof: &[Node], index: GeneralizedIndex
 /// Calculate the Merkle root of a set of leaves and their corresponding proofs.
 /// Note: `indices` and `leaves` must be in the same order as they correspond to each other.
 pub fn calculate_multi_merkle_root(
-    leaves: &[Node],
-    proof: &[Node],
+    leaves: &[Hash256],
+    proof: &[Hash256],
     indices: &[GeneralizedIndex],
-) -> Node {
+) -> Hash256 {
     assert_eq!(leaves.len(), indices.len());
     let helper_indices = get_helper_indices(indices);
     assert_eq!(proof.len(), helper_indices.len());
 
-    let mut objects: HashMap<usize, Node> = indices
+    let mut objects: HashMap<usize, Hash256> = indices
         .iter()
         .chain(helper_indices.iter())
         .copied()
@@ -163,9 +163,9 @@ pub fn calculate_multi_merkle_root(
 /// Return an array representing the tree nodes by generalized index:
 /// [0, 1, 2, 3, 4, 5, 6, 7], where each layer is a power of 2. The 0 index is ignored. The 1 index is the root.
 /// The result will be twice the size as the padded bottom layer for the input leaves.
-pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
+pub fn merkle_tree(leaves: &[Hash256]) -> Vec<Hash256> {
     let bottom_length = get_power_of_two_ceil(leaves.len());
-    let mut o = vec![Node::default(); bottom_length * 2];
+    let mut o = vec![Hash256::default(); bottom_length * 2];
     o[bottom_length..bottom_length + leaves.len()].copy_from_slice(leaves);
     for i in (1..bottom_length).rev() {
         let left = o[i * 2].as_ref();
@@ -178,7 +178,10 @@ pub fn merkle_tree(leaves: &[Node]) -> Vec<Node> {
     o
 }
 
-pub fn create_multiproof(merkle_tree: &[Node], indices_to_prove: &[GeneralizedIndex]) -> Vec<Node> {
+pub fn create_multiproof(
+    merkle_tree: &[Hash256],
+    indices_to_prove: &[GeneralizedIndex],
+) -> Vec<Hash256> {
     get_helper_indices(indices_to_prove)
         .into_iter()
         .map(|i| merkle_tree[i])

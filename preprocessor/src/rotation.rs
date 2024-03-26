@@ -4,19 +4,18 @@
 
 use std::marker::PhantomData;
 
-use beacon_api_client::{BlockId, Client, ClientTypes};
 use eth_types::Spec;
-use ethereum_consensus_types::LightClientUpdateCapella;
 use itertools::Itertools;
-use lightclient_circuits::witness::CommitteeUpdateArgs;
-use log::debug;
-use ssz_rs::Merkleized;
 
-use crate::{get_block_header, get_light_client_update_at_period};
+use crate::get_light_client_update_at_period;
+use eth2::{types::BlockId, BeaconNodeHttpClient};
+use ethereum_types::{EthSpec, LightClientUpdate};
+use lightclient_circuits::witness::CommitteeUpdateArgs;
+use tree_hash::TreeHash;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
-pub async fn fetch_rotation_args<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
+pub async fn fetch_rotation_args<S: Spec, T: EthSpec>(
+    client: &BeaconNodeHttpClient,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -27,29 +26,29 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    let block = get_block_header(client, BlockId::Head).await?;
-    let slot = block.slot;
+    let block = client
+        .get_beacon_headers_block_id(BlockId::Head)
+        .await
+        .unwrap()
+        .unwrap()
+        .data
+        .header
+        .message;
+
+    let slot = block.slot.as_u64();
     let period = slot / (32 * 256);
-    debug!(
+    println!(
         "Fetching light client update at current Slot: {} at Period: {}",
         slot, period
     );
 
-    let update = get_light_client_update_at_period(client, period).await?;
+    let update = get_light_client_update_at_period::<S, T>(client, period).await?;
     rotation_args_from_update(&update).await
 }
 
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
-pub async fn rotation_args_from_update<S: Spec>(
-    update: &LightClientUpdateCapella<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_ROOT_INDEX },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::FINALIZED_HEADER_INDEX },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
+pub async fn rotation_args_from_update<S: Spec, T: EthSpec>(
+    update: &LightClientUpdate<T>,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -60,45 +59,47 @@ where
     [(); S::SYNC_COMMITTEE_DEPTH]:,
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
-    let mut update = update.clone();
-    let pubkeys_compressed = update
-        .next_sync_committee
+    let update = update.clone();
+    let next_sync_committee = update.next_sync_committee().clone();
+
+    let pubkeys_compressed = next_sync_committee
         .pubkeys
         .iter()
-        .map(|pk| pk.to_bytes().to_vec())
+        .map(|pk| pk.serialize().to_vec())
         .collect_vec();
-    let mut sync_committee_branch = update.next_sync_committee_branch.as_ref().to_vec();
+    let mut sync_committee_branch = update.next_sync_committee_branch().as_ref().to_vec();
 
-    sync_committee_branch.insert(
-        0,
-        update
-            .next_sync_committee
-            .aggregate_pubkey
-            .hash_tree_root()
-            .unwrap(),
-    );
+    sync_committee_branch.insert(0, next_sync_committee.aggregate_pubkey.tree_hash_root());
+    let (attested_header_beacon, finalized_header_beacon) = match update {
+        LightClientUpdate::Altair(_) => unimplemented!(),
+        LightClientUpdate::Capella(update) => (
+            update.attested_header.beacon,
+            update.finalized_header.beacon,
+        ),
+
+        LightClientUpdate::Deneb(update) => (
+            update.attested_header.beacon,
+            update.finalized_header.beacon,
+        ),
+    };
 
     assert!(
-        ssz_rs::is_valid_merkle_branch(
-            update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
-            &sync_committee_branch
-                .iter()
-                .map(|n| n.as_ref())
-                .collect_vec(),
+        merkle_proof::verify_merkle_proof(
+            next_sync_committee.pubkeys.tree_hash_root(),
+            &sync_committee_branch,
             S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-            update.attested_header.beacon.state_root,
-        )
-        .is_ok(),
+            attested_header_beacon.state_root,
+        ),
         "Execution payload merkle proof verification failed"
     );
 
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
-        finalized_header: update.finalized_header.beacon.clone(),
+        finalized_header: finalized_header_beacon,
         sync_committee_branch: sync_committee_branch
             .into_iter()
-            .map(|n| n.to_vec())
+            .map(|n| n.0.to_vec())
             .collect_vec(),
         _spec: PhantomData,
     };
@@ -107,9 +108,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
+    use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use ethereum_types::MainnetEthSpec;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
@@ -119,16 +123,20 @@ mod tests {
         halo2_base::gates::circuit::CircuitBuilderStage,
         util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
     };
-    use reqwest::Url;
     use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
-        const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        const K: u32 = 20;
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
@@ -157,9 +165,14 @@ mod tests {
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
+            .await
+            .unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

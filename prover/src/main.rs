@@ -13,6 +13,7 @@ mod utils;
 use crate::{cli::spec_app, rpc::run_rpc};
 use args::Cli;
 use clap::Parser;
+use ethereum_types::MainnetEthSpec;
 use utils::utils_cli;
 mod args;
 
@@ -26,7 +27,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
         } => {
             match spec {
                 args::Spec::Testnet => {
-                    run_rpc::<eth_types::Testnet>(
+                    run_rpc::<eth_types::Testnet, MainnetEthSpec>(
                         port.parse().unwrap(),
                         options.args.config_dir,
                         build_dir,
@@ -35,7 +36,7 @@ async fn app(options: Cli) -> eyre::Result<()> {
                     .await
                 }
                 args::Spec::Mainnet => {
-                    run_rpc::<eth_types::Mainnet>(
+                    run_rpc::<eth_types::Mainnet, MainnetEthSpec>(
                         port.parse().unwrap(),
                         options.args.config_dir,
                         build_dir,
