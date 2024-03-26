@@ -31,6 +31,7 @@ serde.workspace = true
 ethereum-types = {workspace = true, default-features = false }
 eth2.workspace = true
 tree_hash.workspace = true
+merkle_proof.workspace = true
 
 # local
 eth-types.workspace = true

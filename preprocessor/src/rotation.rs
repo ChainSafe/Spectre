@@ -12,7 +12,7 @@ use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use ethereum_types::{EthSpec, LightClientUpdate};
 use lightclient_circuits::witness::CommitteeUpdateArgs;
-use tree_hash::TreeHash;
+use tree_hash::{Hash256, TreeHash};
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, T: EthSpec>(
@@ -61,42 +61,39 @@ where
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
     let update = update.clone();
-    let pubkeys_compressed = update
-        .next_sync_committee()
+    let next_sync_committee = update.next_sync_committee().clone();
+
+    let pubkeys_compressed = next_sync_committee
         .pubkeys
         .iter()
         .map(|pk| pk.serialize().to_vec())
         .collect_vec();
     let mut sync_committee_branch = update.next_sync_committee_branch().as_ref().to_vec();
 
-    sync_committee_branch.insert(
-        0,
-        update
-            .next_sync_committee()
-            .aggregate_pubkey
-            .tree_hash_root(),
-    );
-
-    // assert!(
-    //     ssz_rs::is_valid_merkle_branch(
-    //         update.next_sync_committee.pubkeys.hash_tree_root().unwrap(),
-    //         &sync_committee_branch
-    //             .iter()
-    //             .map(|n| n.as_ref())
-    //             .collect_vec(),
-    //         S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
-    //         S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
-    //         update.attested_header.beacon.state_root,
-    //     )
-    //     .is_ok(),
-    //     "Execution payload merkle proof verification failed"
-    // );
-    let finalized_header_beacon = match update {
+    sync_committee_branch.insert(0, next_sync_committee.aggregate_pubkey.tree_hash_root());
+    let (attested_header_beacon, finalized_header_beacon) = match update {
         LightClientUpdate::Altair(_) => unimplemented!(),
-        LightClientUpdate::Capella(update) => update.finalized_header.beacon,
+        LightClientUpdate::Capella(update) => (
+            update.attested_header.beacon,
+            update.finalized_header.beacon,
+        ),
 
-        LightClientUpdate::Deneb(update) => update.finalized_header.beacon,
+        LightClientUpdate::Deneb(update) => (
+            update.attested_header.beacon,
+            update.finalized_header.beacon,
+        ),
     };
+
+    assert!(
+        merkle_proof::verify_merkle_proof(
+            next_sync_committee.pubkeys.tree_hash_root(),
+            &sync_committee_branch,
+            S::SYNC_COMMITTEE_PUBKEYS_DEPTH,
+            S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
+            attested_header_beacon.state_root,
+        ),
+        "Execution payload merkle proof verification failed"
+    );
 
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
