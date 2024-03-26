@@ -181,7 +181,7 @@ where
     )?)
 }
 
-pub async fn run_rpc<S: eth_types::Spec>(
+pub async fn run_rpc<S: eth_types::Spec, T: EthSpec>(
     port: usize,
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
@@ -200,7 +200,7 @@ where
     let timer = start_timer!(|| "Load Prover State and Context");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);
     end_timer!(timer);
-    let rpc_server = Arc::new(jsonrpc_server::<S>(state));
+    let rpc_server = Arc::new(jsonrpc_server::<S, T>(state));
     let router = Router::new()
         .route("/rpc", post(handler))
         .with_state(rpc_server);

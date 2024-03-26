@@ -9,6 +9,7 @@ use eth_types::LIMB_BITS;
 use ethereum_types::{LightClientBootstrap, MainnetEthSpec};
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
+use tree_hash::TreeHash;
 use url::Url;
 
 use crate::args::UtilsCmd;
@@ -37,7 +38,12 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
                 .ok_or(eyre::eyre!("Failed to get bootstrap: None"))?
                 .data;
 
-            let sync_period = bootstrap.header.beacon.slot / (32 * 256);
+            let sync_period = match bootstrap {
+                LightClientBootstrap::Altair(_) => unimplemented!("Altair not implemented"),
+                LightClientBootstrap::Capella(bootstrap) => bootstrap.header.beacon.slot,
+                LightClientBootstrap::Deneb(bootstrap) => bootstrap.header.beacon.slot,
+            } / (32 * 256);
+
             println!("Sync period: {}", sync_period);
             let pubkeys_uncompressed = bootstrap
                 .current_sync_committee()
@@ -46,12 +52,9 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
                 .map(|pk| pk.decompressed_bytes())
                 .collect_vec();
 
-            let ssz_root = bootstrap
-                .current_sync_committee()
-                .pubkeys
-                .hash_tree_root()
-                .unwrap();
-            println!("SSZ root: {:?}", hex::encode(ssz_root.deref()));
+            let ssz_root = bootstrap.current_sync_committee().pubkeys.tree_hash_root();
+
+            println!("SSZ root: {:?}", hex::encode(ssz_root.0));
 
             let mut committee_poseidon =
                 poseidon_committee_commitment_from_uncompressed(&pubkeys_uncompressed, LIMB_BITS)
