@@ -27,7 +27,7 @@ where
     [(); S::FINALIZED_HEADER_INDEX]:,
 {
     let block = client
-        .get_beacon_headers_block_id(BlockId::Head)
+        .get_beacon_headers_block_id(BlockId::Finalized)
         .await
         .unwrap()
         .unwrap()
