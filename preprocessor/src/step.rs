@@ -97,70 +97,33 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
         })
         .collect_vec();
 
-    let (execution_payload_root, execution_payload_branch, finalized_beacon_body_root) =
-        match finality_update {
-            LightClientFinalityUpdate::Altair(_) => unimplemented!(),
-            LightClientFinalityUpdate::Capella(ref header) => {
-                let finalized_header = &header.finalized_header;
+    let (execution_payload_root, execution_payload_branch) = match finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(ref header) => {
+            let finalized_header = &header.finalized_header;
 
-                (
-                    finalized_header.execution.tree_hash_root().0.to_vec(),
-                    finalized_header
-                        .execution_branch
-                        .iter()
-                        .map(|n| n.0.to_vec())
-                        .collect_vec(),
-                    finalized_header.beacon.body_root,
-                )
-            }
-            LightClientFinalityUpdate::Deneb(ref header) => {
-                let finalized_header = &header.finalized_header;
+            (
+                finalized_header.execution.tree_hash_root().0.to_vec(),
+                finalized_header
+                    .execution_branch
+                    .iter()
+                    .map(|n| n.0.to_vec())
+                    .collect_vec(),
+            )
+        }
+        LightClientFinalityUpdate::Deneb(ref header) => {
+            let finalized_header = &header.finalized_header;
 
-                (
-                    finalized_header.execution.tree_hash_root().0.to_vec(),
-                    finalized_header
-                        .execution_branch
-                        .iter()
-                        .map(|n| n.0.to_vec())
-                        .collect_vec(),
-                    finalized_header.beacon.body_root,
-                )
-            }
-        };
-
-    assert!(
-        merkle_proof::verify_merkle_proof(
-            Hash256::from_slice(&execution_payload_root),
-            &execution_payload_branch
-                .iter()
-                .map(|n| Hash256::from_slice(n))
-                .collect_vec(),
-            S::EXECUTION_STATE_ROOT_DEPTH,
-            S::EXECUTION_STATE_ROOT_INDEX,
-            finalized_beacon_body_root,
-        ),
-        "Execution payload merkle proof verification failed"
-    );
-    // assert!(
-    //     merkle_proof::verify_merkle_proof(
-    //         finality_update
-    //             .finalized_header
-    //             .beacon
-    //             .clone()
-    //             .hash_tree_root()
-    //             .unwrap(),
-    //         &finality_update
-    //             .finality_branch
-    //             .iter()
-    //             .map(|n| n.as_ref())
-    //             .collect_vec(),
-    //         S::FINALIZED_HEADER_DEPTH,
-    //         S::FINALIZED_HEADER_INDEX,
-    //         finality_update.attested_header.beacon.state_root,
-    //     )
-    //     .is_ok(),
-    //     "Finality merkle proof verification failed"
-    // );
+            (
+                finalized_header.execution.tree_hash_root().0.to_vec(),
+                finalized_header
+                    .execution_branch
+                    .iter()
+                    .map(|n| n.0.to_vec())
+                    .collect_vec(),
+            )
+        }
+    };
 
     let attested_header_beacon = match &finality_update {
         LightClientFinalityUpdate::Altair(_) => unimplemented!(),
@@ -175,6 +138,30 @@ pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
 
         LightClientFinalityUpdate::Deneb(update) => update.finalized_header.beacon.clone(),
     };
+
+    assert!(
+        merkle_proof::verify_merkle_proof(
+            Hash256::from_slice(&execution_payload_root),
+            &execution_payload_branch
+                .iter()
+                .map(|n| Hash256::from_slice(n))
+                .collect_vec(),
+            S::EXECUTION_STATE_ROOT_DEPTH,
+            S::EXECUTION_STATE_ROOT_INDEX,
+            finalized_header_beacon.body_root,
+        ),
+        "Execution payload merkle proof verification failed"
+    );
+    assert!(
+        merkle_proof::verify_merkle_proof(
+            finalized_header_beacon.tree_hash_root(),
+            &finality_update.finality_branch(),
+            S::FINALIZED_HEADER_DEPTH,
+            S::FINALIZED_HEADER_INDEX,
+            attested_header_beacon.state_root,
+        ),
+        "Finality merkle proof verification failed"
+    );
 
     Ok(SyncStepArgs {
         signature_compressed: finality_update

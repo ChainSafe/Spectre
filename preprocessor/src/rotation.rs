@@ -6,13 +6,12 @@ use std::marker::PhantomData;
 
 use eth_types::Spec;
 use itertools::Itertools;
-use log::debug;
 
 use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use ethereum_types::{EthSpec, LightClientUpdate};
 use lightclient_circuits::witness::CommitteeUpdateArgs;
-use tree_hash::{Hash256, TreeHash};
+use tree_hash::TreeHash;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec, T: EthSpec>(
@@ -38,7 +37,7 @@ where
 
     let slot = block.slot.as_u64();
     let period = slot / (32 * 256);
-    debug!(
+    println!(
         "Fetching light client update at current Slot: {} at Period: {}",
         slot, period
     );
@@ -129,7 +128,7 @@ mod tests {
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
-        const K: u32 = 21;
+        const K: u32 = 20;
         const URL: &str = "https://lodestar-sepolia.chainsafe.io";
         let client = BeaconNodeHttpClient::new(
             SensitiveUrl::parse(URL).unwrap(),
