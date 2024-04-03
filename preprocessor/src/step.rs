@@ -200,7 +200,7 @@ mod tests {
             light_client_finality_update,
             domain,
             pubkeys,
-        } = serde_json::from_reader(std::fs::File::open("../step_input_holesky_sepolia.json.json").unwrap()).unwrap();
+        } = serde_json::from_reader(std::fs::File::open("../step_input_holesky_sepolia.json").unwrap()).unwrap();
 
         let mut update: LightClientFinalityUpdate<
             512,
