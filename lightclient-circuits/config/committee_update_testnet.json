@@ -6,7 +6,7 @@
     ],
     "num_fixed": 1,
     "num_lookup_advice_per_phase": [
-      1,
+      0,
       0,
       0
     ],

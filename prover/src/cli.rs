@@ -98,7 +98,7 @@ where
                     &params,
                     &pk,
                     &cfg_path,
-                    None::<String>,
+                    Some("./build/committee_update_dummy.snark"),
                     &Default::default(),
                 )
                 .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))
@@ -176,7 +176,7 @@ where
                     &params,
                     &pk,
                     &cfg_path,
-                    None::<String>,
+                    Some("./build/step_dummy.snark"),
                     &Default::default(),
                 )
                 .map_err(|e| eyre::eyre!("Failed to generate proof: {}", e))

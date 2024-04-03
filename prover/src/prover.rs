@@ -74,7 +74,7 @@ impl ProverState {
             params_map.get(step.degree()).unwrap(),
             step.pk(),
             step.config_path(),
-            None::<String>,
+            Some("./build/step_dummy.snark"),
             &Default::default(),
         )
         .unwrap();
@@ -90,7 +90,7 @@ impl ProverState {
             params_map.get(committee_update.degree()).unwrap(),
             committee_update.pk(),
             committee_update.config_path(),
-            None::<String>,
+            Some("./build/committee_update_dummy.snark"),
             &Default::default(),
         )
         .unwrap();
