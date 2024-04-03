@@ -159,7 +159,10 @@ pub async fn step_args_from_finality_update<S: Spec>(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use eth_types::Testnet;
+    use ethereum_consensus_types::signing::compute_signing_root;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
@@ -168,6 +171,7 @@ mod tests {
         halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
         util::AppCircuit,
     };
+    use serde_json::json;
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
@@ -176,11 +180,62 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
-        const K: u32 = 21;
+        const K: u32 = 20;
         let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+            MainnetClient::new(Url::parse("https://lodestar-holesky.chainsafe.io").unwrap());
 
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+
+        use serde::{Deserialize, Serialize};
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct GenProofStepParams {
+            // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
+            pub light_client_finality_update: Vec<u8>,
+            pub pubkeys: Vec<u8>,
+
+            pub domain: [u8; 32],
+        }
+
+        let GenProofStepParams {
+            light_client_finality_update,
+            domain,
+            pubkeys,
+        } = serde_json::from_reader(std::fs::File::open("../step_input.json").unwrap()).unwrap();
+
+        let mut update: LightClientFinalityUpdate<
+            512,
+            { Testnet::FINALIZED_HEADER_DEPTH },
+            { Testnet::BYTES_PER_LOGS_BLOOM },
+            { Testnet::MAX_EXTRA_DATA_BYTES },
+        > = ssz_rs::deserialize(&light_client_finality_update).unwrap();
+
+        let pubkeys: Vector<BlsPublicKey, 512> = ssz_rs::deserialize(&pubkeys).unwrap();
+
+        serde_json::to_writer_pretty(fs::File::create("step_update.json").unwrap(), &update)
+            .unwrap();
+        let committee = ethereum_consensus_types::SyncCommittee {
+            pubkeys: pubkeys.clone(),
+            aggregate_pubkey: Default::default(),
+        };
+        let aggregate_pk = committee
+            .aggregate_pubkey(&update.sync_aggregate.sync_committee_bits)
+            .unwrap();
+        aggregate_pk
+            .verify_signature(
+                compute_signing_root(
+                    update.attested_header.clone().hash_tree_root().unwrap(),
+                    domain,
+                )
+                .unwrap()
+                .as_ref(),
+                &update.sync_aggregate.sync_committee_signature,
+            )
+            .unwrap();
+
+        let witness = step_args_from_finality_update(update, pubkeys, domain)
+            .await
+            .unwrap();
+
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -198,7 +253,7 @@ mod tests {
     #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
         const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_21.json";
-        const K: u32 = 21;
+        const K: u32 = 20;
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(

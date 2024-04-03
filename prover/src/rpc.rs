@@ -129,6 +129,11 @@ where
         .map_err(|e| {
             JsonRpcError::internal(format!("Failed to acquire concurrency lock: {}", e))
         })?;
+        
+
+    // write params to "step_input.json"
+    let file = std::fs::File::create("step_input.json").unwrap();
+    serde_json::to_writer(&file, &params).unwrap();
 
     let GenProofStepParams {
         light_client_finality_update,
@@ -146,7 +151,7 @@ where
         params,
         state.step.pk(),
         witness,
-    )?;
+    ).expect("step snark failed");
 
     let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
         state.params.get(state.step_verifier.degree()).unwrap(),
@@ -154,8 +159,7 @@ where
         state.step_verifier.config_path(),
         None,
         &vec![snark],
-    )
-    .map_err(JsonRpcError::internal)?;
+    ).expect("step verifier snark failed");
 
     let calldata = encode_calldata(&instances, &proof);
 

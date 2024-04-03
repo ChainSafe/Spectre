@@ -4,9 +4,9 @@ members = [
     "prover",
     "preprocessor",
     "eth-types",
-    "contract-tests",
-    "test-utils",
-    "contracts",
+    # "contract-tests",
+    # "test-utils",
+    # "contracts",
 ]
 
 resolver = "2"
