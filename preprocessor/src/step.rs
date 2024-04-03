@@ -184,7 +184,7 @@ mod tests {
         let client =
             MainnetClient::new(Url::parse("https://lodestar-holesky.chainsafe.io").unwrap());
 
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        // let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         use serde::{Deserialize, Serialize};
         #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,7 +200,7 @@ mod tests {
             light_client_finality_update,
             domain,
             pubkeys,
-        } = serde_json::from_reader(std::fs::File::open("../step_input.json").unwrap()).unwrap();
+        } = serde_json::from_reader(std::fs::File::open("../step_input_holesky_sepolia.json.json").unwrap()).unwrap();
 
         let mut update: LightClientFinalityUpdate<
             512,
@@ -230,7 +230,7 @@ mod tests {
                 .as_ref(),
                 &update.sync_aggregate.sync_committee_signature,
             )
-            .unwrap();
+            .expect("signature verification failed");
 
         let witness = step_args_from_finality_update(update, pubkeys, domain)
             .await
