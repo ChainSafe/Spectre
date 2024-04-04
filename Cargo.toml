@@ -67,7 +67,7 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 ] }
 
 # ethereum types
-ethereum-types = { package = "types", git = "https://github.com/sigp/lighthouse/", tag = "v5.1.3", default-features = false}
+ethereum-types = { package = "types", git = "https://github.com/sigp/lighthouse/", tag = "v5.1.3", default-features = false, features = ["legacy-arith"] }
 tree_hash = { version = "0.5" }
 eth2 = { package = "eth2", git = "https://github.com/sigp/lighthouse/", tag =  "v5.1.3" }
 merkle_proof = { package = "merkle_proof", git = "https://github.com/sigp/lighthouse/", tag =  "v5.1.3" }
