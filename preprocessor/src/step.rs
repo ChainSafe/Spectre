@@ -91,8 +91,8 @@ pub async fn step_args_from_finality_update<S: Spec>(
         .map(|pk| {
             bls::PublicKey::uncompress(&pk.serialize())
                 .map_err(|e| eyre::eyre!("Failed to uncompress public key: {:?}", e))
-                .and_then(|k| Ok(bls::PublicKey::serialize(&k)))
-                .and_then(|b| Ok(b.to_vec()))
+                .map(|k| bls::PublicKey::serialize(&k))
+                .map(|b| b.to_vec())
         })
         .collect::<Result<Vec<Vec<u8>>, _>>()?;
 
@@ -154,7 +154,7 @@ pub async fn step_args_from_finality_update<S: Spec>(
     assert!(
         merkle_proof::verify_merkle_proof(
             finalized_header_beacon.tree_hash_root(),
-            &finality_update.finality_branch(),
+            finality_update.finality_branch(),
             S::FINALIZED_HEADER_DEPTH,
             S::FINALIZED_HEADER_INDEX,
             attested_header_beacon.state_root,

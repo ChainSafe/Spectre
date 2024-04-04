@@ -158,7 +158,6 @@ fn to_sync_ciruit_witness(
         .sync_aggregate
         .sync_committee_bits
         .iter()
-        .map(|b| b)
         .collect();
     args.attested_header = BeaconBlockHeader {
         slot: light_client_update.attested_header.beacon.slot,

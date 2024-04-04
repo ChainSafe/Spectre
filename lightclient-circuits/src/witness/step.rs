@@ -63,7 +63,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         );
 
         let mut finalized_header = BeaconBlockHeader::empty();
-        finalized_header.body_root = beacon_block_body_root.try_into().unwrap();
+        finalized_header.body_root = beacon_block_body_root.into();
 
         let finality_header_root = finalized_header.tree_hash_root();
 
@@ -76,11 +76,9 @@ impl<S: Spec> Default for SyncStepArgs<S> {
         );
 
         let mut attested_header = BeaconBlockHeader::empty();
-        attested_header.state_root = attested_state_root.try_into().unwrap();
+        attested_header.state_root = attested_state_root.into();
 
-        let signing_root = attested_header
-            .tree_hash_root()
-            .signing_root(DOMAIN.try_into().unwrap());
+        let signing_root = attested_header.tree_hash_root().signing_root(DOMAIN.into());
 
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
 

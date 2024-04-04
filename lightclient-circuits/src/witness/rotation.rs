@@ -61,7 +61,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
         );
 
         let mut finalized_header = BeaconBlockHeader::empty();
-        finalized_header.state_root = state_root.try_into().unwrap();
+        finalized_header.state_root = state_root.into();
 
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)

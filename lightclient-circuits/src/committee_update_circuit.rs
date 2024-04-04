@@ -279,12 +279,7 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
     use halo2_base::{
-        halo2_proofs::{
-            dev::MockProver,
-            halo2curves::bn256::Fr,
-            plonk::ProvingKey,
-            poly::{commitment::Params, kzg::commitment::ParamsKZG},
-        },
+        halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr, plonk::ProvingKey},
         utils::fs::gen_srs,
     };
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};

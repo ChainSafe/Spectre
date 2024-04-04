@@ -205,7 +205,7 @@ mod tests {
 
         // Magic swap of sync committee branch
         finalized_sync_committee_branch.insert(0, c.sync_committee_branch[0].clone());
-        finalized_sync_committee_branch[1] = c.sync_committee_branch[1].clone();
+        finalized_sync_committee_branch[1].clone_from(&c.sync_committee_branch[1]);
         c.sync_committee_branch = finalized_sync_committee_branch;
         // Replaces the attested header with step circuits finalized header
         c.finalized_header = s.finalized_header.clone();

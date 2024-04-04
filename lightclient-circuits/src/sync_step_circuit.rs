@@ -435,10 +435,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
 mod tests {
     use std::fs;
 
-    use crate::{
-        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
-        witness::SyncStepArgs,
-    };
+    use crate::{aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning};
 
     use super::*;
     use ark_std::{end_timer, start_timer};
