@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 use core::fmt::Debug;
-
+use ethereum_types::{EthSpec, MainnetEthSpec, MinimalEthSpec};
 /// Beacon chain specification.
 pub trait Spec: 'static + Sized + Copy + Default + Debug {
+    type EthSpec: EthSpec;
+
     const NAME: &'static str;
     const SYNC_COMMITTEE_SIZE: usize;
     const SYNC_COMMITTEE_ROOT_INDEX: usize;
@@ -26,6 +28,8 @@ pub trait Spec: 'static + Sized + Copy + Default + Debug {
 pub struct Minimal;
 
 impl Spec for Minimal {
+    type EthSpec = MinimalEthSpec;
+
     const NAME: &'static str = "minimal";
     const SYNC_COMMITTEE_SIZE: usize = 32;
     const SYNC_COMMITTEE_DEPTH: usize = 5;
@@ -47,6 +51,8 @@ impl Spec for Minimal {
 pub struct Testnet;
 
 impl Spec for Testnet {
+    type EthSpec = MainnetEthSpec;
+
     const NAME: &'static str = "testnet";
     const SYNC_COMMITTEE_SIZE: usize = 512;
     const SYNC_COMMITTEE_DEPTH: usize = 5;
@@ -67,6 +73,8 @@ impl Spec for Testnet {
 pub struct Mainnet;
 
 impl Spec for Mainnet {
+    type EthSpec = MainnetEthSpec;
+
     const NAME: &'static str = "mainnet";
     const SYNC_COMMITTEE_SIZE: usize = 512;
     const SYNC_COMMITTEE_DEPTH: usize = 5;

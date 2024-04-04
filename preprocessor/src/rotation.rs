@@ -9,12 +9,12 @@ use itertools::Itertools;
 
 use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
-use ethereum_types::{EthSpec, LightClientUpdate};
+use ethereum_types::LightClientUpdate;
 use lightclient_circuits::witness::CommitteeUpdateArgs;
 use tree_hash::TreeHash;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
-pub async fn fetch_rotation_args<S: Spec, T: EthSpec>(
+pub async fn fetch_rotation_args<S: Spec>(
     client: &BeaconNodeHttpClient,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
@@ -42,13 +42,13 @@ where
         slot, period
     );
 
-    let update = get_light_client_update_at_period::<S, T>(client, period).await?;
+    let update = get_light_client_update_at_period::<S>(client, period).await?;
     rotation_args_from_update(&update).await
 }
 
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
-pub async fn rotation_args_from_update<S: Spec, T: EthSpec>(
-    update: &LightClientUpdate<T>,
+pub async fn rotation_args_from_update<S: Spec>(
+    update: &LightClientUpdate<S::EthSpec>,
 ) -> eyre::Result<CommitteeUpdateArgs<S>>
 where
     [(); S::SYNC_COMMITTEE_SIZE]:,
@@ -134,9 +134,7 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
-            .await
-            .unwrap();
+        let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
         let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
@@ -170,9 +168,7 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let witness = fetch_rotation_args::<Testnet, MainnetEthSpec>(&client)
-            .await
-            .unwrap();
+        let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

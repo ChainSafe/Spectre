@@ -32,7 +32,7 @@ use crate::rpc_api::{
     RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
 };
 
-pub(crate) fn jsonrpc_server<S: eth_types::Spec, T: EthSpec>(
+pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
     state: ProverState,
 ) -> JsonRpcServer<JsonRpcMapRouter>
 where
@@ -48,16 +48,16 @@ where
         .with_data(Data::new(state))
         .with_method(
             RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
-            gen_evm_proof_committee_update_handler::<S, T>,
+            gen_evm_proof_committee_update_handler::<S>,
         )
         .with_method(
             RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
-            gen_evm_proof_sync_step_compressed_handler::<S, T>,
+            gen_evm_proof_sync_step_compressed_handler::<S>,
         )
         .finish_unwrapped()
 }
 
-pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec, T: EthSpec>(
+pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
 ) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
@@ -87,13 +87,13 @@ where
     let fork_name = ForkName::from_str(&fork_name)
         .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
 
-    let update =
-        LightClientUpdate::<T>::from_ssz_bytes(&light_client_update, fork_name).map_err(|e| {
-            JsonRpcError::internal(format!(
-                "Failed to deserialize light client update: {:?}",
-                e
-            ))
-        })?;
+    let update = LightClientUpdate::<S::EthSpec>::from_ssz_bytes(&light_client_update, fork_name)
+        .map_err(|e| {
+        JsonRpcError::internal(format!(
+            "Failed to deserialize light client update: {:?}",
+            e
+        ))
+    })?;
     let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
@@ -126,7 +126,7 @@ where
     })
 }
 
-pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec, T: EthSpec>(
+pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofStepParams>,
 ) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError>
@@ -155,15 +155,20 @@ where
     let fork_name = ForkName::from_str(&fork_name)
         .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
 
-    let update =
-        LightClientFinalityUpdate::<T>::from_ssz_bytes(&light_client_finality_update, fork_name)
-            .map_err(|e| {
-                JsonRpcError::internal(format!(
-                    "Failed to deserialize light client finality update: {:?}",
-                    e
-                ))
-            })?;
-    let pubkeys = FixedVector::<PublicKeyBytes, T::SyncCommitteeSize>::from_ssz_bytes(&pubkeys)
+    let update = LightClientFinalityUpdate::<S::EthSpec>::from_ssz_bytes(
+        &light_client_finality_update,
+        fork_name,
+    )
+    .map_err(|e| {
+        JsonRpcError::internal(format!(
+            "Failed to deserialize light client finality update: {:?}",
+            e
+        ))
+    })?;
+    let pubkeys =
+        FixedVector::<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>::from_ssz_bytes(
+            &pubkeys,
+        )
         .map_err(|e| JsonRpcError::internal(format!("Failed to deserialize pubkeys: {:?}", e)))?;
     let witness = step_args_from_finality_update(update, &pubkeys, domain).await?;
     let params = state.params.get(state.step.degree()).unwrap();
@@ -207,7 +212,7 @@ where
     )?)
 }
 
-pub async fn run_rpc<S: eth_types::Spec, T: EthSpec>(
+pub async fn run_rpc<S: eth_types::Spec>(
     port: usize,
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
@@ -226,7 +231,7 @@ where
     let timer = start_timer!(|| "Load Prover State and Context");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);
     end_timer!(timer);
-    let rpc_server = Arc::new(jsonrpc_server::<S, T>(state));
+    let rpc_server = Arc::new(jsonrpc_server::<S>(state));
     let router = Router::new()
         .route("/rpc", post(handler))
         .with_state(rpc_server);

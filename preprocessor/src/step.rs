@@ -16,7 +16,7 @@ use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKeyB
 use tree_hash::{Hash256, TreeHash};
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
-pub async fn fetch_step_args<S: Spec, T: EthSpec>(
+pub async fn fetch_step_args<S: Spec>(
     client: &BeaconNodeHttpClient,
 ) -> eyre::Result<SyncStepArgs<S>>
 where
@@ -28,7 +28,7 @@ where
 {
     //TODO Should probably parameterise SyncStepArgs<S> as <S,T>
     let finality_update = client
-        .get_beacon_light_client_finality_update::<T>()
+        .get_beacon_light_client_finality_update::<S::EthSpec>()
         .await
         .map_err(|e| eyre::eyre!("Failed to get finality update: {:?}", e))?
         .ok_or(eyre::eyre!("Failed to get finality update: None"))?
@@ -43,7 +43,7 @@ where
     };
 
     let bootstrap = client
-        .get_light_client_bootstrap::<T>(block_root)
+        .get_light_client_bootstrap::<S::EthSpec>(block_root)
         .await
         .map_err(|e| eyre::eyre!("Failed to get bootstrap: {:?}", e))?
         .ok_or(eyre::eyre!("Failed to get bootstrap: None"))?
@@ -72,7 +72,7 @@ where
         .data
         .genesis_validators_root;
 
-    let domain = T::default_spec().compute_domain(
+    let domain = S::EthSpec::default_spec().compute_domain(
         Domain::SyncCommittee,
         fork_version,
         genesis_validators_root,
@@ -82,9 +82,9 @@ where
 }
 
 /// Converts a [`LightClientFinalityUpdate`] to a [`SyncStepArgs`] witness.
-pub async fn step_args_from_finality_update<S: Spec, T: EthSpec>(
-    finality_update: LightClientFinalityUpdate<T>,
-    pubkeys_compressed: &FixedVector<PublicKeyBytes, T::SyncCommitteeSize>,
+pub async fn step_args_from_finality_update<S: Spec>(
+    finality_update: LightClientFinalityUpdate<S::EthSpec>,
+    pubkeys_compressed: &FixedVector<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>,
     domain: [u8; 32],
 ) -> eyre::Result<SyncStepArgs<S>> {
     let pubkeys_uncompressed = pubkeys_compressed
@@ -217,9 +217,7 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let witness = fetch_step_args::<Testnet, MainnetEthSpec>(&client)
-            .await
-            .unwrap();
+        let witness = fetch_step_args::<Testnet>(&client).await.unwrap();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -252,9 +250,7 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let witness = fetch_step_args::<Testnet, MainnetEthSpec>(&client)
-            .await
-            .unwrap();
+        let witness = fetch_step_args::<Testnet>(&client).await.unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

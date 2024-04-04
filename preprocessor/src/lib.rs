@@ -21,10 +21,10 @@ pub use rotation::*;
 pub use step::*;
 use url::Url;
 
-pub async fn get_light_client_update_at_period<S: Spec, T: EthSpec>(
+pub async fn get_light_client_update_at_period<S: Spec>(
     client: &BeaconNodeHttpClient,
     period: u64,
-) -> eyre::Result<LightClientUpdate<T>> {
+) -> eyre::Result<LightClientUpdate<S::EthSpec>> {
     let mut path = Url::parse(client.as_ref()).unwrap();
 
     path.path_segments_mut()
@@ -43,15 +43,16 @@ pub async fn get_light_client_update_at_period<S: Spec, T: EthSpec>(
         .await
         .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?;
 
-    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<T>>> = resp.json().await?;
+    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<S::EthSpec>>> =
+        resp.json().await?;
 
     assert!(updates.len() == 1, "should only get one update");
     Ok(updates.pop().unwrap().data)
 }
 
-pub async fn light_client_update_to_args<S: Spec, T: EthSpec>(
-    update: &LightClientUpdate<T>,
-    pubkeys_compressed: &FixedVector<PublicKeyBytes, T::SyncCommitteeSize>,
+pub async fn light_client_update_to_args<S: Spec>(
+    update: &LightClientUpdate<S::EthSpec>,
+    pubkeys_compressed: &FixedVector<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>,
     domain: [u8; 32],
 ) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)>
 where
@@ -145,12 +146,9 @@ mod tests {
 
         // Fetch light client update and create circuit arguments
         let (s, mut c) = {
-            let update = get_light_client_update_at_period::<Testnet, MainnetEthSpec>(
-                &client,
-                period.into(),
-            )
-            .await
-            .unwrap();
+            let update = get_light_client_update_at_period::<Testnet>(&client, period.into())
+                .await
+                .unwrap();
 
             let block_root = block.canonical_root();
 
@@ -184,13 +182,9 @@ mod tests {
                 genesis_validators_root,
             );
 
-            light_client_update_to_args::<Testnet, MainnetEthSpec>(
-                &update,
-                pubkeys_compressed,
-                domain.into(),
-            )
-            .await
-            .unwrap()
+            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain.into())
+                .await
+                .unwrap()
         };
 
         let mut finalized_sync_committee_branch = {
