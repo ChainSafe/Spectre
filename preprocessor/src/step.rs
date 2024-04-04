@@ -59,15 +59,15 @@ where
     let fork_version = client
         .get_beacon_states_fork(StateId::Root(attested_state_id))
         .await
-        .unwrap()
-        .unwrap()
+        .map_err(|e| eyre::eyre!("Failed to get fork version: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get fork version: None"))?
         .data
         .current_version;
 
     let genesis_validators_root = client
         .get_beacon_genesis()
         .await
-        .unwrap()
+        .map_err(|e| eyre::eyre!("Failed to get genesis validators root: {:?}", e))?
         .data
         .genesis_validators_root;
 
@@ -90,11 +90,11 @@ pub async fn step_args_from_finality_update<S: Spec>(
         .iter()
         .map(|pk| {
             bls::PublicKey::uncompress(&pk.serialize())
-                .unwrap()
-                .serialize()
-                .to_vec()
+                .map_err(|e| eyre::eyre!("Failed to uncompress public key: {:?}", e))
+                .and_then(|k| Ok(bls::PublicKey::serialize(&k)))
+                .and_then(|b| Ok(b.to_vec()))
         })
-        .collect_vec();
+        .collect::<Result<Vec<Vec<u8>>, _>>()?;
 
     let (execution_payload_root, execution_payload_branch) = match finality_update {
         LightClientFinalityUpdate::Altair(_) => unimplemented!(),
@@ -173,7 +173,6 @@ pub async fn step_args_from_finality_update<S: Spec>(
             .sync_aggregate()
             .sync_committee_bits
             .iter()
-            // .by_vals()
             .collect_vec(),
         attested_header: attested_header_beacon,
         finalized_header: finalized_header_beacon,

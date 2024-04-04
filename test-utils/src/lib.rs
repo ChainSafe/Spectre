@@ -235,7 +235,6 @@ pub fn load_snappy_ssz_bytes(path: &Path) -> Vec<u8> {
 pub fn load_snappy_ssz<T: ssz::Decode>(path: &str) -> Option<T> {
     let path = Path::new(path);
     if !path.exists() {
-        // panic!("Path to snappy_ssz file does not exist: {:?} from dir {:?}", path, std::env::current_dir());
         return None;
     }
     let buffer = load_snappy_ssz_bytes(path);

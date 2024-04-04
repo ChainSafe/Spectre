@@ -25,7 +25,7 @@ pub async fn get_light_client_update_at_period<S: Spec>(
     client: &BeaconNodeHttpClient,
     period: u64,
 ) -> eyre::Result<LightClientUpdate<S::EthSpec>> {
-    let mut path = Url::parse(client.as_ref()).unwrap();
+    let mut path = Url::parse(client.as_ref()).map_err(|e| eyre::eyre!("Invalid URL: {:?}", e))?;
 
     path.path_segments_mut()
         .map_err(|()| eyre::eyre!("Invalid URL: {}", client.as_ref()))?

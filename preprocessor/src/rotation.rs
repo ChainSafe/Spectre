@@ -29,8 +29,8 @@ where
     let block = client
         .get_beacon_headers_block_id(BlockId::Finalized)
         .await
-        .unwrap()
-        .unwrap()
+        .map_err(|e| eyre::eyre!("Failed to get block id: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get block id: None"))?
         .data
         .header
         .message;
