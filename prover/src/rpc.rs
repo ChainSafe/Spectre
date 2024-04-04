@@ -34,16 +34,7 @@ use crate::rpc_api::{
 
 pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
     state: ProverState,
-) -> JsonRpcServer<JsonRpcMapRouter>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> JsonRpcServer<JsonRpcMapRouter> {
     JsonRpcServer::new()
         .with_data(Data::new(state))
         .with_method(
@@ -60,16 +51,7 @@ where
 pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
-) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError> {
     let _permit = state
         .concurrency
         .clone()
@@ -129,13 +111,7 @@ where
 pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofStepParams>,
-) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-{
+) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError> {
     let _permit = state
         .concurrency
         .clone()
@@ -217,16 +193,7 @@ pub async fn run_rpc<S: eth_types::Spec>(
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
     concurrency: usize,
-) -> Result<(), eyre::Error>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> Result<(), eyre::Error> {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     let timer = start_timer!(|| "Load Prover State and Context");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);

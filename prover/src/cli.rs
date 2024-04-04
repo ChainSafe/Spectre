@@ -25,16 +25,7 @@ use halo2_solidity_verifier_new::{
 pub(crate) async fn spec_app<S: eth_types::Spec>(
     proof: ProofCmd,
     base_args: &BaseArgs,
-) -> eyre::Result<()>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> eyre::Result<()> {
     match proof {
         ProofCmd::SyncStep {
             operation,

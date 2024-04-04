@@ -18,14 +18,7 @@ use tree_hash::{Hash256, TreeHash};
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
 pub async fn fetch_step_args<S: Spec>(
     client: &BeaconNodeHttpClient,
-) -> eyre::Result<SyncStepArgs<S>>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-{
+) -> eyre::Result<SyncStepArgs<S>> {
     let finality_update = client
         .get_beacon_light_client_finality_update::<S::EthSpec>()
         .await

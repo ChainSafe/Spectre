@@ -198,10 +198,7 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     pub fn get_instances(
         args: &witness::CommitteeUpdateArgs<S>,
         limb_bits: usize,
-    ) -> Vec<Vec<bn256::Fr>>
-    where
-        [(); S::SYNC_COMMITTEE_SIZE]:,
-    {
+    ) -> Vec<Vec<bn256::Fr>> {
         let poseidon_commitment =
             poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed, limb_bits);
 

@@ -54,16 +54,7 @@ pub async fn light_client_update_to_args<S: Spec>(
     update: &LightClientUpdate<S::EthSpec>,
     pubkeys_compressed: &FixedVector<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>,
     domain: [u8; 32],
-) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)> {
     let finality_update = match update {
         LightClientUpdate::Altair(_) => unimplemented!(),
         LightClientUpdate::Capella(update) => {

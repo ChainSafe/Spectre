@@ -16,16 +16,7 @@ use tree_hash::TreeHash;
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
 pub async fn fetch_rotation_args<S: Spec>(
     client: &BeaconNodeHttpClient,
-) -> eyre::Result<CommitteeUpdateArgs<S>>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> eyre::Result<CommitteeUpdateArgs<S>> {
     let block = client
         .get_beacon_headers_block_id(BlockId::Finalized)
         .await
@@ -49,16 +40,7 @@ where
 /// Converts a [`LightClientUpdateCapella`] to a [`CommitteeUpdateArgs`] witness.
 pub async fn rotation_args_from_update<S: Spec>(
     update: &LightClientUpdate<S::EthSpec>,
-) -> eyre::Result<CommitteeUpdateArgs<S>>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> eyre::Result<CommitteeUpdateArgs<S>> {
     let update = update.clone();
     let next_sync_committee = update.next_sync_committee().clone();
 
