@@ -26,7 +26,6 @@ where
     [(); S::BYTES_PER_LOGS_BLOOM]:,
     [(); S::MAX_EXTRA_DATA_BYTES]:,
 {
-    //TODO Should probably parameterise SyncStepArgs<S> as <S,T>
     let finality_update = client
         .get_beacon_light_client_finality_update::<S::EthSpec>()
         .await
