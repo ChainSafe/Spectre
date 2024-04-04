@@ -195,7 +195,6 @@ mod tests {
 
     use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
-    use ethereum_types::MainnetEthSpec;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
