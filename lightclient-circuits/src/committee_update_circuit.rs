@@ -29,7 +29,6 @@ use halo2_ecc::{
     fields::FieldChip,
 };
 use itertools::Itertools;
-// use ssz_rs::Merkleized;
 use std::{env::var, iter, marker::PhantomData, vec};
 use tree_hash::TreeHash;
 

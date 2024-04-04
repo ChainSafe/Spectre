@@ -56,13 +56,6 @@ pub(crate) async fn utils_cli(method: UtilsCmd) -> eyre::Result<()> {
                 })
                 .collect_vec();
 
-            // let pubkeys_uncompressed = bootstrap
-            //     .current_sync_committee()
-            //     .pubkeys
-            //     .iter()
-            //     .map(|pk| pk.decompressed_bytes())
-            //     .collect_vec();
-
             let ssz_root = bootstrap.current_sync_committee().pubkeys.tree_hash_root();
 
             println!("SSZ root: {:?}", hex::encode(ssz_root.0));
