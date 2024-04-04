@@ -4,6 +4,9 @@
 
 use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
+use ethereum_types::{
+    EthSpec, FixedVector, ForkName, LightClientFinalityUpdate, LightClientUpdate, PublicKeyBytes,
+};
 use ethers::prelude::*;
 use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
@@ -17,7 +20,9 @@ use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
 use snark_verifier_sdk::evm::encode_calldata;
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use spectre_prover::prover::ProverState;
+use ssz::Decode;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
@@ -29,16 +34,7 @@ use crate::rpc_api::{
 
 pub(crate) fn jsonrpc_server<S: eth_types::Spec>(
     state: ProverState,
-) -> JsonRpcServer<JsonRpcMapRouter>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> JsonRpcServer<JsonRpcMapRouter> {
     JsonRpcServer::new()
         .with_data(Data::new(state))
         .with_method(
@@ -55,16 +51,7 @@ where
 pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofCommitteeUpdateParams>,
-) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError> {
     let _permit = state
         .concurrency
         .clone()
@@ -76,9 +63,19 @@ where
 
     let GenProofCommitteeUpdateParams {
         light_client_update,
+        fork_name,
     } = params;
 
-    let update = ssz_rs::deserialize(&light_client_update)?;
+    let fork_name = ForkName::from_str(&fork_name)
+        .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
+
+    let update = LightClientUpdate::<S::EthSpec>::from_ssz_bytes(&light_client_update, fork_name)
+        .map_err(|e| {
+        JsonRpcError::internal(format!(
+            "Failed to deserialize light client update: {:?}",
+            e
+        ))
+    })?;
     let witness = rotation_args_from_update(&update).await?;
     let params = state.params.get(state.committee_update.degree()).unwrap();
 
@@ -114,13 +111,7 @@ where
 pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
     Params(params): Params<GenProofStepParams>,
-) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-{
+) -> Result<SyncStepCompressedEvmProofResult, JsonRpcError> {
     let _permit = state
         .concurrency
         .clone()
@@ -134,11 +125,28 @@ where
         light_client_finality_update,
         domain,
         pubkeys,
+        fork_name,
     } = params;
 
-    let update = ssz_rs::deserialize(&light_client_finality_update)?;
-    let pubkeys = ssz_rs::deserialize(&pubkeys)?;
-    let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+    let fork_name = ForkName::from_str(&fork_name)
+        .map_err(|e| JsonRpcError::internal(format!("Failed to parse fork version: {}", e)))?;
+
+    let update = LightClientFinalityUpdate::<S::EthSpec>::from_ssz_bytes(
+        &light_client_finality_update,
+        fork_name,
+    )
+    .map_err(|e| {
+        JsonRpcError::internal(format!(
+            "Failed to deserialize light client finality update: {:?}",
+            e
+        ))
+    })?;
+    let pubkeys =
+        FixedVector::<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>::from_ssz_bytes(
+            &pubkeys,
+        )
+        .map_err(|e| JsonRpcError::internal(format!("Failed to deserialize pubkeys: {:?}", e)))?;
+    let witness = step_args_from_finality_update(update, &pubkeys, domain).await?;
     let params = state.params.get(state.step.degree()).unwrap();
 
     let snark = gen_uncompressed_snark::<StepCircuit<S, Fr>>(
@@ -185,16 +193,7 @@ pub async fn run_rpc<S: eth_types::Spec>(
     config_dir: impl AsRef<Path>,
     build_dir: impl AsRef<Path>,
     concurrency: usize,
-) -> Result<(), eyre::Error>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
+) -> Result<(), eyre::Error> {
     let tcp_listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     let timer = start_timer!(|| "Load Prover State and Context");
     let state = ProverState::new::<S>(config_dir.as_ref(), build_dir.as_ref(), concurrency);

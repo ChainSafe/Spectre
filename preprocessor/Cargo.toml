@@ -14,29 +14,31 @@ required-features = ["test-gen"]
 
 
 [dependencies]
-ssz_rs.workspace = true
 halo2curves.workspace = true
 group.workspace = true
-beacon-api-client.workspace = true
 
 # misc
 eyre = "0.6"
 tokio = { version = "1", features = ["full"] }
+url = "2.2.2"
 
 hex.workspace = true
 log.workspace = true
 itertools.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-ethereum-consensus-types.workspace = true
+
+ethereum-types = {workspace = true, default-features = false }
+eth2.workspace = true
+tree_hash.workspace = true
+merkle_proof.workspace = true
+
 # local
 eth-types.workspace = true
 lightclient-circuits.workspace = true
 reqwest = "0.11.22"
 
-# for test gen binary
-ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f", optional = true }
-blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ], optional = true }
+blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ]}
 
 [dev-dependencies]
 halo2-base.workspace = true
@@ -44,4 +46,4 @@ snark-verifier-sdk.workspace = true
 ark-std.workspace = true
 
 [features]
-test-gen = ["ethereum-consensus", "blst"]
+test-gen = []

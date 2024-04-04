@@ -4,154 +4,178 @@
 
 use std::marker::PhantomData;
 
-use beacon_api_client::Client;
-use beacon_api_client::{BlockId, ClientTypes, StateId};
 use eth_types::Spec;
-use ethereum_consensus_types::bls::BlsPublicKey;
-use ethereum_consensus_types::signing::{compute_domain, DomainType};
-use ethereum_consensus_types::{ForkData, LightClientBootstrap, LightClientFinalityUpdate};
 use itertools::Itertools;
 use lightclient_circuits::witness::SyncStepArgs;
-use ssz_rs::Vector;
-use ssz_rs::{Merkleized, Node};
 
-use crate::{get_light_client_bootstrap, get_light_client_finality_update};
+use blst::min_pk as bls;
+use eth2::types::StateId;
+use eth2::BeaconNodeHttpClient;
+use ethereum_types::Domain;
+use ethereum_types::{EthSpec, FixedVector, LightClientFinalityUpdate, PublicKeyBytes};
+use tree_hash::{Hash256, TreeHash};
 
 /// Fetches the latest `LightClientFinalityUpdate`` and the current sync committee (from LightClientBootstrap) and converts it to a [`SyncStepArgs`] witness.
-pub async fn fetch_step_args<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
-) -> eyre::Result<SyncStepArgs<S>>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-{
-    let finality_update = get_light_client_finality_update(client).await?;
-    let block_root = client
-        .get_beacon_block_root(BlockId::Slot(finality_update.finalized_header.beacon.slot))
+pub async fn fetch_step_args<S: Spec>(
+    client: &BeaconNodeHttpClient,
+) -> eyre::Result<SyncStepArgs<S>> {
+    let finality_update = client
+        .get_beacon_light_client_finality_update::<S::EthSpec>()
         .await
-        .unwrap();
-    let bootstrap: LightClientBootstrap<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    > = get_light_client_bootstrap(client, block_root).await?;
+        .map_err(|e| eyre::eyre!("Failed to get finality update: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get finality update: None"))?
+        .data;
 
-    let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
+    let block_root = match &finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(header) => {
+            header.finalized_header.beacon.canonical_root()
+        }
+        LightClientFinalityUpdate::Deneb(header) => header.finalized_header.beacon.canonical_root(),
+    };
 
-    let attested_state_id = finality_update.attested_header.beacon.state_root;
+    let bootstrap = client
+        .get_light_client_bootstrap::<S::EthSpec>(block_root)
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get bootstrap: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get bootstrap: None"))?
+        .data;
+
+    let pubkeys_compressed = &bootstrap.current_sync_committee().pubkeys;
+
+    let attested_state_id = match &finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(header) => header.attested_header.beacon.state_root,
+        LightClientFinalityUpdate::Deneb(header) => header.attested_header.beacon.state_root,
+    };
 
     let fork_version = client
-        .get_fork(StateId::Root(attested_state_id))
-        .await?
+        .get_beacon_states_fork(StateId::Root(attested_state_id))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get fork version: {:?}", e))?
+        .ok_or(eyre::eyre!("Failed to get fork version: None"))?
+        .data
         .current_version;
-    let genesis_validators_root = client.get_genesis_details().await?.genesis_validators_root;
-    let fork_data = ForkData {
-        genesis_validators_root,
-        fork_version,
-    };
-    let domain = compute_domain(DomainType::SyncCommittee, &fork_data)?;
 
-    step_args_from_finality_update(finality_update, pubkeys_compressed, domain).await
+    let genesis_validators_root = client
+        .get_beacon_genesis()
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get genesis validators root: {:?}", e))?
+        .data
+        .genesis_validators_root;
+
+    let domain = S::EthSpec::default_spec().compute_domain(
+        Domain::SyncCommittee,
+        fork_version,
+        genesis_validators_root,
+    );
+
+    step_args_from_finality_update(finality_update, pubkeys_compressed, domain.into()).await
 }
 
 /// Converts a [`LightClientFinalityUpdate`] to a [`SyncStepArgs`] witness.
 pub async fn step_args_from_finality_update<S: Spec>(
-    finality_update: LightClientFinalityUpdate<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
-    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+    finality_update: LightClientFinalityUpdate<S::EthSpec>,
+    pubkeys_compressed: &FixedVector<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>,
     domain: [u8; 32],
 ) -> eyre::Result<SyncStepArgs<S>> {
     let pubkeys_uncompressed = pubkeys_compressed
         .iter()
-        .map(|pk| pk.decompressed_bytes())
-        .collect_vec();
+        .map(|pk| {
+            bls::PublicKey::uncompress(&pk.serialize())
+                .map_err(|e| eyre::eyre!("Failed to uncompress public key: {:?}", e))
+                .map(|k| bls::PublicKey::serialize(&k))
+                .map(|b| b.to_vec())
+        })
+        .collect::<Result<Vec<Vec<u8>>, _>>()?;
 
-    let execution_payload_root = finality_update
-        .finalized_header
-        .execution
-        .clone()
-        .hash_tree_root()?
-        .to_vec();
-    let execution_payload_branch = finality_update
-        .finalized_header
-        .execution_branch
-        .iter()
-        .map(|n| n.0.to_vec())
-        .collect_vec();
+    let (execution_payload_root, execution_payload_branch) = match finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(ref header) => {
+            let finalized_header = &header.finalized_header;
+
+            (
+                finalized_header.execution.tree_hash_root().0.to_vec(),
+                finalized_header
+                    .execution_branch
+                    .iter()
+                    .map(|n| n.0.to_vec())
+                    .collect_vec(),
+            )
+        }
+        LightClientFinalityUpdate::Deneb(ref header) => {
+            let finalized_header = &header.finalized_header;
+
+            (
+                finalized_header.execution.tree_hash_root().0.to_vec(),
+                finalized_header
+                    .execution_branch
+                    .iter()
+                    .map(|n| n.0.to_vec())
+                    .collect_vec(),
+            )
+        }
+    };
+
+    let attested_header_beacon = match &finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(update) => update.attested_header.beacon.clone(),
+
+        LightClientFinalityUpdate::Deneb(update) => update.attested_header.beacon.clone(),
+    };
+
+    let finalized_header_beacon = match &finality_update {
+        LightClientFinalityUpdate::Altair(_) => unimplemented!(),
+        LightClientFinalityUpdate::Capella(update) => update.finalized_header.beacon.clone(),
+
+        LightClientFinalityUpdate::Deneb(update) => update.finalized_header.beacon.clone(),
+    };
 
     assert!(
-        ssz_rs::is_valid_merkle_branch(
-            Node::try_from(execution_payload_root.as_slice())?,
-            &execution_payload_branch,
+        merkle_proof::verify_merkle_proof(
+            Hash256::from_slice(&execution_payload_root),
+            &execution_payload_branch
+                .iter()
+                .map(|n| Hash256::from_slice(n))
+                .collect_vec(),
             S::EXECUTION_STATE_ROOT_DEPTH,
             S::EXECUTION_STATE_ROOT_INDEX,
-            finality_update.finalized_header.beacon.body_root,
-        )
-        .is_ok(),
+            finalized_header_beacon.body_root,
+        ),
         "Execution payload merkle proof verification failed"
     );
     assert!(
-        ssz_rs::is_valid_merkle_branch(
-            finality_update
-                .finalized_header
-                .beacon
-                .clone()
-                .hash_tree_root()
-                .unwrap(),
-            &finality_update
-                .finality_branch
-                .iter()
-                .map(|n| n.as_ref())
-                .collect_vec(),
+        merkle_proof::verify_merkle_proof(
+            finalized_header_beacon.tree_hash_root(),
+            finality_update.finality_branch(),
             S::FINALIZED_HEADER_DEPTH,
             S::FINALIZED_HEADER_INDEX,
-            finality_update.attested_header.beacon.state_root,
-        )
-        .is_ok(),
+            attested_header_beacon.state_root,
+        ),
         "Finality merkle proof verification failed"
     );
 
     Ok(SyncStepArgs {
         signature_compressed: finality_update
-            .sync_aggregate
+            .sync_aggregate()
             .sync_committee_signature
-            .to_bytes()
+            .serialize()
             .to_vec(),
         pubkeys_uncompressed,
         pariticipation_bits: finality_update
-            .sync_aggregate
+            .sync_aggregate()
             .sync_committee_bits
             .iter()
-            .by_vals()
             .collect_vec(),
-        attested_header: finality_update.attested_header.beacon,
-        finalized_header: finality_update.finalized_header.beacon,
+        attested_header: attested_header_beacon,
+        finalized_header: finalized_header_beacon,
         finality_branch: finality_update
-            .finality_branch
+            .finality_branch()
             .iter()
             .map(|n| n.0.to_vec())
             .collect_vec(),
-        execution_payload_root: finality_update
-            .finalized_header
-            .execution
-            .clone()
-            .hash_tree_root()
-            .unwrap()
-            .to_vec(),
-        execution_payload_branch: finality_update
-            .finalized_header
-            .execution_branch
-            .iter()
-            .map(|n| n.0.to_vec())
-            .collect_vec(),
+        execution_payload_root,
+        execution_payload_branch,
         domain,
         _spec: PhantomData,
     })
@@ -159,6 +183,9 @@ pub async fn step_args_from_finality_update<S: Spec>(
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
@@ -171,16 +198,16 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
-    use reqwest::Url;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_step_args::<Testnet>(&client).await.unwrap();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -208,9 +235,12 @@ mod tests {
             &SyncStepArgs::<Testnet>::default(),
             None,
         );
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
+        let witness = fetch_step_args::<Testnet>(&client).await.unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

@@ -14,7 +14,7 @@ pub struct GenProofStepParams {
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_finality_update: Vec<u8>,
     pub pubkeys: Vec<u8>,
-
+    pub fork_name: String,
     pub domain: [u8; 32],
 }
 
@@ -22,6 +22,7 @@ pub struct GenProofStepParams {
 pub struct GenProofCommitteeUpdateParams {
     // Serializing as Vec<u8> so that we can differentiate between Mainnet, Testnet, Minimal at runtime
     pub light_client_update: Vec<u8>,
+    pub fork_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

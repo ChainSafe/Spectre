@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 use eth_types::Spec;
-use ethereum_consensus_types::signing::compute_signing_root;
-use ethereum_consensus_types::BeaconBlockHeader;
+use ethereum_types::{BeaconBlockHeader, SignedRoot};
 use ff::Field;
 use halo2curves::bls12_381::hash_to_curve::ExpandMsgXmd;
 use halo2curves::bls12_381::{hash_to_curve, Fr, G1, G2};
@@ -12,9 +11,8 @@ use halo2curves::group::Curve;
 use itertools::Itertools;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
-use ssz_rs::{Merkleized, Node};
 use std::marker::PhantomData;
-use std::ops::Deref;
+use tree_hash::TreeHash;
 
 use super::mock_root;
 
@@ -64,28 +62,23 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             S::EXECUTION_STATE_ROOT_INDEX,
         );
 
-        let mut finalized_header = BeaconBlockHeader {
-            body_root: Node::try_from(beacon_block_body_root.as_slice()).unwrap(),
-            ..Default::default()
-        };
+        let mut finalized_header = BeaconBlockHeader::empty();
+        finalized_header.body_root = beacon_block_body_root.into();
 
-        let finality_header_root = finalized_header.hash_tree_root().unwrap();
+        let finality_header_root = finalized_header.tree_hash_root();
 
         let finality_branch = vec![vec![0; 32]; S::FINALIZED_HEADER_DEPTH];
 
         let attested_state_root = mock_root(
-            finality_header_root.deref().to_vec(),
+            finality_header_root.0.to_vec(),
             &finality_branch,
             S::FINALIZED_HEADER_INDEX,
         );
 
-        let mut attested_header = BeaconBlockHeader {
-            state_root: Node::try_from(attested_state_root.as_slice()).unwrap(),
-            ..Default::default()
-        };
+        let mut attested_header = BeaconBlockHeader::empty();
+        attested_header.state_root = attested_state_root.into();
 
-        let signing_root =
-            compute_signing_root(attested_header.hash_tree_root().unwrap(), DOMAIN).unwrap();
+        let signing_root = attested_header.tree_hash_root().signing_root(DOMAIN.into());
 
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
 
@@ -93,7 +86,7 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             .map(|_| Fr::random(&mut rng))
             .collect_vec();
         let msg = <G2 as hash_to_curve::HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
-            signing_root.deref(),
+            signing_root.0,
             S::DST,
         )
         .to_affine();
