@@ -44,10 +44,8 @@ lazy_static = "1.4"
 getset = "0.1.2"
 rand_chacha = "0.3.0"
 
-
-
-
 [dev-dependencies]
+ark-std.workspace = true
 rstest = "0.18.2"
 test-utils = { workspace = true }
 
