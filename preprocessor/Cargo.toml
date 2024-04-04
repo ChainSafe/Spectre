@@ -38,8 +38,6 @@ eth-types.workspace = true
 lightclient-circuits.workspace = true
 reqwest = "0.11.22"
 
-# for test gen binary
-# ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f", optional = true }
 blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ]}
 
 [dev-dependencies]

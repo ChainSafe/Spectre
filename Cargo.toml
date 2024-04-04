@@ -92,7 +92,6 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 
 
 [patch.crates-io]
-ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 halo2-base = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }
 halo2-ecc = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }
 zkevm-hashes = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }

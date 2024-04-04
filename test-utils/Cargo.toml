@@ -13,7 +13,7 @@ halo2-base = { workspace = true }
 ethereum-types = {workspace = true, default-features = false }
 eth2.workspace = true
 tree_hash.workspace = true
-ethereum_ssz = { workspace = true, default-features = false }
+ethereum_ssz = { workspace = true }
 
 
 itertools = "0.11.0"
