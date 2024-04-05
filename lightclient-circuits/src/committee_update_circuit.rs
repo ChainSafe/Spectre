@@ -88,10 +88,8 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .collect_vec();
         let finalized_header_root = args
             .finalized_header
-            .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::InvalidInstances)?
-            .as_ref()
+            .tree_hash_root()
+            .0
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();

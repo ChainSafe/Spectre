@@ -63,20 +63,15 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
             &sync_committee_branch,
             S::SYNC_COMMITTEE_PUBKEYS_ROOT_INDEX,
         );
-        let finalized_header = BeaconBlockHeader {
-            state_root: state_root.as_slice().try_into().unwrap(),
-            ..Default::default()
-        };
+
+        let mut finalized_header = BeaconBlockHeader::empty();
+        finalized_header.state_root = state_root.into();
 
         let (finalized_header_multiproof, finalized_header_helper_indices) =
             beacon_header_multiproof_and_helper_indices(
                 &mut finalized_header.clone(),
                 &[S::HEADER_STATE_ROOT_INDEX],
             );
-
-        let mut finalized_header = BeaconBlockHeader::empty();
-        finalized_header.state_root = state_root.into();
-
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)

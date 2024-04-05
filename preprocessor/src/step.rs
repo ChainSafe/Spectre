@@ -7,8 +7,6 @@ use std::marker::PhantomData;
 use eth_types::Spec;
 use itertools::Itertools;
 use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
-use ssz_rs::Vector;
-use ssz_rs::{Merkleized, Node};
 
 use blst::min_pk as bls;
 use eth2::types::StateId;
@@ -160,13 +158,13 @@ pub async fn step_args_from_finality_update<S: Spec>(
     // Proof length is 3
     let (attested_header_multiproof, attested_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
-            &mut finality_update.attested_header.beacon.clone(),
+            &attested_header_beacon,
             &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
         );
     // Proof length is 4
     let (finalized_header_multiproof, finalized_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
-            &mut finality_update.finalized_header.beacon.clone(),
+            &finalized_header_beacon,
             &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
         );
 

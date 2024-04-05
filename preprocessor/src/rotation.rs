@@ -14,7 +14,6 @@ use log::debug;
 use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use ethereum_types::LightClientUpdate;
-use lightclient_circuits::witness::CommitteeUpdateArgs;
 use tree_hash::TreeHash;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
@@ -82,7 +81,7 @@ pub async fn rotation_args_from_update<S: Spec>(
 
     let (finalized_header_multiproof, finalized_header_helper_indices) =
         beacon_header_multiproof_and_helper_indices(
-            &mut update.finalized_header.beacon.clone(),
+            &finalized_header_beacon,
             &[S::HEADER_STATE_ROOT_INDEX],
         );
 
@@ -102,11 +101,8 @@ pub async fn rotation_args_from_update<S: Spec>(
 
 #[cfg(test)]
 mod tests {
-<<<<<<< HEAD
     use crate::get_light_client_bootstrap;
-=======
     use std::time::Duration;
->>>>>>> develop
 
     use super::*;
     use eth2::{SensitiveUrl, Timeouts};
@@ -116,11 +112,7 @@ mod tests {
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
-<<<<<<< HEAD
-    use reqwest::Url;
-=======
     use snark_verifier_sdk::CircuitExt;
->>>>>>> develop
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
@@ -160,9 +152,11 @@ mod tests {
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
         );
-<<<<<<< HEAD
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
         let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
         let mut finalized_sync_committee_branch = {
             let block_root = client
@@ -183,14 +177,6 @@ mod tests {
         finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
         finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
         witness.sync_committee_branch = finalized_sync_committee_branch;
-=======
-        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
-        let client = BeaconNodeHttpClient::new(
-            SensitiveUrl::parse(URL).unwrap(),
-            Timeouts::set_all(Duration::from_secs(10)),
-        );
-        let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
->>>>>>> develop
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,

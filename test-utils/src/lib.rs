@@ -8,7 +8,7 @@
 mod test_types;
 use crate::test_types::{TestMeta, TestStep};
 use blst::min_pk as bls;
-use eth_types::{Minimal, LIMB_BITS};
+use eth_types::{Minimal, Spec, LIMB_BITS};
 use ethereum_types::{
     BeaconBlockHeader, Domain, EthSpec, ExecutionPayloadHeader, Hash256,
     LightClientBootstrapCapella, LightClientUpdateCapella, MinimalEthSpec, SyncCommittee,
@@ -16,7 +16,9 @@ use ethereum_types::{
 use ethers::types::H256;
 use itertools::Itertools;
 use lightclient_circuits::poseidon::poseidon_committee_commitment_from_uncompressed;
-use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
+use lightclient_circuits::witness::{
+    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs, SyncStepArgs,
+};
 use serde::Deserialize;
 use tree_hash::TreeHash;
 
@@ -113,7 +115,11 @@ pub fn read_test_files_and_gen_witness(
         .to_vec();
 
     sync_committee_branch.insert(0, agg_pk);
-
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut sync_wit.attested_header.clone(),
+            &[Minimal::HEADER_STATE_ROOT_INDEX],
+        );
     let rotation_wit = CommitteeUpdateArgs::<Minimal> {
         pubkeys_compressed: updates[0]
             .next_sync_committee

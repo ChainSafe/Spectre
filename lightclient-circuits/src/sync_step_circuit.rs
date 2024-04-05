@@ -109,7 +109,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             y_signs_packed,
         )?;
 
-        let attested_slot_bytes: HashInputChunk<_> = args.attested_header.slot.into_witness();
+        let attested_slot_bytes: HashInputChunk<_> =
+            args.attested_header.slot.as_u64().into_witness();
         let attested_header_state_root = args
             .attested_header
             .state_root
@@ -119,10 +120,8 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .collect_vec();
         let attested_header_root = args
             .attested_header
-            .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::Synthesis)?
-            .as_ref()
+            .tree_hash_root()
+            .0
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
@@ -149,14 +148,13 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
             .iter()
             .map(|&b| builder.main().load_witness(F::from(b as u64)))
             .collect_vec();
-        let finalized_slot_bytes: HashInputChunk<_> = args.finalized_header.slot.into_witness();
+        let finalized_slot_bytes: HashInputChunk<_> =
+            args.finalized_header.slot.as_u64().into_witness();
 
         let finalized_header_root = args
             .finalized_header
-            .clone()
-            .hash_tree_root()
-            .map_err(|_| Error::Synthesis)?
-            .as_ref()
+            .tree_hash_root()
+            .0
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
