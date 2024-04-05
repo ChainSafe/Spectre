@@ -9,7 +9,6 @@ use itertools::Itertools;
 use lightclient_circuits::witness::{
     beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
 };
-use log::debug;
 
 use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
@@ -161,7 +160,7 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let mut witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
+        let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
         // let mut finalized_sync_committee_branch = {
         //     let block_root = client
         //         .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
