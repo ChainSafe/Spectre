@@ -202,10 +202,9 @@ mod tests {
         c.sync_committee_branch = finalized_sync_committee_branch;
 
         let params: ParamsKZG<Bn256> = gen_srs(K);
-        let pinning = Eth2ConfigPinning::from_path(STEP_CONFIG_PATH);
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &s,
             &params,
         )

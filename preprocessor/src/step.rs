@@ -239,13 +239,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_20.json";
-        const K: u32 = 20;
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_21.json";
+        const K: u32 = 21;
         let params = gen_srs(K);
 
         let pk = StepCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_20.pkey",
+            "../build/sync_step_21.pkey",
             CONFIG_PATH,
             &SyncStepArgs::<Testnet>::default(),
             None,
