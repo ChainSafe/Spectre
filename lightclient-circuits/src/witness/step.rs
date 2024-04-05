@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use tree_hash::TreeHash;
 
+use crate::witness::beacon_header_multiproof_and_helper_indices;
+
 use super::mock_root;
 
 /// Input datum for the `StepCircuit` to verify `attested_header` singed by the lightclient sync committee,
@@ -41,6 +43,11 @@ pub struct SyncStepArgs<S: Spec> {
     pub execution_payload_branch: Vec<Vec<u8>>,
 
     pub domain: [u8; 32],
+
+    pub attested_header_multiproof: Vec<Vec<u8>>,
+    pub attested_header_helper_indices: Vec<usize>,
+    pub finalized_header_multiproof: Vec<Vec<u8>>,
+    pub finalized_header_helper_indices: Vec<usize>,
 
     #[serde(skip)]
     pub _spec: PhantomData<S>,
@@ -109,6 +116,19 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             })
             .collect_vec();
 
+        // Proof length is 3
+        let (attested_header_multiproof, attested_header_helper_indices) =
+            beacon_header_multiproof_and_helper_indices(
+                &mut attested_header.clone(),
+                &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+            );
+        // Proof length is 4
+        let (finalized_header_multiproof, finalized_header_helper_indices) =
+            beacon_header_multiproof_and_helper_indices(
+                &mut finalized_header.clone(),
+                &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+            );
+
         Self {
             signature_compressed,
             pubkeys_uncompressed,
@@ -120,6 +140,11 @@ impl<S: Spec> Default for SyncStepArgs<S> {
             execution_payload_branch: execution_branch,
             execution_payload_root: execution_root,
             _spec: PhantomData,
+
+            attested_header_multiproof,
+            attested_header_helper_indices,
+            finalized_header_multiproof,
+            finalized_header_helper_indices,
         }
     }
 }

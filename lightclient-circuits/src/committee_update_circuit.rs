@@ -5,7 +5,7 @@
 use crate::{
     gadget::crypto::{HashInstructions, Sha256ChipWide, ShaBitGateManager, ShaCircuitBuilder},
     poseidon::{g1_array_poseidon, poseidon_committee_commitment_from_compressed},
-    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_proof},
+    ssz_merkle::{ssz_merkleize_chunks, verify_merkle_multiproof, verify_merkle_proof},
     util::{bytes_be_to_u128, AppCircuit, CommonGateManager, Eth2ConfigPinning, IntoWitness},
     witness::{self, HashInput, HashInputChunk},
     Eth2CircuitBuilder,
@@ -86,16 +86,24 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
             .iter()
             .map(|v| builder.main().load_witness(F::from(*v as u64)))
             .collect_vec();
-        let finalized_header_root = ssz_merkleize_chunks(
+        let finalized_header_root = args
+            .finalized_header
+            .tree_hash_root()
+            .0
+            .iter()
+            .map(|v| builder.main().load_witness(F::from(*v as u64)))
+            .collect_vec();
+
+        verify_merkle_multiproof(
             builder,
             &sha256_chip,
-            [
-                args.finalized_header.slot.as_u64().into_witness(),
-                args.finalized_header.proposer_index.into_witness(),
-                args.finalized_header.parent_root.as_ref().into_witness(),
-                finalized_state_root.clone().into(),
-                args.finalized_header.body_root.as_ref().into_witness(),
-            ],
+            args.finalized_header_multiproof
+                .iter()
+                .map(|w| w.clone().into_witness()),
+            [finalized_state_root.clone().into()],
+            &finalized_header_root,
+            [S::HEADER_STATE_ROOT_INDEX],
+            args.finalized_header_helper_indices.clone(),
         )?;
 
         // Verify that the sync committee root is in the finalized state root

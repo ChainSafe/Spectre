@@ -20,6 +20,10 @@ pub trait Spec: 'static + Sized + Copy + Default + Debug {
     const EXECUTION_STATE_ROOT_DEPTH: usize;
     const FINALIZED_HEADER_INDEX: usize;
     const FINALIZED_HEADER_DEPTH: usize;
+
+    const HEADER_SLOT_INDEX: usize = 8;
+    const HEADER_STATE_ROOT_INDEX: usize = 11;
+    const HEADER_BODY_ROOT_INDEX: usize = 12;
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]

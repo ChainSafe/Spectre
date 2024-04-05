@@ -1,20 +1,18 @@
 // NOT FOR USE IN PROD!
 // Used to generate files for circuit unit tests
-use ethereum_consensus::capella::mainnet::{
-    BeaconBlockBody, BeaconBlockHeader, BeaconState, Validator,
+
+use blst::min_pk as bls;
+use ethereum_types::{
+    BeaconBlockBody, BeaconBlockBodyCapella, BeaconBlockHeader, BeaconState, EthSpec, FixedVector,
+    MainnetEthSpec, SecretKey, Validator,
 };
-use ethereum_consensus::crypto::{self, eth_aggregate_public_keys, SecretKey};
-use ethereum_consensus::primitives::DomainType;
-use ethereum_consensus::signing::compute_signing_root;
-use ethereum_consensus::state_transition::Context;
 use itertools::Itertools as _;
 use lightclient_circuits::witness::{
-    get_helper_indices, merkle_tree, parent, CommitteeUpdateArgs, SyncStepArgs,
+    beacon_header_multiproof_and_helper_indices, get_helper_indices, merkle_tree, parent,
+    CommitteeUpdateArgs, SyncStepArgs,
 };
-use ssz_rs::{MerkleizationError, Merkleized, Node};
-use std::fs::File;
 use std::io::Read;
-use std::ops::Deref;
+use std::{fs::File, sync::Arc};
 
 use eth_types::{Mainnet, Spec as _};
 
@@ -39,46 +37,62 @@ fn main() {
     };
     let priv_key = priv_key_hex
         .iter()
-        .map(|sk| SecretKey::try_from(sk.as_slice()).unwrap());
+        .map(|sk| SecretKey::deserialize(sk.as_slice()).unwrap());
 
-    let mut beacon_state: BeaconState = {
+    let mut beacon_state: BeaconState<MainnetEthSpec> = {
         let mut file = File::open(BEACON_STATE_PATH).unwrap();
         let mut buf = vec![];
         file.read_to_end(&mut buf).unwrap();
-        ssz_rs::Deserialize::deserialize(&buf).unwrap()
+        BeaconState::from_ssz_bytes(&buf, &MainnetEthSpec::default_spec()).unwrap()
     };
 
     let validators = (0..N_VALIDATORS)
         .map(|i| {
-            let sk = SecretKey::try_from(priv_key_hex[i].as_slice()).unwrap();
+            let sk = SecretKey::deserialize(priv_key_hex[i].as_slice()).unwrap();
             let pubkey = sk.public_key();
             let bls_public_key = pubkey;
 
             Validator {
-                public_key: bls_public_key.clone(),
+                pubkey: bls_public_key.into(),
                 withdrawal_credentials: Default::default(),
                 effective_balance: 32_000_000,
                 slashed: false,
-                activation_eligibility_epoch: i as u64,
-                activation_epoch: i as u64 + 1,
-                exit_epoch: 100,
-                withdrawable_epoch: 0,
+                activation_eligibility_epoch: i.into(),
+                activation_epoch: (i + 1).into(),
+                exit_epoch: 100.into(),
+                withdrawable_epoch: 0.into(),
             }
         })
         .collect::<Vec<_>>();
 
-    let pubkeys = validators
-        .iter()
-        .map(|x| x.public_key.clone())
-        .collect::<Vec<_>>();
+    let pubkeys: FixedVector<_, <MainnetEthSpec as EthSpec>::SyncCommitteeSize> = FixedVector::new(
+        validators
+            .iter()
+            .map(|x| x.pubkey.clone())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let current_sync_committee = beacon_state
+        .current_sync_committee()
+        .unwrap()
+        .as_ref()
+        .clone();
+    current_sync_committee.pubkeys = pubkeys.clone();
 
-    beacon_state.validators = validators.try_into().unwrap();
-    beacon_state.current_sync_committee.public_keys = pubkeys.clone().try_into().unwrap();
-    beacon_state.next_sync_committee.public_keys = pubkeys.clone().try_into().unwrap();
-    beacon_state.current_sync_committee.aggregate_public_key =
-        eth_aggregate_public_keys(&pubkeys).unwrap();
+    *beacon_state.validators_mut() = validators.into();
+    *beacon_state.current_sync_committee_mut().unwrap() = Arc::new(current_sync_committee);
 
-    let mut beacon_block_body = BeaconBlockBody {
+    let next_sync_committee = beacon_state.next_sync_committee().unwrap().as_ref().clone();
+    next_sync_committee.pubkeys = pubkeys.clone();
+
+    *beacon_state.next_sync_committee_mut().unwrap() = Arc::new(next_sync_committee);
+    // TODO:
+    // *beacon_state
+    //     .current_sync_committee_mut()
+    //     .unwrap()
+    //     .aggregate_pubkey = eth_aggregate_public_keys(&pubkeys).unwrap();
+
+    let mut beacon_block_body = BeaconBlockBodyCapella {
         eth1_data: beacon_state.eth1_data.clone(),
         ..Default::default()
     };
@@ -155,6 +169,19 @@ fn main() {
         body_root: finalized_block.body_root,
     };
 
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut finalized_header.clone(),
+            &[Mainnet::HEADER_SLOT_INDEX, Mainnet::HEADER_BODY_ROOT_INDEX],
+        );
+
     let sync_args: SyncStepArgs<Mainnet> = SyncStepArgs {
         signature_compressed: {
             ethereum_consensus_types::BlsSignature::try_from(hex::encode(agg_sig.deref()))
@@ -185,7 +212,21 @@ fn main() {
             .collect_vec(),
         domain,
         _spec: std::marker::PhantomData,
+
+        attested_header_multiproof: attested_header_multiproof
+            .into_iter()
+            .map(|n| n.as_ref().to_vec())
+            .collect_vec(),
+        attested_header_helper_indices,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
     };
+
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &mut attested_header.clone(),
+            &[Mainnet::HEADER_STATE_ROOT_INDEX],
+        );
 
     let rotation_args: CommitteeUpdateArgs<Mainnet> = CommitteeUpdateArgs {
         pubkeys_compressed: pubkeys.iter().map(|x| x.deref().to_vec()).collect_vec(),
@@ -195,6 +236,8 @@ fn main() {
             .map(|x| x.to_vec())
             .collect_vec(),
         _spec: std::marker::PhantomData,
+        finalized_header_multiproof,
+        finalized_header_helper_indices: attested_header_helper_indices,
     };
 
     std::fs::write(

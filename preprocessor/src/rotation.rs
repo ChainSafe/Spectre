@@ -6,11 +6,13 @@ use std::marker::PhantomData;
 
 use eth_types::Spec;
 use itertools::Itertools;
+use lightclient_circuits::witness::{
+    beacon_header_multiproof_and_helper_indices, CommitteeUpdateArgs,
+};
 
 use crate::get_light_client_update_at_period;
 use eth2::{types::BlockId, BeaconNodeHttpClient};
 use ethereum_types::LightClientUpdate;
-use lightclient_circuits::witness::CommitteeUpdateArgs;
 use tree_hash::TreeHash;
 
 /// Fetches LightClientUpdate from the beacon client and converts it to a [`CommitteeUpdateArgs`] witness
@@ -76,6 +78,12 @@ pub async fn rotation_args_from_update<S: Spec>(
         "Execution payload merkle proof verification failed"
     );
 
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &finalized_header_beacon,
+            &[S::HEADER_STATE_ROOT_INDEX],
+        );
+
     let args = CommitteeUpdateArgs::<S> {
         pubkeys_compressed,
         finalized_header: finalized_header_beacon,
@@ -84,6 +92,8 @@ pub async fn rotation_args_from_update<S: Spec>(
             .map(|n| n.0.to_vec())
             .collect_vec(),
         _spec: PhantomData,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
     };
     Ok(args)
 }
@@ -95,20 +105,20 @@ mod tests {
     use super::*;
     use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use halo2_base::gates::circuit::CircuitBuilderStage;
+    use halo2_base::halo2_proofs::dev::MockProver;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
-    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
+    use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning};
     use lightclient_circuits::{
-        committee_update_circuit::CommitteeUpdateCircuit,
-        halo2_base::gates::circuit::CircuitBuilderStage,
-        util::{AppCircuit, Eth2ConfigPinning, Halo2ConfigPinning},
+        committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
     use snark_verifier_sdk::CircuitExt;
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
         const K: u32 = 20;
         const URL: &str = "https://lodestar-sepolia.chainsafe.io";
         let client = BeaconNodeHttpClient::new(
@@ -116,12 +126,11 @@ mod tests {
             Timeouts::set_all(Duration::from_secs(10)),
         );
         let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
             &params,
         )
@@ -133,7 +142,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rotation_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_18.json";
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_21.json";
         const K: u32 = 21;
         let params = gen_srs(K);
 
@@ -150,7 +159,6 @@ mod tests {
             Timeouts::set_all(Duration::from_secs(10)),
         );
         let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
-
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
             &pk,

@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 
 use eth_types::Spec;
 use itertools::Itertools;
-use lightclient_circuits::witness::SyncStepArgs;
+use lightclient_circuits::witness::{beacon_header_multiproof_and_helper_indices, SyncStepArgs};
 
 use blst::min_pk as bls;
 use eth2::types::StateId;
@@ -155,6 +155,19 @@ pub async fn step_args_from_finality_update<S: Spec>(
         "Finality merkle proof verification failed"
     );
 
+    // Proof length is 3
+    let (attested_header_multiproof, attested_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &attested_header_beacon,
+            &[S::HEADER_SLOT_INDEX, S::HEADER_STATE_ROOT_INDEX],
+        );
+    // Proof length is 4
+    let (finalized_header_multiproof, finalized_header_helper_indices) =
+        beacon_header_multiproof_and_helper_indices(
+            &finalized_header_beacon,
+            &[S::HEADER_SLOT_INDEX, S::HEADER_BODY_ROOT_INDEX],
+        );
+
     Ok(SyncStepArgs {
         signature_compressed: finality_update
             .sync_aggregate()
@@ -178,6 +191,10 @@ pub async fn step_args_from_finality_update<S: Spec>(
         execution_payload_branch,
         domain,
         _spec: PhantomData,
+        attested_header_multiproof,
+        attested_header_helper_indices,
+        finalized_header_multiproof,
+        finalized_header_helper_indices,
     })
 }
 
@@ -185,19 +202,17 @@ pub async fn step_args_from_finality_update<S: Spec>(
 mod tests {
     use std::time::Duration;
 
+    use super::*;
     use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use halo2_base::gates::circuit::CircuitBuilderStage;
+    use halo2_base::halo2_proofs::dev::MockProver;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
-    use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
-    use lightclient_circuits::{
-        halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
-        util::AppCircuit,
-    };
+    use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
+    use lightclient_circuits::{sync_step_circuit::StepCircuit, util::AppCircuit};
     use snark_verifier_sdk::CircuitExt;
-
-    use super::*;
 
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
