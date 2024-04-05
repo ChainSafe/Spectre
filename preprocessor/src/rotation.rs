@@ -101,14 +101,18 @@ pub async fn rotation_args_from_update<S: Spec>(
 
 #[cfg(test)]
 mod tests {
-    use crate::get_light_client_bootstrap;
     use std::time::Duration;
 
     use super::*;
     use eth2::{SensitiveUrl, Timeouts};
     use eth_types::Testnet;
+    use halo2_base::gates::circuit::CircuitBuilderStage;
+    use halo2_base::halo2_proofs::dev::MockProver;
+    use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
+    use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::halo2curves::bn256::Fr;
+    use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning};
     use lightclient_circuits::{
         committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit,
     };
@@ -157,26 +161,26 @@ mod tests {
             SensitiveUrl::parse(URL).unwrap(),
             Timeouts::set_all(Duration::from_secs(10)),
         );
-        let mut witness = fetch_rotation_args::<Testnet, _>(&client).await.unwrap();
-        let mut finalized_sync_committee_branch = {
-            let block_root = client
-                .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
-                .await
-                .unwrap();
+        let mut witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
+        // let mut finalized_sync_committee_branch = {
+        //     let block_root = client
+        //         .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
+        //         .await
+        //         .unwrap();
 
-            get_light_client_bootstrap::<Testnet, _>(&client, block_root)
-                .await
-                .unwrap()
-                .current_sync_committee_branch
-                .iter()
-                .map(|n| n.to_vec())
-                .collect_vec()
-        };
+        //     get_light_client_bootstrap::<Testnet, _>(&client, block_root)
+        //         .await
+        //         .unwrap()
+        //         .current_sync_committee_branch
+        //         .iter()
+        //         .map(|n| n.to_vec())
+        //         .collect_vec()
+        // };
 
-        // Magic swap of sync committee branch
-        finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
-        finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
-        witness.sync_committee_branch = finalized_sync_committee_branch;
+        // // Magic swap of sync committee branch
+        // finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
+        // finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
+        // witness.sync_committee_branch = finalized_sync_committee_branch;
 
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
