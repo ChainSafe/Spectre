@@ -119,7 +119,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_rotation_circuit_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_testnet.json";
         const K: u32 = 20;
         const URL: &str = "https://lodestar-sepolia.chainsafe.io";
         let client = BeaconNodeHttpClient::new(
@@ -143,13 +142,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_rotation_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_18.json";
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_21.json";
         const K: u32 = 21;
         let params = gen_srs(K);
 
         let pk = CommitteeUpdateCircuit::<Testnet, Fr>::create_pk(
             &params,
-            "../build/sync_step_20.pkey",
+            "../build/sync_step_21.pkey",
             CONFIG_PATH,
             &CommitteeUpdateArgs::<Testnet>::default(),
             None,
