@@ -127,12 +127,11 @@ mod tests {
             Timeouts::set_all(Duration::from_secs(10)),
         );
         let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
-        let pinning = Eth2ConfigPinning::from_path(CONFIG_PATH);
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = CommitteeUpdateCircuit::<Testnet, Fr>::create_circuit(
             CircuitBuilderStage::Mock,
-            Some(pinning),
+            None,
             &witness,
             &params,
         )
@@ -161,26 +160,6 @@ mod tests {
             Timeouts::set_all(Duration::from_secs(10)),
         );
         let witness = fetch_rotation_args::<Testnet>(&client).await.unwrap();
-        // let mut finalized_sync_committee_branch = {
-        //     let block_root = client
-        //         .get_beacon_block_root(BlockId::Slot(witness.finalized_header.slot))
-        //         .await
-        //         .unwrap();
-
-        //     get_light_client_bootstrap::<Testnet, _>(&client, block_root)
-        //         .await
-        //         .unwrap()
-        //         .current_sync_committee_branch
-        //         .iter()
-        //         .map(|n| n.to_vec())
-        //         .collect_vec()
-        // };
-
-        // // Magic swap of sync committee branch
-        // finalized_sync_committee_branch.insert(0, witness.sync_committee_branch[0].clone());
-        // finalized_sync_committee_branch[1] = witness.sync_committee_branch[1].clone();
-        // witness.sync_committee_branch = finalized_sync_committee_branch;
-
         CommitteeUpdateCircuit::<Testnet, Fr>::gen_snark_shplonk(
             &params,
             &pk,
