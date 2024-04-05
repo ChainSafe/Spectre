@@ -39,6 +39,7 @@ serde_json.workspace = true
 getset.workspace = true
 log.workspace = true
 url = "2"
+blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ]}
 
 # ethereum
 ethers = { version = "2.0.7", default_features = false, features = [
@@ -47,9 +48,12 @@ ethers = { version = "2.0.7", default_features = false, features = [
 ] }
 primitive-types = "0.12.2"
 reqwest = "0.11.22"
-beacon-api-client.workspace = true
-ethereum-consensus-types.workspace = true
-ssz_rs.workspace = true
+
+
+ethereum-types = {workspace = true, default-features = false }
+eth2.workspace = true
+tree_hash.workspace = true
+ethereum_ssz = { workspace = true }
 
 [features]
 default = []

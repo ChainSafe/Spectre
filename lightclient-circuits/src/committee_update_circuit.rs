@@ -29,8 +29,9 @@ use halo2_ecc::{
     fields::FieldChip,
 };
 use itertools::Itertools;
-use ssz_rs::Merkleized;
 use std::{env::var, iter, marker::PhantomData, vec};
+use tree_hash::TreeHash;
+
 /// `CommitteeUpdateCircuit` maps next sync committee SSZ root in the finalized state root to the corresponding Poseidon commitment to the public keys.
 ///
 /// Assumes that public keys are BLS12-381 points on G1; `sync_committee_branch` is exactly `S::SYNC_COMMITTEE_PUBKEYS_DEPTH` hashes in lenght.
@@ -207,14 +208,11 @@ impl<S: Spec, F: Field> CommitteeUpdateCircuit<S, F> {
     pub fn get_instances(
         args: &witness::CommitteeUpdateArgs<S>,
         limb_bits: usize,
-    ) -> Vec<Vec<bn256::Fr>>
-    where
-        [(); S::SYNC_COMMITTEE_SIZE]:,
-    {
+    ) -> Vec<Vec<bn256::Fr>> {
         let poseidon_commitment =
             poseidon_committee_commitment_from_compressed(&args.pubkeys_compressed, limb_bits);
 
-        let finalized_header_root = args.finalized_header.clone().hash_tree_root().unwrap();
+        let finalized_header_root = args.finalized_header.tree_hash_root();
 
         let finalized_header_root_hilo = {
             let bytes = finalized_header_root.as_ref();
@@ -288,12 +286,7 @@ mod tests {
     use ark_std::{end_timer, start_timer};
     use eth_types::Testnet;
     use halo2_base::{
-        halo2_proofs::{
-            dev::MockProver,
-            halo2curves::bn256::Fr,
-            plonk::ProvingKey,
-            poly::{commitment::Params, kzg::commitment::ParamsKZG},
-        },
+        halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr, plonk::ProvingKey},
         utils::fs::gen_srs,
     };
     use snark_verifier_sdk::evm::{evm_verify, gen_evm_proof_shplonk};

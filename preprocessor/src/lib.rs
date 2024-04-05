@@ -7,159 +7,75 @@
 
 mod rotation;
 mod step;
-
-use beacon_api_client::{BlockId, Client, ClientTypes, Value, VersionedValue};
+use eth2::mixin::RequestAccept as _;
+use eth2::types::Accept;
+use eth2::BeaconNodeHttpClient;
 use eth_types::Spec;
-use ethereum_consensus_types::bls::BlsSignature;
-use ethereum_consensus_types::{
-    BeaconBlockHeader, BlsPublicKey, ByteVector, LightClientBootstrap, LightClientFinalityUpdate,
-    LightClientUpdateCapella, Root,
+use ethereum_types::{
+    EthSpec, FixedVector, LightClientFinalityUpdate, LightClientFinalityUpdateCapella,
+    LightClientFinalityUpdateDeneb, PublicKeyBytes,
 };
-
-use itertools::Itertools;
+use ethereum_types::{ForkVersionedResponse, LightClientUpdate};
 use lightclient_circuits::witness::{CommitteeUpdateArgs, SyncStepArgs};
 pub use rotation::*;
-use serde::{Deserialize, Serialize};
-use ssz_rs::{Node, Vector};
 pub use step::*;
+use url::Url;
 
-pub async fn get_light_client_update_at_period<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
+pub async fn get_light_client_update_at_period<S: Spec>(
+    client: &BeaconNodeHttpClient,
     period: u64,
-) -> eyre::Result<
-    LightClientUpdateCapella<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_ROOT_INDEX },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::FINALIZED_HEADER_INDEX },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
->
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
-    let route = "eth/v1/beacon/light_client/updates";
-    let mut updates: Vec<VersionedValue<_>> = client
-        .http
-        .get(client.endpoint.join(route)?)
-        .query(&[("start_period", period), ("count", 1)])
-        .send()
-        .await?
-        .json()
-        .await?;
+) -> eyre::Result<LightClientUpdate<S::EthSpec>> {
+    let mut path = Url::parse(client.as_ref()).map_err(|e| eyre::eyre!("Invalid URL: {:?}", e))?;
+
+    path.path_segments_mut()
+        .map_err(|()| eyre::eyre!("Invalid URL: {}", client.as_ref()))?
+        .push("eth")
+        .push("v1")
+        .push("beacon")
+        .push("light_client")
+        .push("updates");
+
+    path.query_pairs_mut()
+        .append_pair("start_period", &period.to_string())
+        .append_pair("count", "1");
+    let resp = client
+        .get_response(path, |b| b.accept(Accept::Json))
+        .await
+        .map_err(|e| eyre::eyre!("Failed to get light client update: {:?}", e))?;
+
+    let mut updates: Vec<ForkVersionedResponse<LightClientUpdate<S::EthSpec>>> =
+        resp.json().await?;
+
     assert!(updates.len() == 1, "should only get one update");
     Ok(updates.pop().unwrap().data)
 }
 
-pub async fn get_light_client_bootstrap<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
-    block_root: Node,
-) -> eyre::Result<
-    LightClientBootstrap<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
->
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-{
-    let route = format!("eth/v1/beacon/light_client/bootstrap/{block_root:?}");
-    let bootstrap = client.get::<VersionedValue<_>>(&route).await?.data;
-    Ok(bootstrap)
-}
-
-pub async fn get_light_client_finality_update<S: Spec, C: ClientTypes>(
-    client: &Client<C>,
-) -> eyre::Result<
-    LightClientFinalityUpdate<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
->
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-{
-    Ok(client
-        .get::<VersionedValue<_>>("eth/v1/beacon/light_client/finality_update")
-        .await?
-        .data)
-}
-
-pub async fn get_block_header<C: ClientTypes>(
-    client: &Client<C>,
-    id: BlockId,
-) -> eyre::Result<BeaconBlockHeader> {
-    // TODO: Once the ethereum beacon_api_client is updated, we can avoid this struct definition
-    #[derive(Serialize, Deserialize)]
-    struct BeaconHeaderSummary {
-        pub root: Root,
-        pub canonical: bool,
-        pub header: SignedBeaconBlockHeader,
-    }
-    #[derive(Serialize, Deserialize)]
-    struct SignedBeaconBlockHeader {
-        pub message: BeaconBlockHeader,
-        pub signature: BlsSignature,
-    }
-
-    let route = format!("eth/v1/beacon/headers/{id}");
-    let block: BeaconHeaderSummary = client.get::<Value<_>>(&route).await?.data;
-    Ok(block.header.message)
-}
-
 pub async fn light_client_update_to_args<S: Spec>(
-    update: &LightClientUpdateCapella<
-        { S::SYNC_COMMITTEE_SIZE },
-        { S::SYNC_COMMITTEE_ROOT_INDEX },
-        { S::SYNC_COMMITTEE_DEPTH },
-        { S::FINALIZED_HEADER_INDEX },
-        { S::FINALIZED_HEADER_DEPTH },
-        { S::BYTES_PER_LOGS_BLOOM },
-        { S::MAX_EXTRA_DATA_BYTES },
-    >,
-    pubkeys_compressed: Vector<BlsPublicKey, { S::SYNC_COMMITTEE_SIZE }>,
+    update: &LightClientUpdate<S::EthSpec>,
+    pubkeys_compressed: &FixedVector<PublicKeyBytes, <S::EthSpec as EthSpec>::SyncCommitteeSize>,
     domain: [u8; 32],
-) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
-    let finality_update = LightClientFinalityUpdate {
-        attested_header: update.attested_header.clone(),
-        finalized_header: update.finalized_header.clone(),
-        finality_branch: Vector::try_from(
-            update
-                .finality_branch
-                .iter()
-                .map(|v| ByteVector(Vector::try_from(v.to_vec()).unwrap()))
-                .collect_vec(),
-        )
-        .unwrap(),
-        sync_aggregate: update.sync_aggregate.clone(),
-        signature_slot: update.signature_slot,
+) -> eyre::Result<(SyncStepArgs<S>, CommitteeUpdateArgs<S>)> {
+    let finality_update = match update {
+        LightClientUpdate::Altair(_) => unimplemented!(),
+        LightClientUpdate::Capella(update) => {
+            LightClientFinalityUpdate::Capella(LightClientFinalityUpdateCapella {
+                attested_header: update.attested_header.clone(),
+                finalized_header: update.finalized_header.clone(),
+                finality_branch: update.finality_branch.clone(),
+                sync_aggregate: update.sync_aggregate.clone(),
+                signature_slot: update.signature_slot,
+            })
+        }
+
+        LightClientUpdate::Deneb(update) => {
+            LightClientFinalityUpdate::Deneb(LightClientFinalityUpdateDeneb {
+                attested_header: update.attested_header.clone(),
+                finalized_header: update.finalized_header.clone(),
+                finality_branch: update.finality_branch.clone(),
+                sync_aggregate: update.sync_aggregate.clone(),
+                signature_slot: update.signature_slot,
+            })
+        }
     };
 
     let rotation_args = rotation::rotation_args_from_update(update).await?;
@@ -172,13 +88,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use beacon_api_client::StateId;
+    use eth2::types::{BlockId, StateId};
     use eth_types::Testnet;
-    use ethereum_consensus_types::signing::{compute_domain, DomainType};
-    use ethereum_consensus_types::ForkData;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
+    use itertools::Itertools;
     use lightclient_circuits::committee_update_circuit::CommitteeUpdateCircuit;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
     use lightclient_circuits::util::{Eth2ConfigPinning, Halo2ConfigPinning};
@@ -189,16 +104,29 @@ mod tests {
     use snark_verifier_sdk::CircuitExt;
 
     use super::*;
-    use beacon_api_client::mainnet::Client as MainnetClient;
-    use reqwest::Url;
+
+    use eth2::{SensitiveUrl, Timeouts};
+    use ethereum_types::Domain;
+    use ethereum_types::MainnetEthSpec;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn test_both_circuit_sepolia() {
-        const K: u32 = 20;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        const K: u32 = 21;
+        const URL: &str = "https://lodestar-sepolia.chainsafe.io";
+        let client = BeaconNodeHttpClient::new(
+            SensitiveUrl::parse(URL).unwrap(),
+            Timeouts::set_all(Duration::from_secs(10)),
+        );
 
-        let block = get_block_header(&client, BlockId::Finalized).await.unwrap();
+        let block = client
+            .get_beacon_headers_block_id(BlockId::Finalized)
+            .await
+            .unwrap()
+            .unwrap()
+            .data
+            .header
+            .message;
         let slot = block.slot;
         let period = slot / (32 * 256);
         const ROTATE_CONFIG_PATH: &str = "../lightclient-circuits/config/committee_update_20.json";
@@ -211,59 +139,66 @@ mod tests {
 
         // Fetch light client update and create circuit arguments
         let (s, mut c) = {
-            let update = get_light_client_update_at_period(&client, period)
+            let update = get_light_client_update_at_period::<Testnet>(&client, period.into())
                 .await
                 .unwrap();
 
-            let block_root = client
-                .get_beacon_block_root(BlockId::Slot(slot))
-                .await
-                .unwrap();
+            let block_root = block.canonical_root();
 
-            let bootstrap = get_light_client_bootstrap(&client, block_root)
+            let bootstrap = client
+                .get_light_client_bootstrap::<MainnetEthSpec>(block_root)
                 .await
-                .unwrap();
+                .unwrap()
+                .unwrap()
+                .data;
 
-            let pubkeys_compressed = bootstrap.current_sync_committee.pubkeys;
+            let pubkeys_compressed = &bootstrap.current_sync_committee().pubkeys;
 
             let fork_version = client
-                .get_fork(StateId::Head)
+                .get_beacon_states_fork(StateId::Head)
                 .await
                 .unwrap()
+                .unwrap()
+                .data
                 .current_version;
+
             let genesis_validators_root = client
-                .get_genesis_details()
+                .get_beacon_genesis()
                 .await
                 .unwrap()
+                .data
                 .genesis_validators_root;
-            let fork_data = ForkData {
-                genesis_validators_root,
+
+            let domain = MainnetEthSpec::default_spec().compute_domain(
+                Domain::SyncCommittee,
                 fork_version,
-            };
-            let domain = compute_domain(DomainType::SyncCommittee, &fork_data).unwrap();
-            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain)
+                genesis_validators_root,
+            );
+
+            light_client_update_to_args::<Testnet>(&update, pubkeys_compressed, domain.into())
                 .await
                 .unwrap()
         };
 
         let mut finalized_sync_committee_branch = {
-            let block_root = client
-                .get_beacon_block_root(BlockId::Slot(s.finalized_header.slot))
-                .await
-                .unwrap();
+            let block_root = s.finalized_header.canonical_root();
 
-            get_light_client_bootstrap::<Testnet, _>(&client, block_root)
+            let k = client
+                .get_light_client_bootstrap::<MainnetEthSpec>(block_root)
                 .await
                 .unwrap()
-                .current_sync_committee_branch
-                .iter()
-                .map(|n| n.to_vec())
-                .collect_vec()
+                .unwrap()
+                .data
+                .current_sync_committee_branch()
+                .into_iter()
+                .map(|n| n.0.to_vec())
+                .collect_vec();
+            k
         };
 
         // Magic swap of sync committee branch
         finalized_sync_committee_branch.insert(0, c.sync_committee_branch[0].clone());
-        finalized_sync_committee_branch[1] = c.sync_committee_branch[1].clone();
+        finalized_sync_committee_branch[1].clone_from(&c.sync_committee_branch[1]);
         c.sync_committee_branch = finalized_sync_committee_branch;
 
         let params: ParamsKZG<Bn256> = gen_srs(K);

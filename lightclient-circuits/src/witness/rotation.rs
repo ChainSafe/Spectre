@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 use eth_types::Spec;
-use ethereum_consensus_types::BeaconBlockHeader;
+use ethereum_types::BeaconBlockHeader;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -74,6 +74,9 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
                 &[S::HEADER_STATE_ROOT_INDEX],
             );
 
+        let mut finalized_header = BeaconBlockHeader::empty();
+        finalized_header.state_root = state_root.into();
+
         Self {
             pubkeys_compressed: iter::repeat(dummy_x_bytes)
                 .take(S::SYNC_COMMITTEE_SIZE)
@@ -87,7 +90,7 @@ impl<S: Spec> Default for CommitteeUpdateArgs<S> {
     }
 }
 
-pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> Vec<u8> {
+pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) -> [u8; 32] {
     let mut last_hash = leaf;
 
     for i in 0..branch.len() {
@@ -103,7 +106,7 @@ pub(crate) fn mock_root(leaf: Vec<u8>, branch: &[Vec<u8>], mut gindex: usize) ->
         gindex /= 2;
     }
 
-    last_hash
+    last_hash.try_into().unwrap()
 }
 
 #[cfg(test)]

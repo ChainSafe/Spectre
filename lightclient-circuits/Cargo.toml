@@ -25,14 +25,13 @@ sha2.workspace = true
 pse-poseidon = { git = "https://github.com/axiom-crypto/pse-poseidon.git" }
 
 # ethereum
-ssz_rs = { workspace = true, features = ["serde"] }
-ethereum-consensus-types ={ workspace = true, features = ["serde"] }
+ethereum-types = {workspace = true, default-features = false }
+tree_hash.workspace = true
 
 # local
 eth-types.workspace = true
 
 # misc
-ark-std.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 itertools.workspace = true
@@ -40,14 +39,13 @@ log.workspace = true
 hex.workspace = true
 rayon = "1.7.0"
 array-init = "2.0.0"
-strum = "0.25"
-strum_macros = "0.25"
 rand = "0.8"
 lazy_static = "1.4"
 getset = "0.1.2"
 rand_chacha = "0.3.0"
 
 [dev-dependencies]
+ark-std.workspace = true
 rstest = "0.18.2"
 test-utils = { workspace = true }
 

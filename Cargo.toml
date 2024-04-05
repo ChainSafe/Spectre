@@ -67,9 +67,11 @@ snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git
 ] }
 
 # ethereum types
-ethereum-consensus-types = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
-beacon-api-client = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f" }
-ssz_rs = "0.9"
+ethereum-types = { package = "types", git = "https://github.com/sigp/lighthouse/", tag = "v5.1.3", default-features = false, features = ["legacy-arith"] }
+tree_hash = { version = "0.5" }
+eth2 = { package = "eth2", git = "https://github.com/sigp/lighthouse/", tag =  "v5.1.3" }
+merkle_proof = { package = "merkle_proof", git = "https://github.com/sigp/lighthouse/", tag =  "v5.1.3" }
+ethereum_ssz = "0.5.3"
 
 # crypto
 group = "0.13"
@@ -90,7 +92,6 @@ ark-std = { version = "0.4.0", features = ["print-trace"] }
 
 
 [patch.crates-io]
-ssz_rs = { git = "https://github.com/ralexstokes/ssz-rs", rev = "5f1ec833718efa07bbbff427ab28a1eeaa706164" }
 halo2-base = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }
 halo2-ecc = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }
 zkevm-hashes = { git = "https://github.com/nulltea/halo2-lib", branch = "feat/bls12-381-hash2curve" }

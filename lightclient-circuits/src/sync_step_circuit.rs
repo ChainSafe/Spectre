@@ -42,8 +42,8 @@ use halo2_ecc::{
 use halo2curves::bls12_381::{G1Affine, G2Affine};
 use itertools::Itertools;
 use num_bigint::BigUint;
-use ssz_rs::Merkleized;
 use std::{env::var, marker::PhantomData, vec};
+use tree_hash::TreeHash;
 
 /// `StepCircuit` verifies that Beacon chain block header is attested by a lightclient sync committee via aggregated signature,
 /// and the execution (Eth1) payload via Merkle proof against the finalized block header.
@@ -255,11 +255,11 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
         const INPUT_SIZE: usize = 8 * 3 + 32 * 2;
         let mut input = [0; INPUT_SIZE];
 
-        let mut attested_slot_le = args.attested_header.slot.to_le_bytes().to_vec();
+        let mut attested_slot_le = args.attested_header.slot.as_u64().to_le_bytes().to_vec();
         attested_slot_le.resize(8, 0);
         input[..8].copy_from_slice(&attested_slot_le);
 
-        let mut finalized_slot_le = args.finalized_header.slot.to_le_bytes().to_vec();
+        let mut finalized_slot_le = args.finalized_header.slot.as_u64().to_le_bytes().to_vec();
         finalized_slot_le.resize(8, 0);
         input[8..16].copy_from_slice(&finalized_slot_le);
 
@@ -275,9 +275,7 @@ impl<S: Spec, F: Field> StepCircuit<S, F> {
 
         let finalized_header_root: [u8; 32] = args
             .finalized_header
-            .clone()
-            .hash_tree_root()
-            .unwrap()
+            .tree_hash_root()
             .as_ref()
             .try_into()
             .unwrap();
@@ -460,10 +458,7 @@ impl<S: Spec> AppCircuit for StepCircuit<S, bn256::Fr> {
 mod tests {
     use std::fs;
 
-    use crate::{
-        aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning,
-        witness::SyncStepArgs,
-    };
+    use crate::{aggregation_circuit::AggregationConfigPinning, util::Halo2ConfigPinning};
 
     use super::*;
     use ark_std::{end_timer, start_timer};

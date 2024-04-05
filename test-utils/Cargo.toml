@@ -5,11 +5,15 @@ edition = "2021"
 
 [dependencies]
 lightclient-circuits = { workspace = true }
-ethereum-consensus-types = { workspace = true }
 eth-types = { workspace = true }
-ssz_rs = { workspace = true }
 halo2curves = { workspace = true }
 halo2-base = { workspace = true }
+
+
+ethereum-types = {workspace = true, default-features = false }
+tree_hash.workspace = true
+ethereum_ssz = { workspace = true }
+
 
 itertools = "0.11.0"
 hex = "0.4.3"
@@ -17,7 +21,6 @@ serde = { version = "1.0.130", features = ["derive"] }
 anyhow = "1.0.75"
 ethers = "2.0.10"
 
-test-utils = { git = "https://github.com/ChainSafe/ethereum-consensus-types", branch = "capella" }
-
 snap = "1.1.0"
 serde_yaml = "0.9.19"
+blst = { version = "0.3.11", default-features = false, features = [ "portable", "no-threads" ]}
