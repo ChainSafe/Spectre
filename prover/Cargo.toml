@@ -50,6 +50,8 @@ reqwest = "0.11.22"
 beacon-api-client.workspace = true
 ethereum-consensus-types.workspace = true
 ssz_rs.workspace = true
+ethereum-consensus = { git = "https://github.com/ralexstokes/ethereum-consensus.git", rev = "f3bff52e9c43866f231ec40c8ab0e34125a8957f", optional = true }
+
 
 [features]
 default = []

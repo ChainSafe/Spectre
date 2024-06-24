@@ -4,21 +4,27 @@
 
 use ark_std::{end_timer, start_timer};
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
+use eth_types::Testnet;
 use ethers::prelude::*;
 use jsonrpc_v2::{Data, RequestObject as JsonRpcRequestObject};
 use jsonrpc_v2::{Error as JsonRpcError, Params};
 use jsonrpc_v2::{MapRouter as JsonRpcMapRouter, Server as JsonRpcServer};
+use lightclient_circuits::halo2_proofs::dev::MockProver;
 use lightclient_circuits::halo2_proofs::halo2curves::bn256::{Bn256, Fr, G1Affine};
 use lightclient_circuits::halo2_proofs::plonk::ProvingKey;
 use lightclient_circuits::halo2_proofs::poly::kzg::commitment::ParamsKZG;
 use lightclient_circuits::sync_step_circuit::StepCircuit;
 use lightclient_circuits::{committee_update_circuit::CommitteeUpdateCircuit, util::AppCircuit};
-use preprocessor::{rotation_args_from_update, step_args_from_finality_update};
+use preprocessor::{fetch_step_args, rotation_args_from_update, step_args_from_finality_update};
+use snark_verifier::halo2_base::gates::circuit::CircuitBuilderStage;
 use snark_verifier_sdk::evm::encode_calldata;
+use snark_verifier_sdk::CircuitExt;
 use snark_verifier_sdk::{halo2::aggregation::AggregationCircuit, Snark};
 use spectre_prover::prover::ProverState;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use url::Url;
 
 pub type JsonRpcServerState = Arc<JsonRpcServer<JsonRpcMapRouter>>;
 use crate::rpc_api::{
@@ -41,10 +47,10 @@ where
 {
     JsonRpcServer::new()
         .with_data(Data::new(state))
-        .with_method(
-            RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
-            gen_evm_proof_committee_update_handler::<S>,
-        )
+        // .with_method(
+        //     RPC_EVM_PROOF_COMMITTEE_UPDATE_CIRCUIT_COMPRESSED,
+        //     gen_evm_proof_committee_update_handler::<S>,
+        // )
         .with_method(
             RPC_EVM_PROOF_STEP_CIRCUIT_COMPRESSED,
             gen_evm_proof_sync_step_compressed_handler::<S>,
@@ -52,64 +58,64 @@ where
         .finish_unwrapped()
 }
 
-pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
-    Data(state): Data<ProverState>,
-    Params(params): Params<GenProofCommitteeUpdateParams>,
-) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
-where
-    [(); S::SYNC_COMMITTEE_SIZE]:,
-    [(); S::FINALIZED_HEADER_DEPTH]:,
-    [(); S::BYTES_PER_LOGS_BLOOM]:,
-    [(); S::MAX_EXTRA_DATA_BYTES]:,
-    [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
-    [(); S::SYNC_COMMITTEE_DEPTH]:,
-    [(); S::FINALIZED_HEADER_INDEX]:,
-{
-    let _permit = state
-        .concurrency
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|e| {
-            JsonRpcError::internal(format!("Failed to acquire concurrency lock: {}", e))
-        })?;
+// pub(crate) async fn gen_evm_proof_committee_update_handler<S: eth_types::Spec>(
+//     Data(state): Data<ProverState>,
+//     Params(params): Params<GenProofCommitteeUpdateParams>,
+// ) -> Result<CommitteeUpdateEvmProofResult, JsonRpcError>
+// where
+//     [(); S::SYNC_COMMITTEE_SIZE]:,
+//     [(); S::FINALIZED_HEADER_DEPTH]:,
+//     [(); S::BYTES_PER_LOGS_BLOOM]:,
+//     [(); S::MAX_EXTRA_DATA_BYTES]:,
+//     [(); S::SYNC_COMMITTEE_ROOT_INDEX]:,
+//     [(); S::SYNC_COMMITTEE_DEPTH]:,
+//     [(); S::FINALIZED_HEADER_INDEX]:,
+// {
+//     let _permit = state
+//         .concurrency
+//         .clone()
+//         .acquire_owned()
+//         .await
+//         .map_err(|e| {
+//             JsonRpcError::internal(format!("Failed to acquire concurrency lock: {}", e))
+//         })?;
 
-    let GenProofCommitteeUpdateParams {
-        light_client_update,
-    } = params;
+//     let GenProofCommitteeUpdateParams {
+//         light_client_update,
+//     } = params;
 
-    let update = ssz_rs::deserialize(&light_client_update)?;
-    let witness = rotation_args_from_update(&update).await?;
-    let params = state.params.get(state.committee_update.degree()).unwrap();
+//     let update = ssz_rs::deserialize(&light_client_update)?;
+//     let witness = rotation_args_from_update(&update).await?;
+//     let params = state.params.get(state.committee_update.degree()).unwrap();
 
-    let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
-        state.committee_update.config_path(),
-        params,
-        state.committee_update.pk(),
-        witness,
-    )?;
+//     let snark = gen_uncompressed_snark::<CommitteeUpdateCircuit<S, Fr>>(
+//         state.committee_update.config_path(),
+//         params,
+//         state.committee_update.pk(),
+//         witness,
+//     )?;
 
-    let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
-        state
-            .params
-            .get(state.committee_update_verifier.degree())
-            .unwrap(),
-        state.committee_update_verifier.pk(),
-        state.committee_update_verifier.config_path(),
-        None,
-        &vec![snark],
-    )
-    .map_err(JsonRpcError::internal)?;
+//     let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
+//         state
+//             .params
+//             .get(state.committee_update_verifier.degree())
+//             .unwrap(),
+//         state.committee_update_verifier.pk(),
+//         state.committee_update_verifier.config_path(),
+//         None,
+//         &vec![snark],
+//     )
+//     .map_err(JsonRpcError::internal)?;
 
-    let calldata = encode_calldata(&instances, &proof);
+//     let calldata = encode_calldata(&instances, &proof);
 
-    let committee_poseidon = U256::from_little_endian(&instances[0][12].to_bytes());
+//     let committee_poseidon = U256::from_little_endian(&instances[0][12].to_bytes());
 
-    Ok(CommitteeUpdateEvmProofResult {
-        proof: calldata,
-        committee_poseidon,
-    })
-}
+//     Ok(CommitteeUpdateEvmProofResult {
+//         proof: calldata,
+//         committee_poseidon,
+//     })
+// }
 
 pub(crate) async fn gen_evm_proof_sync_step_compressed_handler<S: eth_types::Spec>(
     Data(state): Data<ProverState>,
@@ -138,8 +144,30 @@ where
 
     let update = ssz_rs::deserialize(&light_client_finality_update)?;
     let pubkeys = ssz_rs::deserialize(&pubkeys)?;
+
     let witness = step_args_from_finality_update(update, pubkeys, domain).await?;
+
+    // save witness that we got from spectre-node
+    let file_path = "step_witness.json";
+    if !Path::new(file_path).exists() {
+        let file = File::create(file_path)?;
+        serde_json::to_writer(file, &witness)?;
+    }
     let params = state.params.get(state.step.degree()).unwrap();
+
+    // check using mock prover - it will show where constraints failed
+    {
+        let circuit = StepCircuit::<S, Fr>::create_circuit(
+            CircuitBuilderStage::Mock,
+            None,
+            &witness,
+            &params,
+        )
+        .unwrap();
+
+        let prover = MockProver::<Fr>::run(21, &circuit, circuit.instances()).unwrap();
+        prover.assert_satisfied();
+    }
 
     let snark = gen_uncompressed_snark::<StepCircuit<S, Fr>>(
         state.step.config_path(),
@@ -148,16 +176,18 @@ where
         witness,
     )?;
 
-    let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
-        state.params.get(state.step_verifier.degree()).unwrap(),
-        state.step_verifier.pk(),
-        state.step_verifier.config_path(),
-        None,
-        &vec![snark],
-    )
-    .map_err(JsonRpcError::internal)?;
+    // let (proof, instances) = AggregationCircuit::gen_evm_proof_shplonk(
+    //     state.params.get(state.step_verifier.degree()).unwrap(),
+    //     state.step_verifier.pk(),
+    //     state.step_verifier.config_path(),
+    //     None,
+    //     &vec![snark],
+    // )
+    // .map_err(JsonRpcError::internal)?;
 
-    let calldata = encode_calldata(&instances, &proof);
+    // let calldata = encode_calldata(&instances, &proof);
+
+    let calldata = vec![0u8; 32];
 
     Ok(SyncStepCompressedEvmProofResult { proof: calldata })
 }

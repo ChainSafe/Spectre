@@ -159,11 +159,15 @@ pub async fn step_args_from_finality_update<S: Spec>(
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::path::Path;
+
     use eth_types::Testnet;
     use halo2_base::halo2_proofs::halo2curves::bn256::Bn256;
     use halo2_base::halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_base::utils::fs::gen_srs;
     use lightclient_circuits::halo2_proofs::{dev::MockProver, halo2curves::bn256::Fr};
+    use lightclient_circuits::witness;
     use lightclient_circuits::{
         halo2_base::gates::circuit::CircuitBuilderStage, sync_step_circuit::StepCircuit,
         util::AppCircuit,
@@ -177,10 +181,27 @@ mod tests {
     #[tokio::test]
     async fn test_sync_circuit_sepolia() {
         const K: u32 = 21;
-        let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+        let client = beacon_api_client::mainnet::Client::new(
+            Url::parse("https://gnosis.chainsafe.dev").unwrap(),
+        );
+    
+        // here we save witness from local beacon chain rpc client, so can compare with what we get from the spectre-node
+        {
+            let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+    
+            let file_path = "../step_witness2.json";
+    
+            if !Path::new(file_path).exists() {
+                let file = File::create(file_path).unwrap();
+                serde_json::to_writer(file, &witness).unwrap()
+            }
+        }
+        
+        // let client =
+        //     MainnetClient::new(Url::parse("https://gnosis.chainsafe.dev").unwrap());
 
-        let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        // let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
+        let witness = serde_json::from_reader(File::open("../step_witness.json").unwrap()).unwrap();
         let params: ParamsKZG<Bn256> = gen_srs(K);
 
         let circuit = StepCircuit::<Testnet, Fr>::create_circuit(
@@ -197,7 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_step_snark_sepolia() {
-        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_21.json";
+        const CONFIG_PATH: &str = "../lightclient-circuits/config/sync_step_testnet.json";
         const K: u32 = 21;
         let params = gen_srs(K);
 
@@ -209,7 +230,7 @@ mod tests {
             None,
         );
         let client =
-            MainnetClient::new(Url::parse("https://lodestar-sepolia.chainsafe.io").unwrap());
+            MainnetClient::new(Url::parse("https://gnosis.chainsafe.dev").unwrap());
         let witness = fetch_step_args::<Testnet, _>(&client).await.unwrap();
 
         StepCircuit::<Testnet, Fr>::gen_snark_shplonk(

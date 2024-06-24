@@ -34,9 +34,9 @@ pub struct ProverState {
     // degree -> params (use BTreeMap to find proper degree for params downsize)
     pub params: BTreeMap<u32, ParamsKZG<Bn256>>,
     pub step: CircuitContext,
-    pub step_verifier: CircuitContext,
-    pub committee_update: CircuitContext,
-    pub committee_update_verifier: CircuitContext,
+    // pub step_verifier: CircuitContext,
+    // pub committee_update: CircuitContext,
+    // pub committee_update_verifier: CircuitContext,
     pub concurrency: Arc<Semaphore>,
 }
 
@@ -70,46 +70,46 @@ impl ProverState {
             Default::default(),
         );
 
-        let step_snark = StepCircuit::<S, Fr>::gen_snark_shplonk(
-            params_map.get(step.degree()).unwrap(),
-            step.pk(),
-            step.config_path(),
-            Some("./build/step_dummy.snark"),
-            &Default::default(),
-        )
-        .unwrap();
+        // let step_snark = StepCircuit::<S, Fr>::gen_snark_shplonk(
+        //     params_map.get(step.degree()).unwrap(),
+        //     step.pk(),
+        //     step.config_path(),
+        //     Some("./build/step_dummy.snark"),
+        //     &Default::default(),
+        // )
+        // .unwrap();
 
-        let committee_update = load_ctx::<CommitteeUpdateCircuit<S, Fr>>(
-            config_dir.join(format!("committee_update_{}.json", S::NAME)),
-            build_dir.join(format!("committee_update_{}.pkey", S::NAME)),
-            &mut params_map,
-            Default::default(),
-        );
+        // let committee_update = load_ctx::<CommitteeUpdateCircuit<S, Fr>>(
+        //     config_dir.join(format!("committee_update_{}.json", S::NAME)),
+        //     build_dir.join(format!("committee_update_{}.pkey", S::NAME)),
+        //     &mut params_map,
+        //     Default::default(),
+        // );
 
-        let committee_update_snark = CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
-            params_map.get(committee_update.degree()).unwrap(),
-            committee_update.pk(),
-            committee_update.config_path(),
-            Some("./build/committee_update_dummy.snark"),
-            &Default::default(),
-        )
-        .unwrap();
+        // let committee_update_snark = CommitteeUpdateCircuit::<S, Fr>::gen_snark_shplonk(
+        //     params_map.get(committee_update.degree()).unwrap(),
+        //     committee_update.pk(),
+        //     committee_update.config_path(),
+        //     Some("./build/committee_update_dummy.snark"),
+        //     &Default::default(),
+        // )
+        // .unwrap();
 
         Self {
             step,
-            step_verifier: load_ctx::<AggregationCircuit>(
-                config_dir.join(format!("sync_step_verifier_{}.json", S::NAME)),
-                build_dir.join(format!("sync_step_verifier_{}.pkey", S::NAME)),
-                &mut params_map,
-                vec![step_snark],
-            ),
-            committee_update,
-            committee_update_verifier: load_ctx::<AggregationCircuit>(
-                config_dir.join(format!("committee_update_verifier_{}.json", S::NAME)),
-                build_dir.join(format!("committee_update_verifier_{}.pkey", S::NAME)),
-                &mut params_map,
-                vec![committee_update_snark],
-            ),
+            // step_verifier: load_ctx::<AggregationCircuit>(
+            //     config_dir.join(format!("sync_step_verifier_{}.json", S::NAME)),
+            //     build_dir.join(format!("sync_step_verifier_{}.pkey", S::NAME)),
+            //     &mut params_map,
+            //     vec![step_snark],
+            // ),
+            // committee_update,
+            // committee_update_verifier: load_ctx::<AggregationCircuit>(
+            //     config_dir.join(format!("committee_update_verifier_{}.json", S::NAME)),
+            //     build_dir.join(format!("committee_update_verifier_{}.pkey", S::NAME)),
+            //     &mut params_map,
+            //     vec![committee_update_snark],
+            // ),
             params: params_map,
             concurrency: Arc::new(Semaphore::new(concurrency)),
         }
